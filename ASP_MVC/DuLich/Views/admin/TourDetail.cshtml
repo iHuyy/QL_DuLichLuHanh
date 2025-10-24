@@ -1,0 +1,34 @@
+@model DuLich.Models.Tour
+@{
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<h2>Chi tiết Tour: @Model.TieuDe</h2>
+<div>
+    <p><strong>Mô tả:</strong> @Model.MoTa</p>
+    <p><strong>Thời gian:</strong> @(Model.ThoiGian.HasValue ? Model.ThoiGian.Value.ToString("yyyy-MM-dd") : "-")</p>
+    <p><strong>Giá:</strong> @Model.GiaNguoiLon</p>
+</div>
+
+<div>
+    <h4>QR Code</h4>
+    @if(!string.IsNullOrEmpty(Model.QR)){
+        <img src="@Model.QR" alt="QR code" style="max-width:200px" />
+    } else {
+        <p>Chưa có QR — hệ thống sẽ sinh tự động khi xem</p>
+    }
+</div>
+
+<div>
+    <h4>Ảnh</h4>
+    @if (ViewBag.Images != null)
+    {
+        foreach(var i in ViewBag.Images as List<DuLich.Models.AnhTour>)
+        {
+            <div style="display:inline-block;margin:6px">
+                <img src="@i.DuongDanAnh" style="max-width:150px;display:block" />
+                <small>@i.MoTa</small>
+            </div>
+        }
+    }
+</div>

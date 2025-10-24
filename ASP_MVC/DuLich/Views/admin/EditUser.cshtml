@@ -1,0 +1,51 @@
+@model DuLich.Models.KhachHang
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="admin-page">
+    @await Html.PartialAsync("~/Views/Shared/_AdminSidebar.cshtml")
+    <main>
+        <h2>Chỉnh sửa người dùng</h2>
+
+        <form method="post" asp-action="EditUser">
+            <input type="hidden" asp-for="MaKhachHang" />
+            <div class="form-group">
+                <label>ORACLE_USERNAME</label>
+                <input class="form-control" asp-for="ORACLE_USERNAME" />
+            </div>
+            <div class="form-group">
+                <label>Họ tên</label>
+                <input class="form-control" asp-for="HoTen" />
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input class="form-control" asp-for="Email" />
+            </div>
+            <div class="form-group">
+                <label>Số điện thoại</label>
+                <input class="form-control" asp-for="SoDienThoai" />
+            </div>
+            <div class="form-group">
+                <label>Địa chỉ</label>
+                <input class="form-control" asp-for="DiaChi" />
+            </div>
+            <div class="form-group">
+                <label>Vai trò</label>
+                <select class="form-control" asp-for="VaiTro">
+                    <option value="KhachHang">Khách hàng</option>
+                    <option value="Admin">Admin</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Trạng thái</label>
+                <select class="form-control" asp-for="TrangThai">
+                    <option value="HoatDong">Hoạt động</option>
+                    <option value="BiKhoa">Bị khóa</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" type="submit">Lưu</button>
+            <a class="btn btn-secondary" href="/Admin/Users">Hủy</a>
+        </form>
+    </main>
+</div>

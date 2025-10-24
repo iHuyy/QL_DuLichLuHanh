@@ -1,0 +1,51 @@
+@model DuLich.Models.Tour
+@{
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<h2>Chỉnh sửa Tour</h2>
+<form method="post" asp-action="EditTour">
+    <input type="hidden" asp-for="MaTour" />
+    <div class="form-group">
+        <label>Tiêu đề</label>
+        <input class="form-control" asp-for="TieuDe" />
+    </div>
+    <div class="form-group">
+        <label>Mô tả</label>
+        <textarea class="form-control" asp-for="MoTa"></textarea>
+    </div>
+    <div class="form-group">
+        <label>Nơi khởi hành</label>
+        <input class="form-control" asp-for="NoiKhoiHanh" />
+    </div>
+    <div class="form-group">
+        <label>Nơi đến</label>
+        <input class="form-control" asp-for="NoiDen" />
+    </div>
+    <div class="form-group">
+        <label>Thời gian</label>
+        <input class="form-control" asp-for="ThoiGian" />
+    </div>
+    <div class="form-group">
+        <label>Thành phố</label>
+        <input class="form-control" asp-for="ThanhPho" />
+    </div>
+    <div class="form-group">
+        <label>Giá người lớn</label>
+        <input class="form-control" asp-for="GiaNguoiLon" />
+    </div>
+    <div class="form-group">
+        <label>Giá trẻ em</label>
+        <input class="form-control" asp-for="GiaTreEm" />
+    </div>
+    <div class="form-group">
+        <label>Số lượng</label>
+        <input class="form-control" asp-for="SoLuong" />
+    </div>
+    <div class="form-group">
+        <label>Trạng thái</label>
+        <input class="form-control" asp-for="TrangThai" />
+    </div>
+    <button class="btn btn-primary" type="submit">Lưu</button>
+    <a class="btn btn-secondary" href="/Admin/Tours">Hủy</a>
+</form>

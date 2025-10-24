@@ -1,0 +1,176 @@
+@{
+    ViewData["Title"] = "Dashboard";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+<div class="row">
+    <div class="col-xl-3 col-xxl-3 col-sm-6">
+        <div class="widget-stat card bg-primary">
+            <div class="card-body">
+                <div class="media">
+                    <span class="mr-3 text-primary">
+                        <i class="fa fa-envelope"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="text-white">275</h3>
+                        <h5 class="mb-1 text-white"> New Messages</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-xxl-3 col-sm-6">
+        <div class="widget-stat card bg-warning">
+            <div class="card-body">
+                <div class="media">
+                    <span class="mr-3 text-warning">
+                        <i class="fa fa-bookmark"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="text-white">150</h3>
+                        <h5 class="mb-1 text-white">New bookmark</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-xxl-3 col-sm-6">
+        <div class="widget-stat card bg-secondary">
+            <div class="card-body">
+                <div class="media">
+                    <span class="mr-3 text-secondary">
+                        <i class="fa fa-star"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="text-white">532</h3>
+                        <h5 class="mb-1 text-white">New Reviews</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-xxl-3 col-sm-6">
+        <div class="widget-stat card bg-danger">
+            <div class="card-body">
+                <div class="media">
+                    <span class="mr-3 text-danger">
+                        <i class="fa fa-address-book"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="text-white">241</h3>
+                        <h5 class="mb-1 text-white">New Booking</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-12">
+        <div class="row">
+            <div class="col">
+                <div class="widget-stat card text-center">
+                    <div class="card-body">
+                        <div class="media mb-3 justify-content-center">
+                            <span class="bg-primary text-white">
+                                <i class="la la-building"></i>
+                            </span>
+                        </div>
+                        <div class="media-body">
+                            <h2><strong>241</strong></h2>
+                            <h5 class="mb-1">New Hotel Listings</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="widget-stat card text-center">
+                    <div class="card-body">
+                        <div class="media mb-3 justify-content-center">
+                            <span class="bg-warning text-white">
+                                <i class="la la-car"></i>
+                            </span>
+                        </div>
+                        <div class="media-body">
+                            <h2><strong>235</strong></h2>
+                            <h5 class="mb-1">New Car Listings</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="widget-stat card text-center">
+                    <div class="card-body">
+                        <div class="media mb-3 justify-content-center">
+                            <span class="bg-secondary text-white">
+                                <i class="la la-fighter-jet"></i>
+                            </span>
+                        </div>
+                        <div class="media-body">
+                            <h2><strong>118</strong></h2>
+                            <h5 class="mb-1">New Flight Listings</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="widget-stat card text-center">
+                    <div class="card-body">
+                        <div class="media mb-3 justify-content-center">
+                            <span class="bg-danger text-white">
+                                <i class="la la-road"></i>
+                            </span>
+                        </div>
+                        <div class="media-body">
+                            <h2><strong>120</strong></h2>
+                            <h5 class="mb-1">New Tour Listings</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="widget-stat card text-center">
+                    <div class="card-body">
+                        <div class="media mb-3 justify-content-center">
+                            <span class="bg-success text-white">
+                                <i class="la la-ship"></i>
+                            </span>
+                        </div>
+                        <div class="media-body">
+                            <h2><strong>180</strong></h2>
+                            <h5 class="mb-1">New Cruise Listings</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-6 col-xxl-6 col-sm-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Booking Report</h3>
+            </div>
+            <div class="card-body">
+                <canvas id="barChart_2"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-6 col-xxl-6 col-sm-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Booking Report</h3>
+            </div>
+            <div class="card-body">
+                <div id="pie-chart" class="ct-chart ct-golden-section"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-12 col-xxl-12 col-sm-12">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">World Map</h3>
+            </div>
+            <div class="card-body">
+                <div id="world-map"></div>
+            </div>
+        </div>
+    </div>
+</div>

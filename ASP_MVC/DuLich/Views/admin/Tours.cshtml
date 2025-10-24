@@ -1,0 +1,70 @@
+@model IEnumerable<DuLich.Models.Tour>
+@{
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<h2>Quản lí Tour</h2>
+<p><a class="btn btn-primary" asp-controller="TourManagement" asp-action="Create">Thêm tour mới</a></p>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Tiêu đề</th>
+            <th>Nơi khởi hành</th>
+            <th>Nơi đến</th>
+            <th>Thành phố</th>
+            <th>Thời gian</th>
+            <th>Giá (NL/TE)</th>
+            <th>Số lượng</th>
+            <th>QR</th>
+            <th>Trạng thái</th>
+            <th>Hành động</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var t in Model)
+        {
+            <tr>
+                <td>@t.MaTour</td>
+                <td>@t.TieuDe</td>
+                <td>@t.NoiKhoiHanh</td>
+                <td>@t.NoiDen</td>
+                <td>@t.ThanhPho</td>
+                <td>@(t.ThoiGian.HasValue ? t.ThoiGian.Value.ToString("yyyy-MM-dd") : "-")</td>
+                <td>@(t.GiaNguoiLon?.ToString("N0") ?? "-") / @(t.GiaTreEm?.ToString("N0") ?? "-")</td>
+                <td>@(t.SoLuong?.ToString() ?? "-")</td>
+                <td>
+                    @if (!string.IsNullOrEmpty(t.QR))
+                    {
+                        <a href="@t.QR" target="_blank"><img src="@t.QR" style="max-width:60px;max-height:60px" /></a>
+                    }
+                    else
+                    {
+                        <span class="text-muted">(chưa)</span>
+                    }
+                </td>
+                <td>
+                    <form method="post" asp-controller="TourManagement" asp-action="ChangeStatus">
+                        <input type="hidden" name="id" value="@t.MaTour" />
+                        <select name="status" class="form-control form-control-sm" onchange="this.form.submit()">
+                            @{
+                                var options = new[]{"Hoạt động","Tạm ngưng","Đã kết thúc","Đã hủy","Ẩn"};
+                                foreach(var o in options){
+                                    <option value="@o" selected="@(t.TrangThai==o)">@o</option>
+                                }
+                            }
+                        </select>
+                    </form>
+                </td>
+                <td>
+                    <a class="btn btn-sm btn-primary" asp-controller="TourManagement" asp-action="Edit" asp-route-id="@t.MaTour">Sửa</a>
+                    <form method="post" asp-controller="TourManagement" asp-action="Delete" asp-route-id="@t.MaTour" style="display:inline">
+                        <input type="hidden" name="id" value="@t.MaTour" />
+                        <button class="btn btn-sm btn-danger" type="submit" onclick="return confirm('Bạn có chắc muốn xóa tour này?')">Xóa</button>
+                    </form>
+                    <a class="btn btn-sm btn-secondary" asp-controller="TourManagement" asp-action="Detail" asp-route-id="@t.MaTour">Chi tiết</a>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

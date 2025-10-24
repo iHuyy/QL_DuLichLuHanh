@@ -1,0 +1,15 @@
+@using Microsoft.AspNetCore.Mvc.ViewFeatures
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger">
+        <ul>
+            @foreach (var kv in ViewData.ModelState)
+            {
+                foreach (var err in kv.Value.Errors)
+                {
+                    <li>@err.ErrorMessage</li>
+                }
+            }
+        </ul>
+    </div>
+}

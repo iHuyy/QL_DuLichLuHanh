@@ -1,0 +1,32 @@
+@model DuLich.Services.OracleAuthService.UserDetail
+@{
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="admin-page">
+    @await Html.PartialAsync("~/Views/Shared/_AdminSidebar.cshtml")
+    <main>
+        <h2>Chi tiết người dùng: @Model.Username</h2>
+        <dl>
+            <dt>Username</dt>
+            <dd>@Model.Username</dd>
+            <dt>Created</dt>
+            <dd>@Model.Created</dd>
+            <dt>Default Tablespace</dt>
+            <dd>@Model.DefaultTablespace</dd>
+            <dt>Granted Roles</dt>
+            <dd>@string.Join(", ", Model.Roles)</dd>
+        </dl>
+
+        <h3>Cấp quyền</h3>
+        <form method="post" action="/Admin/GrantRole">
+            <input type="hidden" name="username" value="@Model.Username" />
+            <select name="role" class="form-control">
+                <option value="ROLE_CUSTOMER">ROLE_CUSTOMER</option>
+                <option value="ROLE_ADMIN">ROLE_ADMIN</option>
+                <option value="ROLE_READ_ONLY">ROLE_READ_ONLY</option>
+            </select>
+            <button class="btn btn-primary" type="submit">Cấp quyền</button>
+        </form>
+    </main>
+</div>

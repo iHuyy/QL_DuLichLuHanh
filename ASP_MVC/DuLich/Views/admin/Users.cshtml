@@ -1,0 +1,71 @@
+@model IEnumerable<DuLich.Models.KhachHang>
+@{
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Quản lí người dùng</h4>
+        </div>
+    </div>
+    <div class="col-sm-6 p-md-0 justify-content-sm-end mt-2 mt-sm-0 d-flex">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-controller="Admin" asp-action="Dashboard">Home</a></li>
+            <li class="breadcrumb-item active">Users</li>
+        </ol>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>ORACLE_USERNAME</th>
+                                <th>Họ tên</th>
+                                <th>Email</th>
+                                <th>SĐT</th>
+                                <th>Vai trò</th>
+                                <th>Trạng thái</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var u in Model)
+                            {
+                                <tr>
+                                    <td>@u.MaKhachHang</td>
+                                    <td>@u.ORACLE_USERNAME</td>
+                                    <td>@u.HoTen</td>
+                                    <td>@u.Email</td>
+                                    <td>@u.SoDienThoai</td>
+                                    <td>@u.VaiTro</td>
+                                    <td>@u.TrangThai</td>
+                                    <td>
+                                        <a class="btn btn-sm btn-primary" href="/Admin/EditUser?id=@u.MaKhachHang">Sửa</a>
+                                        <form method="post" action="/Admin/ChangeUserRole">
+                                            <input type="hidden" name="id" value="@u.MaKhachHang" />
+                                            <select name="vaiTro" class="form-control form-control-sm"
+                                                style="width:10px;margin-left:4px">
+                                                <option value="KhachHang" selected="@(u.VaiTro == "KhachHang")">Khách hàng
+                                                </option>
+                                                <option value="Admin" selected="@(u.VaiTro == "Admin")">Admin</option>
+                                            </select>
+                                            <button class="btn btn-sm btn-secondary" type="submit"
+                                                style="margin-left:6px">Thay vai trò</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
