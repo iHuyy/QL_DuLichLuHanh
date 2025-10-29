@@ -1,0 +1,244 @@
+@{
+    ViewData["Title"] = "Đặt tour";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Danh sách đặt tour - @Model.TourName</h4>
+        </div>
+    </div>
+    <div class="col-sm-6 p-md-0 justify-content-end mt-2 mt-sm-0 d-flex">
+        <a href="@Url.Action("Tours", "Staff")" class="btn btn-primary">
+            <i class="fa fa-arrow-left"></i> Quay lại
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Thông tin tour</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table">
+                            <tr>
+                                <th style="width: 150px">Mã tour</th>
+                                <td>@Model.MaTour</td>
+                            </tr>
+                            <tr>
+                                <th>Ngày khởi hành</th>
+                                <td>@Model.NgayKhoiHanh.ToString("dd/MM/yyyy")</td>
+                            </tr>
+                            <tr>
+                                <th>Ngày kết thúc</th>
+                                <td>@Model.NgayKetThuc.ToString("dd/MM/yyyy")</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table">
+                            <tr>
+                                <th style="width: 150px">Số chỗ</th>
+                                <td>@Model.SoChoConLai/@Model.SoLuong</td>
+                            </tr>
+                            <tr>
+                                <th>Giá tour</th>
+                                <td>@Model.Gia.ToString("N0") VNĐ</td>
+                            </tr>
+                            <tr>
+                                <th>Trạng thái</th>
+                                <td><span class="badge badge-@Model.StatusClass">@Model.TrangThai</span></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Danh sách đặt tour</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="bookingsTable" class="table table-striped table-bordered">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Khách hàng</th>
+                                <th>Số điện thoại</th>
+                                <th>Ngày đặt</th>
+                                <th>Số lượng</th>
+                                <th>Tổng tiền</th>
+                                <th>Trạng thái</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var booking in Model.Bookings)
+                            {
+                                <tr>
+                                    <td>@booking.Id</td>
+                                    <td>@booking.CustomerName</td>
+                                    <td>@booking.CustomerPhone</td>
+                                    <td>@booking.BookingDate.ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>@booking.Quantity</td>
+                                    <td>@booking.TotalAmount.ToString("N0") VNĐ</td>
+                                    <td>
+                                        <span class="badge badge-@booking.StatusClass">@booking.Status</span>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex">
+                                            <a href="@Url.Action("BookingDetails", "Staff", new { id = booking.Id })"
+                                                class="btn btn-info shadow btn-xs sharp mr-1">
+                                                <i class="fa fa-eye"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-primary shadow btn-xs sharp mr-1"
+                                                onclick="updateStatus(@booking.Id)">
+                                                <i class="fa fa-pencil"></i>
+                                            </button>
+                                            @if (booking.CanCancel)
+                                            {
+                                                <button type="button" class="btn btn-danger shadow btn-xs sharp"
+                                                    onclick="cancelBooking(@booking.Id)">
+                                                    <i class="fa fa-trash"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal cập nhật trạng thái -->
+<div class="modal fade" id="updateStatusModal">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cập nhật trạng thái đặt tour</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <form id="updateStatusForm">
+                    <input type="hidden" id="bookingId" name="bookingId" />
+                    <div class="form-group">
+                        <label>Trạng thái mới</label>
+                        <select class="form-control" id="newStatus" name="newStatus">
+                            <option value="Pending">Chờ xác nhận</option>
+                            <option value="Confirmed">Đã xác nhận</option>
+                            <option value="Cancelled">Đã hủy</option>
+                            <option value="Completed">Hoàn thành</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Ghi chú</label>
+                        <textarea class="form-control" id="note" name="note" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-primary" onclick="submitStatusUpdate()">Cập nhật</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#bookingsTable').DataTable({
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Vietnamese.json'
+                }
+            });
+        });
+
+        function updateStatus(bookingId) {
+            $('#bookingId').val(bookingId);
+            $('#updateStatusModal').modal('show');
+        }
+
+        function submitStatusUpdate() {
+            var data = {
+                bookingId: $('#bookingId').val(),
+                newStatus: $('#newStatus').val(),
+                note: $('#note').val()
+            };
+
+            $.ajax({
+                url: '@Url.Action("UpdateBookingStatus", "Staff")',
+                type: 'POST',
+                data: data,
+                success: function (response) {
+                    if (response.success) {
+                        Swal.fire({
+                            title: 'Thành công!',
+                            text: 'Cập nhật trạng thái thành công',
+                            icon: 'success'
+                        }).then(function () {
+                            location.reload();
+                        });
+                    } else {
+                        Swal.fire('Lỗi!', response.message, 'error');
+                    }
+                },
+                error: function () {
+                    Swal.fire('Lỗi!', 'Có lỗi xảy ra khi cập nhật trạng thái', 'error');
+                }
+            });
+        }
+
+        function cancelBooking(bookingId) {
+            Swal.fire({
+                title: 'Xác nhận hủy đặt tour?',
+                text: "Bạn không thể hoàn tác hành động này!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Đồng ý',
+                cancelButtonText: 'Hủy'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: '@Url.Action("CancelBooking", "Staff")',
+                        type: 'POST',
+                        data: { id: bookingId },
+                        success: function (response) {
+                            if (response.success) {
+                                Swal.fire(
+                                    'Đã hủy!',
+                                    'Đặt tour đã được hủy thành công.',
+                                    'success'
+                                ).then(function () {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire('Lỗi!', response.message, 'error');
+                            }
+                        },
+                        error: function () {
+                            Swal.fire('Lỗi!', 'Có lỗi xảy ra khi hủy đặt tour', 'error');
+                        }
+                    });
+                }
+            });
+        }
+    </script>
+}

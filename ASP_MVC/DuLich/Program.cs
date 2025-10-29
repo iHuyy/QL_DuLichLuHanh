@@ -16,9 +16,20 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.AccessDeniedPath = "/Home/AccessDenied";
     });
 
+// HttpContext accessor needed by DB connection interceptor
+builder.Services.AddHttpContextAccessor();
+
+// Register interceptor
+builder.Services.AddScoped<OracleClientIdentifierInterceptor>();
+
 // Đăng ký DbContext
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseOracle(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
+{
+    options.UseOracle(builder.Configuration.GetConnectionString("DefaultConnection"));
+    // Add interceptor resolved from DI to set CLIENT_IDENTIFIER for Oracle sessions
+    var interceptor = sp.GetService<OracleClientIdentifierInterceptor>();
+    if (interceptor != null) options.AddInterceptors(interceptor);
+});
 
 // Đăng ký OracleAuthService
 builder.Services.AddScoped<OracleAuthService>();

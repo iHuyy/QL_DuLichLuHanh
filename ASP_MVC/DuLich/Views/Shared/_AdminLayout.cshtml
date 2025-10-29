@@ -59,43 +59,144 @@
         <!--**********************************
             Nav header end
         ***********************************-->
-        <partial name="_AdminHeader" />
-        <partial name="_AdminSidebar" />
+        <!--**********************************
+            Header start
+        ***********************************-->
+        <div class="header">
+            <div class="header-content">
+                <nav class="navbar navbar-expand">
+                    <div class="collapse navbar-collapse justify-content-between">
+                        <div class="header-left">
+                        </div>
 
-        <div class="content-body">
-            <div class="container-fluid">
-                @RenderBody()
+                        <ul class="navbar-nav header-right">
+
+                            <li class="nav-item dropdown header-profile">
+                                <a class="nav-link" role="button" data-toggle="dropdown">
+                                    <img src="images/profile/pic1.jpg" width="20" alt="" />
+                                </a>
+                                <div class="dropdown-menu dropdown-menu-right">
+                                    <a asp-action="Logout" method="post" class="form-inline"">
+                                Logout
+                            </a>
+                        </div>
+                    </li>
+                </ul>
             </div>
-        </div>
+        </nav>
+    </div>
+</div>
+<!--**********************************
+            Header end ti-comment-alt
+        ***********************************-->
+        <!--**********************************
+            Sidebar start
+        ***********************************-->
+<div class=" dlabnav">
+                                        <div class="dlabnav-scroll">
+                                            <ul class="metismenu" id="menu">
+                                                <li class="nav-label first">Main Menu</li>
+                                                <li>
+                                                    <a href="/Admin/Dashboard" aria-expanded="false">
+                                                        <span class="nav-text">Dashboard</span>
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <a href="/Admin/Staffs" aria-expanded="false">
+                                                        <span class="nav-text">Staff</span>
+                                                    </a>
+                                                </li>
+                                                <li><a class="has-arrow" href="/Admin/Users" aria-expanded="false">
+                                                        <span class="nav-text">Users</span>
+                                                    </a>
+                                                    <ul aria-expanded="false">
+                                                        <li><a href="/Admin/CreateUser">Create User</a></li>
+                                                        <li><a href="/Admin/Users">Users List</a></li>
+                                                    </ul>
+                                                </li>
+                                                <li><a class="has-arrow" href="javascript:void()" aria-expanded="false">
+                                                        <span class="nav-text">Listing</span>
+                                                    </a>
+                                                    <ul aria-expanded="false">
 
 
-        /admin @* Render footer partial which contains footer markup and vendor scripts *@
-        <partial name="_AdminFooter" />
+                                                        <li>
+                                                            <a href="/Admin/Tours" class="has-arrow"
+                                                                aria-expanded="false"> Tours </a>
 
-    </div> <!-- end #main-wrapper -->
+                                                        </li>
+                                                    </ul>
+                                                </li>
+                                                <li><a class="has-arrow" href="javascript:void()" aria-expanded="false">
+                                                        <span class="nav-text">Booking</span>
+                                                    </a>
+                                                </li>
 
-    <!--**********************************
+                                                <li class="nav-label">Extra</li>
+                                                <li><a class="has-arrow" href="javascript:void()" aria-expanded="false">
+                                                        <i class="la la-th-list"></i>
+                                                        <span class="nav-text">Pages</span>
+                                                    </a>
+                                                    <ul aria-expanded="false">
+                                                        <li><a href="./page-register.html">Register</a></li>
+                                                        <li><a href="./page-login.html">Login</a></li>
+                                                        <li><a class="has-arrow" href="javascript:void()"
+                                                                aria-expanded="false">Error</a>
+                                                            <ul aria-expanded="false">
+                                                                <li><a href="./page-error-400.html">Error 400</a></li>
+                                                                <li><a href="./page-error-403.html">Error 403</a></li>
+                                                                <li><a href="./page-error-404.html">Error 404</a></li>
+                                                                <li><a href="./page-error-500.html">Error 500</a></li>
+                                                                <li><a href="./page-error-503.html">Error 503</a></li>
+                                                            </ul>
+                                                        </li>
+                                                        <li><a href="./page-lock-screen.html">Lock Screen</a></li>
+                                                    </ul>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                </div>
+                                <!--**********************************
+            Sidebar end
+        ***********************************-->
+
+                                <div class="content-body">
+                                    <div class="container-fluid">
+                                        @RenderBody()
+                                    </div>
+                                </div>
+
+
+                                <div class="footer">
+                                    <div class="copyright">
+                                        <p>Copyright © Designed &amp; Developed by Huy</p>
+                                    </div>
+                                </div>
+
+                    </div> <!-- end #main-wrapper -->
+
+                    <!--**********************************
         Scripts
     ***********************************-->
-    <!-- Required vendors -->
-    <script src="~/admin/vendor/global/global.min.js"></script>
-    <script src="~/admin/vendor/bootstrap-select/dist/js/bootstrap-select.min.js"></script>
-    <script src="~/admin/js/custom.min.js"></script>
-    <script src="~/admin/js/dlabnav-init.js"></script>
-    <!-- Chart Chartist plugin files -->
-    <script src="~/admin/vendor/chartist/js/chartist.min.js"></script>
-    <!-- Chart ChartJS plugin files -->
-    <script src="~/admin/vendor/chart.js/Chart.bundle.min.js"></script>
-    <!-- Vectormap -->
-    <script src="~/admin/vendor/jqvmap/js/jquery.vmap.min.js"></script>
-    <script src="~/admin/vendor/jqvmap/js/jquery.vmap.world.js"></script>
-    <!-- Demo scripts -->
-    <script src="~/admin/js/dashboard/dashboard.js"></script>
-    <!-- Svganimation scripts -->
-    <script src="~/admin/vendor/svganimation/vivus.min.js"></script>
-    <script src="~/admin/vendor/svganimation/svg.animation.js"></script>
-    <script src="~/admin/js/styleSwitcher.js"></script>
-    @RenderSection("Scripts", required: false)
+                    <!-- Required vendors -->
+                    <script src="~/admin/vendor/global/global.min.js"></script>
+                    <script src="~/admin/vendor/bootstrap-select/dist/js/bootstrap-select.min.js"></script>
+                    <script src="~/admin/js/custom.min.js"></script>
+                    <script src="~/admin/js/dlabnav-init.js"></script>
+                    <!-- Chart Chartist plugin files -->
+                    <script src="~/admin/vendor/chartist/js/chartist.min.js"></script>
+                    <!-- Chart ChartJS plugin files -->
+                    <script src="~/admin/vendor/chart.js/Chart.bundle.min.js"></script>
+                    <!-- Vectormap -->
+                    <script src="~/admin/vendor/jqvmap/js/jquery.vmap.min.js"></script>
+                    <script src="~/admin/vendor/jqvmap/js/jquery.vmap.world.js"></script>
+                    <!-- Application scripts -->
+                    <script src="~/admin/js/dashboard.js"></script>
+                    <!-- Svganimation scripts -->
+                    <script src="~/admin/vendor/svganimation/vivus.min.js"></script>
+                    <script src="~/admin/vendor/svganimation/svg.animation.js"></script>
+                    <script src="~/admin/js/styleSwitcher.js"></script>
+                    @RenderSection("Scripts", required: false)
 
 </body>
 

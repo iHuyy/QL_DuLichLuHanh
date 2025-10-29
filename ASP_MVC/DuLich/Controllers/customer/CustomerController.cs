@@ -54,7 +54,7 @@ namespace DuLich.Controllers
                     new ClaimsPrincipal(claimsIdentity),
                     authProperties);
 
-                return RedirectToAction("Index", "Home");
+                return RedirectToAction("Index", "Customer");
             }
 
             ModelState.AddModelError(string.Empty, "Tên đăng nhập hoặc mật khẩu không đúng");

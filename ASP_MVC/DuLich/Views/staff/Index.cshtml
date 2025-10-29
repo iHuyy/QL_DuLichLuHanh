@@ -1,0 +1,256 @@
+@{
+    Layout = "~/Views/Shared/_StaffLayout.cshtml"; // reuse admin layout for staff area
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Dashboard nhân viên</h4>
+            <p>Chào mừng, @User.Identity?.Name</p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-xl-3 col-xxl-3 col-sm-6">
+        <div class="widget-stat card bg-primary">
+            <div class="card-body">
+                <div class="media">
+                    <span class="mr-3">
+                        <i class="fa fa-calendar-check text-white fa-3x"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="text-white" id="pendingBookings">0</h3>
+                        <h5 class="mb-1 text-white">Đơn chờ xử lý</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-xxl-3 col-sm-6">
+        <div class="widget-stat card bg-success">
+            <div class="card-body">
+                <div class="media">
+                    <span class="mr-3">
+                        <i class="fa fa-check-circle text-white fa-3x"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="text-white" id="confirmedBookings">0</h3>
+                        <h5 class="mb-1 text-white">Đơn đã xác nhận</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-xxl-3 col-sm-6">
+        <div class="widget-stat card bg-warning">
+            <div class="card-body">
+                <div class="media">
+                    <span class="mr-3">
+                        <i class="fa fa-plane text-white fa-3x"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="text-white" id="activeTours">0</h3>
+                        <h5 class="mb-1 text-white">Tour đang hoạt động</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-xxl-3 col-sm-6">
+        <div class="widget-stat card bg-info">
+            <div class="card-body">
+                <div class="media">
+                    <span class="mr-3">
+                        <i class="fa fa-users text-white fa-3x"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="text-white" id="totalCustomers">0</h3>
+                        <h5 class="mb-1 text-white">Tổng khách hàng</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Đơn đặt tour mới nhất</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="recentBookings" class="display" style="min-width: 845px">
+                        <thead>
+                            <tr>
+                                <th>Mã đơn</th>
+                                <th>Khách hàng</th>
+                                <th>Tour</th>
+                                <th>Ngày đặt</th>
+                                <th>Trạng thái</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-xl-8 col-xxl-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Lịch tour sắp diễn ra</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="upcomingTours" class="display" style="min-width: 845px">
+                        <thead>
+                            <tr>
+                                <th>Tour</th>
+                                <th>Ngày khởi hành</th>
+                                <th>Số khách</th>
+                                <th>Trạng thái</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4 col-xxl-4">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Thông báo</h4>
+            </div>
+            <div class="card-body">
+                <div id="notifications">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            loadStaffDashboard();
+            setInterval(loadStaffDashboard, 300000); // Refresh every 5 minutes
+        });
+
+        function loadStaffDashboard() {
+            // Load summary stats
+            $.get('/staff/api/stats', function (data) {
+                $('#pendingBookings').text(data.pendingBookings);
+                $('#confirmedBookings').text(data.confirmedBookings);
+                $('#activeTours').text(data.activeTours);
+                $('#totalCustomers').text(data.totalCustomers);
+            });
+
+            // Load recent bookings
+            $('#recentBookings').DataTable({
+                ajax: '/staff/api/recent-bookings',
+                order: [[3, 'desc']],
+                columns: [
+                    { data: 'maDatTour' },
+                    { data: 'tenKhachHang' },
+                    { data: 'tenTour' },
+                    {
+                        data: 'ngayDat',
+                        render: function (data) {
+                            return moment(data).format('DD/MM/YYYY');
+                        }
+                    },
+                    {
+                        data: 'trangThai',
+                        render: function (data) {
+                            return getStatusBadge(data);
+                        }
+                    },
+                    {
+                        data: 'maDatTour',
+                        render: function (data) {
+                            return `
+                                    <div class="d-flex">
+                                        <a href="/staff/bookings/details/${data}" class="btn btn-primary shadow btn-xs sharp mr-1"><i class="fa fa-eye"></i></a>
+                                        <a href="/staff/bookings/edit/${data}" class="btn btn-info shadow btn-xs sharp"><i class="fa fa-pencil"></i></a>
+                                    </div>`;
+                        }
+                    }
+                ]
+            });
+
+            // Load upcoming tours
+            $('#upcomingTours').DataTable({
+                ajax: '/staff/api/upcoming-tours',
+                order: [[1, 'asc']],
+                columns: [
+                    { data: 'tenTour' },
+                    {
+                        data: 'ngayKhoiHanh',
+                        render: function (data) {
+                            return moment(data).format('DD/MM/YYYY');
+                        }
+                    },
+                    { data: 'soKhach' },
+                    {
+                        data: 'trangThai',
+                        render: function (data) {
+                            return getTourStatusBadge(data);
+                        }
+                    },
+                    {
+                        data: 'maTour',
+                        render: function (data) {
+                            return `
+                                    <div class="d-flex">
+                                        <a href="/staff/tours/details/${data}" class="btn btn-primary shadow btn-xs sharp mr-1"><i class="fa fa-eye"></i></a>
+                                        <a href="/staff/tours/edit/${data}" class="btn btn-info shadow btn-xs sharp"><i class="fa fa-pencil"></i></a>
+                                    </div>`;
+                        }
+                    }
+                ]
+            });
+
+            // Load notifications
+            $.get('/staff/api/notifications', function (data) {
+                const notificationsHtml = data.map(notification => `
+                        <div class="alert alert-${notification.type} mb-2">
+                            <p class="mb-0">${notification.message}</p>
+                            <small>${moment(notification.time).fromNow()}</small>
+                        </div>
+                    `).join('');
+                $('#notifications').html(notificationsHtml);
+            });
+        }
+
+        function getStatusBadge(status) {
+            const badges = {
+                'Chờ xử lý': 'badge-warning',
+                'Đã xác nhận': 'badge-success',
+                'Đã hủy': 'badge-danger',
+                'Hoàn thành': 'badge-info'
+            };
+            return `<span class="badge ${badges[status] || 'badge-secondary'}">${status}</span>`;
+        }
+
+        function getTourStatusBadge(status) {
+            const badges = {
+                'Sắp diễn ra': 'badge-primary',
+                'Đang diễn ra': 'badge-success',
+                'Đã kết thúc': 'badge-secondary',
+                'Đã hủy': 'badge-danger'
+            };
+            return `<span class="badge ${badges[status] || 'badge-secondary'}">${status}</span>`;
+        }
+    </script>
+}

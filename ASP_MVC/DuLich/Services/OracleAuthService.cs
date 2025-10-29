@@ -23,11 +23,27 @@ namespace DuLich.Services
                 var builder = new OracleConnectionStringBuilder(_connectionString)
                 {
                     UserID = username.ToUpper(),
-                    Password = password
+                    Password = password,
+                    ConnectionTimeout = 60
                 };
 
                 using var connection = new OracleConnection(builder.ConnectionString);
-                await connection.OpenAsync();
+
+                var retryCount = 3;
+                while (retryCount > 0)
+                {
+                    try
+                    {
+                        await connection.OpenAsync();
+                        break; // Kết nối thành công, thoát vòng lặp
+                    }
+                    catch (OracleException ex) when (ex.Number == 50201)
+                    {
+                        retryCount--;
+                        if (retryCount == 0) throw; // Nếu hết số lần thử, ném ngoại lệ
+                        await Task.Delay(2000); // Chờ 2 giây trước khi thử lại
+                    }
+                }
                 Console.WriteLine($"Successfully connected as {username.ToUpper()}");
 
                 // Determine the user's role (if any)
@@ -76,10 +92,11 @@ namespace DuLich.Services
         private async Task<string> GetUserRoleAsync(OracleConnection connection)
         {
             using var command = connection.CreateCommand();
+            // include staff role as well
             command.CommandText = @"
                 SELECT GRANTED_ROLE 
                 FROM USER_ROLE_PRIVS 
-                WHERE GRANTED_ROLE IN ('ROLE_ADMIN', 'ROLE_CUSTOMER')";
+                WHERE GRANTED_ROLE IN ('ROLE_ADMIN', 'ROLE_CUSTOMER', 'ROLE_STAFF')";
 
             using var reader = await command.ExecuteReaderAsync();
             if (await reader.ReadAsync())
@@ -190,10 +207,21 @@ namespace DuLich.Services
                 // 2. Kiểm tra email đã tồn tại chưa
                 using (var checkEmailCommand = adminConnection.CreateCommand())
                 {
+                    // check both KhachHang and NhanVien for email collisions
                     checkEmailCommand.CommandText = "SELECT COUNT(*) FROM TADMIN.KhachHang WHERE Email = :email";
                     checkEmailCommand.Parameters.Add("email", OracleDbType.Varchar2).Value = email;
-                    var count = Convert.ToInt32(await checkEmailCommand.ExecuteScalarAsync());
-                    if (count > 0)
+                    var countKh = Convert.ToInt32(await checkEmailCommand.ExecuteScalarAsync());
+                    if (countKh > 0)
+                    {
+                        return (false, "Email đã được sử dụng");
+                    }
+                }
+                using (var checkEmailCommand2 = adminConnection.CreateCommand())
+                {
+                    checkEmailCommand2.CommandText = "SELECT COUNT(*) FROM TADMIN.NHANVIEN WHERE Email = :email";
+                    checkEmailCommand2.Parameters.Add("email", OracleDbType.Varchar2).Value = email;
+                    var countNv = Convert.ToInt32(await checkEmailCommand2.ExecuteScalarAsync());
+                    if (countNv > 0)
                     {
                         return (false, "Email đã được sử dụng");
                     }
@@ -205,7 +233,7 @@ namespace DuLich.Services
                     using (var createUserCommand = adminConnection.CreateCommand())
                     {
                         createUserCommand.CommandText = $@"
-                            CREATE USER ""{username.ToUpper()}"" IDENTIFIED BY ""{password}""
+                            CREATE USER ""{username.ToUpper()}"" IDENTIFIED BY ""{password}"" 
                             PROFILE cus_profile
                             DEFAULT TABLESPACE USERS
                             TEMPORARY TABLESPACE TEMP";
@@ -271,6 +299,207 @@ namespace DuLich.Services
             {
                 Console.WriteLine($"Error: {ex.Message}");
                 return (false, "Đăng ký không thành công, vui lòng thử lại sau");
+            }
+        }
+
+        // Register a staff account (created by admin). Staff use staff_profile and get ROLE_STAFF
+        public async Task<(bool success, string message)> RegisterStaffAsync(string username, string password, string hoTen, string email, string? soDienThoai = null, string? chiNhanh = null)
+        {
+            using var adminConnection = new OracleConnection(_connectionString);
+            await adminConnection.OpenAsync();
+
+            try
+            {
+                using (var checkCommand = adminConnection.CreateCommand())
+                {
+                    checkCommand.CommandText = "SELECT COUNT(*) FROM all_users WHERE username = :username";
+                    checkCommand.Parameters.Add("username", OracleDbType.Varchar2).Value = username.ToUpper();
+                    var count = Convert.ToInt32(await checkCommand.ExecuteScalarAsync());
+                    if (count > 0)
+                    {
+                        return (false, "Tên đăng nhập đã tồn tại");
+                    }
+                }
+
+                using (var checkEmailCommand = adminConnection.CreateCommand())
+                {
+                    checkEmailCommand.CommandText = "SELECT COUNT(*) FROM TADMIN.KhachHang WHERE Email = :email";
+                    checkEmailCommand.Parameters.Add("email", OracleDbType.Varchar2).Value = email;
+                    var count = Convert.ToInt32(await checkEmailCommand.ExecuteScalarAsync());
+                    if (count > 0)
+                    {
+                        return (false, "Email đã được sử dụng");
+                    }
+                }
+
+                try
+                {
+                    using (var createUserCommand = adminConnection.CreateCommand())
+                    {
+                        createUserCommand.CommandText = $@"
+                            CREATE USER ""{username.ToUpper()}"" IDENTIFIED BY ""{password}"" 
+                            PROFILE staff_profile
+                            DEFAULT TABLESPACE USERS
+                            TEMPORARY TABLESPACE TEMP";
+                        await createUserCommand.ExecuteNonQueryAsync();
+                    }
+
+                    using (var grantCommand = adminConnection.CreateCommand())
+                    {
+                        grantCommand.CommandText = $@"GRANT ROLE_STAFF TO ""{username.ToUpper()}""";
+                        await grantCommand.ExecuteNonQueryAsync();
+
+                        grantCommand.CommandText = $@"GRANT UNLIMITED TABLESPACE TO ""{username.ToUpper()}""";
+                        await grantCommand.ExecuteNonQueryAsync();
+                    }
+                }
+                catch (OracleException ex)
+                {
+                    Console.WriteLine($"Error creating Oracle staff user: {ex.Message}");
+                    return (false, $"Lỗi khi tạo tài khoản: {ex.Message}");
+                }
+
+                // insert into NHANVIEN table as a staff record
+                try
+                {
+                    using (var insertCommand = adminConnection.CreateCommand())
+                    {
+                        insertCommand.CommandText = @"
+                            INSERT INTO TADMIN.NHANVIEN (HoTen, Email, SoDienThoai, ORACLE_USERNAME, VaiTro, ChiNhanh)
+                            VALUES (:HoTen, :Email, :SoDienThoai, :Username, :VaiTro, :ChiNhanh)";
+
+                        insertCommand.Parameters.Add("HoTen", OracleDbType.NVarchar2).Value = hoTen;
+                        insertCommand.Parameters.Add("Email", OracleDbType.NVarchar2).Value = email;
+                        insertCommand.Parameters.Add("SoDienThoai", OracleDbType.NVarchar2).Value = (object?)soDienThoai ?? DBNull.Value;
+                        insertCommand.Parameters.Add("Username", OracleDbType.NVarchar2).Value = username.ToUpper();
+                        insertCommand.Parameters.Add("VaiTro", OracleDbType.NVarchar2).Value = "NhanVien";
+                        insertCommand.Parameters.Add("ChiNhanh", OracleDbType.NVarchar2).Value = (object?)chiNhanh ?? DBNull.Value;
+
+                        await insertCommand.ExecuteNonQueryAsync();
+                    }
+                }
+                catch (OracleException ex)
+                {
+                    Console.WriteLine($"Error inserting staff into NHANVIEN: {ex.Message}");
+                    using (var dropCommand = adminConnection.CreateCommand())
+                    {
+                        dropCommand.CommandText = $@"DROP USER ""{username.ToUpper()}"" CASCADE";
+                        await dropCommand.ExecuteNonQueryAsync();
+                    }
+                    return (false, $"Lỗi khi lưu thông tin: {ex.Message}");
+                }
+
+                return (true, "Tạo nhân viên thành công");
+            }
+            catch (OracleException ex)
+            {
+                Console.WriteLine($"Oracle error: {ex.Message}");
+                return (false, $"Lỗi khi tạo tài khoản: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+                return (false, "Không thể tạo nhân viên, vui lòng thử lại sau");
+            }
+        }
+
+        // Register an admin account (created by admin). Uses admin_profile and ROLE_ADMIN
+        public async Task<(bool success, string message)> RegisterAdminAsync(string username, string password, string hoTen, string email, string? soDienThoai = null, string? diaChi = null)
+        {
+            using var adminConnection = new OracleConnection(_connectionString);
+            await adminConnection.OpenAsync();
+            try
+            {
+                using (var checkCommand = adminConnection.CreateCommand())
+                {
+                    checkCommand.CommandText = "SELECT COUNT(*) FROM all_users WHERE username = :username";
+                    checkCommand.Parameters.Add("username", OracleDbType.Varchar2).Value = username.ToUpper();
+                    var count = Convert.ToInt32(await checkCommand.ExecuteScalarAsync());
+                    if (count > 0)
+                    {
+                        return (false, "Tên đăng nhập đã tồn tại");
+                    }
+                }
+
+                using (var checkEmailCommand = adminConnection.CreateCommand())
+                {
+                    checkEmailCommand.CommandText = "SELECT COUNT(*) FROM TADMIN.KhachHang WHERE Email = :email";
+                    checkEmailCommand.Parameters.Add("email", OracleDbType.Varchar2).Value = email;
+                    var count = Convert.ToInt32(await checkEmailCommand.ExecuteScalarAsync());
+                    if (count > 0)
+                    {
+                        return (false, "Email đã được sử dụng");
+                    }
+                }
+
+                try
+                {
+                    using (var createUserCommand = adminConnection.CreateCommand())
+                    {
+                        createUserCommand.CommandText = $@"
+                            CREATE USER ""{username.ToUpper()}"" IDENTIFIED BY ""{password}"" 
+                            PROFILE admin_profile
+                            DEFAULT TABLESPACE USERS
+                            TEMPORARY TABLESPACE TEMP";
+                        await createUserCommand.ExecuteNonQueryAsync();
+                    }
+
+                    using (var grantCommand = adminConnection.CreateCommand())
+                    {
+                        grantCommand.CommandText = $@"GRANT ROLE_ADMIN TO ""{username.ToUpper()}""";
+                        await grantCommand.ExecuteNonQueryAsync();
+
+                        grantCommand.CommandText = $@"GRANT UNLIMITED TABLESPACE TO ""{username.ToUpper()}""";
+                        await grantCommand.ExecuteNonQueryAsync();
+                    }
+                }
+                catch (OracleException ex)
+                {
+                    Console.WriteLine($"Error creating Oracle admin user: {ex.Message}");
+                    return (false, $"Lỗi khi tạo tài khoản: {ex.Message}");
+                }
+
+                // insert into KhachHang as Admin
+                try
+                {
+                    using (var insertCommand = adminConnection.CreateCommand())
+                    {
+                        insertCommand.CommandText = @"
+                            INSERT INTO TADMIN.KhachHang (HoTen, Email, SoDienThoai, DiaChi, ORACLE_USERNAME, VaiTro)
+                            VALUES (:HoTen, :Email, :SoDienThoai, :DiaChi, :Username, :VaiTro)";
+
+                        insertCommand.Parameters.Add("HoTen", OracleDbType.NVarchar2).Value = hoTen;
+                        insertCommand.Parameters.Add("Email", OracleDbType.NVarchar2).Value = email;
+                        insertCommand.Parameters.Add("SoDienThoai", OracleDbType.NVarchar2).Value = (object?)soDienThoai ?? DBNull.Value;
+                        insertCommand.Parameters.Add("DiaChi", OracleDbType.NVarchar2).Value = (object?)diaChi ?? DBNull.Value;
+                        insertCommand.Parameters.Add("Username", OracleDbType.NVarchar2).Value = username.ToUpper();
+                        insertCommand.Parameters.Add("VaiTro", OracleDbType.NVarchar2).Value = "Admin";
+
+                        await insertCommand.ExecuteNonQueryAsync();
+                    }
+                }
+                catch (OracleException ex)
+                {
+                    Console.WriteLine($"Error inserting admin into KhachHang: {ex.Message}");
+                    using (var dropCommand = adminConnection.CreateCommand())
+                    {
+                        dropCommand.CommandText = $@"DROP USER ""{username.ToUpper()}"" CASCADE";
+                        await dropCommand.ExecuteNonQueryAsync();
+                    }
+                    return (false, $"Lỗi khi lưu thông tin: {ex.Message}");
+                }
+
+                return (true, "Tạo admin thành công");
+            }
+            catch (OracleException ex)
+            {
+                Console.WriteLine($"Oracle error: {ex.Message}");
+                return (false, $"Lỗi khi tạo tài khoản: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+                return (false, "Không thể tạo admin, vui lòng thử lại sau");
             }
         }
     }

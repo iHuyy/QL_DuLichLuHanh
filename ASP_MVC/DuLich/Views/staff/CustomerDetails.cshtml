@@ -1,0 +1,159 @@
+@{
+    ViewData["Title"] = "Chi tiết khách hàng";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Chi tiết khách hàng</h4>
+        </div>
+    </div>
+    <div class="col-sm-6 p-md-0 justify-content-end mt-2 mt-sm-0 d-flex">
+        <a href="@Url.Action("Customers", "Staff")" class="btn btn-primary">
+            <i class="fa fa-arrow-left"></i> Quay lại
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="text-center">
+                    <div class="profile-photo">
+                        <img src="~/images/profile/default-avatar.png" width="100" class="img-fluid rounded-circle" alt="">
+                    </div>
+                    <h3 class="mt-4 mb-1">@Model.HoTen</h3>
+                    <p class="text-muted">@Model.MaKH</p>
+                </div>
+                <div class="profile-info mt-4">
+                    <div class="info-item d-flex py-2">
+                        <span class="w-50"><i class="fa fa-phone mr-2 text-primary"></i>Điện thoại:</span>
+                        <span class="w-50">@Model.SoDienThoai</span>
+                    </div>
+                    <div class="info-item d-flex py-2">
+                        <span class="w-50"><i class="fa fa-envelope mr-2 text-primary"></i>Email:</span>
+                        <span class="w-50">@Model.Email</span>
+                    </div>
+                    <div class="info-item d-flex py-2">
+                        <span class="w-50"><i class="fa fa-calendar mr-2 text-primary"></i>Ngày sinh:</span>
+                        <span class="w-50">@(Model.NgaySinh?.ToString("dd/MM/yyyy"))</span>
+                    </div>
+                    <div class="info-item d-flex py-2">
+                        <span class="w-50"><i class="fa fa-map-marker mr-2 text-primary"></i>Địa chỉ:</span>
+                        <span class="w-50">@Model.DiaChi</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Thống kê hoạt động</h4>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-sm-4 mb-2">
+                        <div class="card bg-primary">
+                            <div class="card-body">
+                                <h3 class="card-title text-white">@Model.TotalBookings</h3>
+                                <p class="card-text text-white">Tổng số tour đã đặt</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4 mb-2">
+                        <div class="card bg-success">
+                            <div class="card-body">
+                                <h3 class="card-title text-white">@Model.CompletedBookings</h3>
+                                <p class="card-text text-white">Tour đã hoàn thành</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4 mb-2">
+                        <div class="card bg-info">
+                            <div class="card-body">
+                                <h3 class="card-title text-white">@Model.TotalSpent.ToString("N0") VNĐ</h3>
+                                <p class="card-text text-white">Tổng chi tiêu</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Lịch sử đặt tour gần đây</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Tour</th>
+                                <th>Ngày đặt</th>
+                                <th>Số lượng</th>
+                                <th>Tổng tiền</th>
+                                <th>Trạng thái</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var booking in Model.RecentBookings)
+                            {
+                                <tr>
+                                    <td>@booking.TourName</td>
+                                    <td>@booking.BookingDate.ToString("dd/MM/yyyy")</td>
+                                    <td>@booking.Quantity</td>
+                                    <td>@booking.TotalAmount.ToString("N0") VNĐ</td>
+                                    <td>
+                                        <span class="badge badge-@booking.StatusClass">@booking.Status</span>
+                                    </td>
+                                    <td>
+                                        <a href="@Url.Action("BookingDetails", "Staff", new { id = booking.Id })" 
+                                           class="btn btn-info shadow btn-xs sharp">
+                                            <i class="fa fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-center mt-3">
+                    <a href="@Url.Action("CustomerBookings", "Staff", new { customerId = Model.Id })" class="btn btn-primary">
+                        Xem tất cả
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .profile-photo {
+        width: 100px;
+        height: 100px;
+        margin: 0 auto;
+    }
+
+    .profile-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .info-item {
+        border-bottom: 1px solid #eee;
+    }
+
+    .info-item:last-child {
+        border-bottom: none;
+    }
+
+    .card-body .card {
+        margin-bottom: 0;
+    }
+</style>

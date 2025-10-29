@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -46,5 +47,10 @@ namespace DuLich.Models
 
         [Column("QR")]
         public string? QR { get; set; }
+
+        [Column("CHINHANH")]
+        public string? ChiNhanh { get; set; }
+
+        public virtual ICollection<AnhTour> AnhTours { get; set; } = new List<AnhTour>();
     }
 }

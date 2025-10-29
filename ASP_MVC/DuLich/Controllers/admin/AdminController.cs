@@ -37,12 +37,18 @@ namespace DuLich.Controllers
 
             var (success, role) = await _authService.ValidateLoginAsync(model.Username, model.Password);
 
-            if (success && role == "ROLE_ADMIN")
+            if (!success)
+            {
+                ModelState.AddModelError(string.Empty, "Đăng nhập không thành công");
+                return View(model);
+            }
+
+            // Accept admin or staff roles here
+            if (role == "ROLE_ADMIN" || role == "ROLE_STAFF" || role == "ROLE_CUSTOMER")
             {
                 var claims = new List<Claim>
                 {
                     new Claim(ClaimTypes.Name, model.Username),
-                    // Use the actual Oracle role string so Authorize(Roles=...) works
                     new Claim(ClaimTypes.Role, role)
                 };
 
@@ -54,7 +60,14 @@ namespace DuLich.Controllers
                     new ClaimsPrincipal(claimsIdentity),
                     authProperties);
 
-                return RedirectToAction("Dashboard", "Admin");
+                if (role == "ROLE_ADMIN")
+                    return RedirectToAction("Dashboard", "Admin");
+
+                if (role == "ROLE_STAFF")
+                    return RedirectToAction("Index", "Staff");
+
+                // default fallback for customers (if they reach this login)
+                return RedirectToAction("Index", "Home");
             }
 
             ModelState.AddModelError(string.Empty, "Đăng nhập không thành công");
@@ -87,10 +100,19 @@ namespace DuLich.Controllers
             return View(users);
         }
 
-        [HttpGet]
-        public IActionResult CreateUser()
+        // List only staff (NhanVien)
+        public async Task<IActionResult> Staffs()
         {
-            return View(new RegisterModel());
+            var staffs = await _db.NhanViens.OrderBy(u => u.MaNhanVien).ToListAsync();
+            return View(staffs);
+        }
+
+        [HttpGet]
+        public IActionResult CreateUser(string? role)
+        {
+            var model = new RegisterModel();
+            if (!string.IsNullOrEmpty(role)) model.Role = role;
+            return View(model);
         }
 
         [HttpPost]
@@ -99,17 +121,32 @@ namespace DuLich.Controllers
             if (!ModelState.IsValid)
                 return View(model);
 
-            // Use OracleAuthService to create the Oracle user and insert KhachHang record
-            var (success, message) = await _authService.RegisterCustomerAsync(
-                model.Username, model.Password, model.HoTen, model.Email, model.SoDienThoai, model.DiaChi);
+            var role = model.Role ?? "KhachHang";
 
-            if (success)
+            (bool success, string? message) result;
+
+            if (role == "NhanVien")
             {
-                TempData["Success"] = message;
+                result = await _authService.RegisterStaffAsync(model.Username, model.Password, model.HoTen, model.Email, model.SoDienThoai, model.ChiNhanh);
+            }
+            else if (role == "Admin")
+            {
+                result = await _authService.RegisterAdminAsync(model.Username, model.Password, model.HoTen, model.Email, model.SoDienThoai, model.DiaChi);
+            }
+            else
+            {
+                result = await _authService.RegisterCustomerAsync(model.Username, model.Password, model.HoTen, model.Email, model.SoDienThoai, model.DiaChi);
+            }
+
+            if (result.success)
+            {
+                TempData["Success"] = result.message;
+                // Redirect to staff list when creating staff
+                if (role == "NhanVien") return RedirectToAction("Staffs");
                 return RedirectToAction("Users");
             }
 
-            ModelState.AddModelError(string.Empty, message ?? "Không thể tạo người dùng");
+            ModelState.AddModelError(string.Empty, result.message ?? "Không thể tạo người dùng");
             return View(model);
         }
 
@@ -187,12 +224,70 @@ namespace DuLich.Controllers
             // If ORACLE_USERNAME exists and role corresponds to DB roles, propagate to Oracle via GrantRole
             if (!string.IsNullOrEmpty(kh.ORACLE_USERNAME))
             {
-                var oracleRole = vaiTro == "Admin" ? "ROLE_ADMIN" : "ROLE_CUSTOMER";
+                var oracleRole = vaiTro == "Admin" ? "ROLE_ADMIN" : (vaiTro == "NhanVien" ? "ROLE_STAFF" : "ROLE_CUSTOMER");
                 await _authService.GrantRoleAsync(kh.ORACLE_USERNAME!, oracleRole);
             }
 
             TempData["Success"] = "Đã thay đổi vai trò người dùng";
             return RedirectToAction("Users");
+        }
+
+        // --- NhanVien (staff) management ---
+        [HttpGet]
+        public async Task<IActionResult> EditStaff(int id)
+        {
+            var nv = await _db.NhanViens.FindAsync(id);
+            if (nv == null) return NotFound();
+            return View(nv);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> EditStaff(DuLich.Models.NhanVien model)
+        {
+            if (!ModelState.IsValid) return View(model);
+            var nv = await _db.NhanViens.FindAsync(model.MaNhanVien);
+            if (nv == null) return NotFound();
+            nv.HoTen = model.HoTen;
+            nv.Email = model.Email;
+            nv.SoDienThoai = model.SoDienThoai;
+            nv.VaiTro = model.VaiTro;
+            nv.TrangThai = model.TrangThai;
+            nv.ORACLE_USERNAME = model.ORACLE_USERNAME;
+            nv.ChiNhanh = model.ChiNhanh;
+            await _db.SaveChangesAsync();
+            TempData["Success"] = "Cập nhật nhân viên thành công";
+            return RedirectToAction("Staffs");
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> ChangeStaffRole(int id, string vaiTro)
+        {
+            var nv = await _db.NhanViens.FindAsync(id);
+            if (nv == null) return NotFound();
+            nv.VaiTro = vaiTro;
+            await _db.SaveChangesAsync();
+            if (!string.IsNullOrEmpty(nv.ORACLE_USERNAME))
+            {
+                var oracleRole = vaiTro == "Admin" ? "ROLE_ADMIN" : (vaiTro == "NhanVien" ? "ROLE_STAFF" : "ROLE_CUSTOMER");
+                await _authService.GrantRoleAsync(nv.ORACLE_USERNAME!, oracleRole);
+            }
+            TempData["Success"] = "Đã thay đổi vai trò nhân viên";
+            return RedirectToAction("Staffs");
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> DeleteStaff(string username)
+        {
+            // delete NHANVIEN record then drop oracle user
+            var nv = await _db.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME == username.ToUpper() || n.ORACLE_USERNAME == username);
+            if (nv != null)
+            {
+                _db.NhanViens.Remove(nv);
+                await _db.SaveChangesAsync();
+            }
+            var (success, message) = await _authService.DeleteUserAsync(username);
+            TempData[success ? "Success" : "Error"] = message;
+            return RedirectToAction("Staffs");
         }
 
         // --- Tour management ---

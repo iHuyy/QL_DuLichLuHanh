@@ -1,0 +1,215 @@
+@{
+    ViewData["Title"] = "Quản lý Tour";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Quản lý Tour</h4>
+        </div>
+    </div>
+    <div class="col-sm-6 p-md-0 justify-content-sm-end mt-2 mt-sm-0 d-flex">
+        <a href="@Url.Action("CreateTour", "Staff")" class="btn btn-primary">
+            <i class="fa fa-plus"></i> Thêm Tour mới
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="toursList" class="display" style="min-width: 845px">
+                        <thead>
+                            <tr>
+                                <th>Mã Tour</th>
+                                <th>Tên Tour</th>
+                                <th>Điểm đến</th>
+                                <th>Thời gian</th>
+                                <th>Giá người lớn</th>
+                                <th>Giá trẻ em</th>
+                                <th>Số chỗ còn</th>
+                                <th>Trạng thái</th>
+                                <th>QR Code</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal hiển thị QR Code -->
+<div class="modal fade" id="qrModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">QR Code Tour</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="qrModalImage" src="" alt="Tour QR Code" style="max-width: 100%;" />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="downloadQR()">Tải QR Code</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal cập nhật trạng thái -->
+<div class="modal fade" id="updateStatusModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cập nhật trạng thái tour</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <form id="statusForm">
+                    <input type="hidden" id="tourId" name="tourId" />
+                    <div class="form-group">
+                        <label>Trạng thái mới</label>
+                        <select class="form-control" id="newStatus">
+                            <option value="Đang mở">Đang mở</option>
+                            <option value="Tạm ngưng">Tạm ngưng</option>
+                            <option value="Đã kết thúc">Đã kết thúc</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Ghi chú</label>
+                        <textarea class="form-control" id="statusNote" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger light" data-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary" onclick="updateTourStatus()">Cập nhật</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            loadTours();
+        });
+
+        function loadTours() {
+            $('#toursList').DataTable({
+                ajax: '/staff/api/tours',
+                order: [[3, 'asc']],
+                columns: [
+                    { data: 'maTour' },
+                    { data: 'tieuDe' },
+                    { data: 'noiDen' },
+                    {
+                        data: 'thoiGian',
+                        render: function (data) {
+                            return moment(data).format('DD/MM/YYYY');
+                        }
+                    },
+                    {
+                        data: 'giaNguoiLon',
+                        render: function (data) {
+                            return new Intl.NumberFormat('vi-VN', {
+                                style: 'currency',
+                                currency: 'VND'
+                            }).format(data);
+                        }
+                    },
+                    {
+                        data: 'giaTreEm',
+                        render: function (data) {
+                            return new Intl.NumberFormat('vi-VN', {
+                                style: 'currency',
+                                currency: 'VND'
+                            }).format(data);
+                        }
+                    },
+                    { data: 'soLuong' },
+                    {
+                        data: 'trangThai',
+                        render: function (data) {
+                            return getTourStatusBadge(data);
+                        }
+                    },
+                    {
+                        data: 'qr',
+                        render: function (data) {
+                            if (data) {
+                                return `<img src="${data}" alt="Tour QR Code" style="width: 50px; height: 50px;" onclick="showQRModal(this.src)" />`;
+                            }
+                            return 'Không có QR';
+                        }
+                    },
+                    {
+                        data: null,
+                        render: function (data) {
+                            return `
+                                        <div class="d-flex">
+                                            <a href="/staff/tours/details/${data.maTour}" class="btn btn-primary shadow btn-xs sharp mr-1"><i class="fa fa-eye"></i></a>
+                                            <a href="/staff/tours/edit/${data.maTour}" class="btn btn-info shadow btn-xs sharp mr-1"><i class="fa fa-pencil"></i></a>
+                                            <button onclick="showStatusModal(${data.maTour})" class="btn btn-warning shadow btn-xs sharp"><i class="fa fa-refresh"></i></button>
+                                        </div>`;
+                        }
+                    }
+                ]
+            });
+        }
+
+        function showStatusModal(tourId) {
+            $('#tourId').val(tourId);
+            $('#updateStatusModal').modal('show');
+        }
+
+        function updateTourStatus() {
+            const tourId = $('#tourId').val();
+            const status = $('#newStatus').val();
+            const note = $('#statusNote').val();
+
+            $.ajax({
+                url: '/staff/api/tours/status',
+                method: 'POST',
+                data: { tourId, status, note },
+                success: function (response) {
+                    $('#updateStatusModal').modal('hide');
+                    $('#toursList').DataTable().ajax.reload();
+                    toastr.success('Đã cập nhật trạng thái tour thành công');
+                },
+                error: function (xhr) {
+                    toastr.error('Có lỗi xảy ra khi cập nhật trạng thái tour. Vui lòng thử lại sau.');
+                }
+            });
+        }
+
+        function getTourStatusBadge(status) {
+            const badges = {
+                'Đang mở': 'badge-success',
+                'Tạm ngưng': 'badge-warning',
+                'Đã kết thúc': 'badge-secondary'
+            };
+            return `<span class="badge ${badges[status] || 'badge-secondary'}">${status}</span>`;
+        }
+
+        function showQRModal(src) {
+            $('#qrModalImage').attr('src', src);
+            $('#qrModal').modal('show');
+        }
+
+        function downloadQR() {
+            const link = document.createElement('a');
+            link.download = 'tour-qr-code.png';
+            link.href = $('#qrModalImage').attr('src');
+            link.click();
+        }
+    </script>
+}

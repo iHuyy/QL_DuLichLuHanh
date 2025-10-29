@@ -1,0 +1,216 @@
+@{
+    ViewData["Title"] = "Quản lý đặt tour";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Quản lý đặt tour</h4>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="bookingsList" class="display" style="min-width: 845px">
+                        <thead>
+                            <tr>
+                                <th>Mã đơn</th>
+                                <th>Tour</th>
+                                <th>Khách hàng</th>
+                                <th>Số người lớn</th>
+                                <th>Số trẻ em</th>
+                                <th>Tổng tiền</th>
+                                <th>Ngày đặt</th>
+                                <th>Trạng thái</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal xác nhận đơn -->
+<div class="modal fade" id="confirmBookingModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Xác nhận đơn đặt tour</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <p>Bạn có chắc chắn muốn xác nhận đơn đặt tour này?</p>
+                <form id="confirmForm">
+                    <input type="hidden" id="bookingId" name="bookingId" />
+                    <div class="form-group">
+                        <label>Ghi chú</label>
+                        <textarea class="form-control" id="confirmNote" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger light" data-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary" onclick="confirmBooking()">Xác nhận</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal hủy đơn -->
+<div class="modal fade" id="cancelBookingModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Hủy đơn đặt tour</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <form id="cancelForm">
+                    <input type="hidden" id="cancelBookingId" name="bookingId" />
+                    <div class="form-group">
+                        <label>Lý do hủy <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="cancelReason" rows="3" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-info light" data-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-danger" onclick="cancelBooking()">Hủy đơn</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            loadBookings();
+        });
+
+        function loadBookings() {
+            $('#bookingsList').DataTable({
+                ajax: '/staff/api/bookings',
+                order: [[6, 'desc']],
+                columns: [
+                    { data: 'maDatTour' },
+                    { data: 'tenTour' },
+                    { data: 'tenKhachHang' },
+                    { data: 'soNguoiLon' },
+                    { data: 'soTreEm' },
+                    { 
+                        data: 'tongTien',
+                        render: function(data) {
+                            return new Intl.NumberFormat('vi-VN', {
+                                style: 'currency',
+                                currency: 'VND'
+                            }).format(data);
+                        }
+                    },
+                    { 
+                        data: 'ngayDat',
+                        render: function(data) {
+                            return moment(data).format('DD/MM/YYYY HH:mm');
+                        }
+                    },
+                    { 
+                        data: 'trangThai',
+                        render: function(data) {
+                            return getStatusBadge(data);
+                        }
+                    },
+                    {
+                        data: null,
+                        render: function(data) {
+                            let buttons = `
+                                <div class="d-flex">
+                                    <a href="/staff/bookings/details/${data.maDatTour}" class="btn btn-primary shadow btn-xs sharp mr-1"><i class="fa fa-eye"></i></a>
+                            `;
+                            
+                            if (data.trangThai === 'Chờ xử lý') {
+                                buttons += `
+                                    <button onclick="showConfirmModal(${data.maDatTour})" class="btn btn-success shadow btn-xs sharp mr-1"><i class="fa fa-check"></i></button>
+                                    <button onclick="showCancelModal(${data.maDatTour})" class="btn btn-danger shadow btn-xs sharp"><i class="fa fa-times"></i></button>
+                                `;
+                            }
+                            
+                            buttons += '</div>';
+                            return buttons;
+                        }
+                    }
+                ]
+            });
+        }
+
+        function showConfirmModal(bookingId) {
+            $('#bookingId').val(bookingId);
+            $('#confirmBookingModal').modal('show');
+        }
+
+        function showCancelModal(bookingId) {
+            $('#cancelBookingId').val(bookingId);
+            $('#cancelBookingModal').modal('show');
+        }
+
+        function confirmBooking() {
+            const bookingId = $('#bookingId').val();
+            const note = $('#confirmNote').val();
+
+            $.ajax({
+                url: '/staff/api/bookings/confirm',
+                method: 'POST',
+                data: { bookingId, note },
+                success: function(response) {
+                    $('#confirmBookingModal').modal('hide');
+                    $('#bookingsList').DataTable().ajax.reload();
+                    toastr.success('Đã xác nhận đơn đặt tour thành công');
+                },
+                error: function(xhr) {
+                    toastr.error('Có lỗi xảy ra khi xác nhận đơn. Vui lòng thử lại sau.');
+                }
+            });
+        }
+
+        function cancelBooking() {
+            const bookingId = $('#cancelBookingId').val();
+            const reason = $('#cancelReason').val();
+
+            if (!reason) {
+                toastr.error('Vui lòng nhập lý do hủy đơn');
+                return;
+            }
+
+            $.ajax({
+                url: '/staff/api/bookings/cancel',
+                method: 'POST',
+                data: { bookingId, reason },
+                success: function(response) {
+                    $('#cancelBookingModal').modal('hide');
+                    $('#bookingsList').DataTable().ajax.reload();
+                    toastr.success('Đã hủy đơn đặt tour thành công');
+                },
+                error: function(xhr) {
+                    toastr.error('Có lỗi xảy ra khi hủy đơn. Vui lòng thử lại sau.');
+                }
+            });
+        }
+
+        function getStatusBadge(status) {
+            const badges = {
+                'Chờ xử lý': 'badge-warning',
+                'Đã xác nhận': 'badge-success',
+                'Đã hủy': 'badge-danger',
+                'Hoàn thành': 'badge-info'
+            };
+            return `<span class="badge ${badges[status] || 'badge-secondary'}">${status}</span>`;
+        }
+    </script>
+}

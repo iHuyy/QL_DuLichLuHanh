@@ -27,5 +27,11 @@ namespace DuLich.Models
 
         [Display(Name = "Địa chỉ")]
         public string? DiaChi { get; set; }
+
+        [Display(Name = "Vai trò")]
+        public string? Role { get; set; } = "KhachHang"; // KhachHang | Admin | NhanVien
+
+        [Display(Name = "Chi nhánh")]
+        public string? ChiNhanh { get; set; }
     }
 }

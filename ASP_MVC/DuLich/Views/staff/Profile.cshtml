@@ -1,0 +1,68 @@
+@{
+    ViewData["Title"] = "Staff Profile";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Thông tin cá nhân</h4>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-xl-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="profile-tab">
+                    <div class="profile-about-me">
+                        <div class="pt-4 border-bottom-1 pb-3">
+                            <h4 class="text-primary">Thông tin nhân viên</h4>
+                        </div>
+                        <div class="row mb-4">
+                            <div class="col-3">
+                                <h5 class="f-w-500">Họ tên <span class="pull-right">:</span></h5>
+                            </div>
+                            <div class="col-9">
+                                <span>@Model.HoTen</span>
+                            </div>
+                        </div>
+                        <div class="row mb-4">
+                            <div class="col-3">
+                                <h5 class="f-w-500">Email <span class="pull-right">:</span></h5>
+                            </div>
+                            <div class="col-9">
+                                <span>@Model.Email</span>
+                            </div>
+                        </div>
+                        <div class="row mb-4">
+                            <div class="col-3">
+                                <h5 class="f-w-500">Số điện thoại <span class="pull-right">:</span></h5>
+                            </div>
+                            <div class="col-9">
+                                <span>@Model.SoDienThoai</span>
+                            </div>
+                        </div>
+                        <div class="row mb-4">
+                            <div class="col-3">
+                                <h5 class="f-w-500">Ngày sinh <span class="pull-right">:</span></h5>
+                            </div>
+                            <div class="col-9">
+                                <span>@(Model.NgaySinh?.ToString("dd/MM/yyyy"))</span>
+                            </div>
+                        </div>
+                        <div class="row mb-4">
+                            <div class="col-3">
+                                <h5 class="f-w-500">Địa chỉ <span class="pull-right">:</span></h5>
+                            </div>
+                            <div class="col-9">
+                                <span>@Model.DiaChi</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

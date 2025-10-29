@@ -1,0 +1,149 @@
+@{
+    ViewData["Title"] = "Chi tiết đặt tour";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Chi tiết đặt tour</h4>
+        </div>
+    </div>
+    <div class="col-sm-6 p-md-0 justify-content-end mt-2 mt-sm-0 d-flex">
+        <a href="@Url.Action("Bookings", "Staff")" class="btn btn-primary">
+            <i class="fa fa-arrow-left"></i> Quay lại
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="row mb-5">
+                    <div class="col-lg-4">
+                        <div class="border-bottom pb-4">
+                            <h4>Thông tin đặt tour</h4>
+                            <div class="mt-4">
+                                <p class="text-muted mb-2">Mã đặt tour</p>
+                                <h6>@Model?.Id</h6>
+                            </div>
+                            <div class="mt-4">
+                                <p class="text-muted mb-2">Ngày đặt</p>
+                                <h6>@(Model?.BookingDate.ToString("dd/MM/yyyy HH:mm") ?? "Chưa xác định")</h6>
+                            </div>
+                            <div class="mt-4">
+                                <p class="text-muted mb-2">Trạng thái</p>
+                                <span class="badge badge-@(Model?.StatusClass ?? "secondary")">@(Model?.Status ?? "Chưa xác định")</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="border-bottom pb-4">
+                            <h4>Thông tin khách hàng</h4>
+                            <div class="mt-4">
+                                <p class="text-muted mb-2">Họ tên</p>
+                                <h6>@(Model?.Customer?.HoTen ?? "Không xác định")</h6>
+                            </div>
+                            <div class="mt-4">
+                                <p class="text-muted mb-2">Email</p>
+                                <h6>@(Model?.Customer?.Email ?? "Không có")</h6>
+                            </div>
+                            <div class="mt-4">
+                                <p class="text-muted mb-2">Số điện thoại</p>
+                                <h6>@(Model?.Customer?.SoDienThoai ?? "Không có")</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="border-bottom pb-4">
+                            <h4>Thông tin thanh toán</h4>
+                            <div class="mt-4">
+                                <p class="text-muted mb-2">Số lượng người</p>
+                                <h6>@(Model?.Quantity.ToString() ?? "0") người</h6>
+                            </div>
+                            <div class="mt-4">
+                                <p class="text-muted mb-2">Giá tour</p>
+                                <h6>@(Model?.Tour?.Gia.ToString("N0") ?? "0") VNĐ/người</h6>
+                            </div>
+                            <div class="mt-4">
+                                <p class="text-muted mb-2">Tổng tiền</p>
+                                <h6>@(Model?.TotalAmount.ToString("N0") ?? "0") VNĐ</h6>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-lg-12">
+                        <h4>Thông tin tour</h4>
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <tr>
+                                    <th style="width:200px">Tên tour</th>
+                                    <td>@(Model?.Tour?.TenTour ?? "Không xác định")</td>
+                                </tr>
+                                <tr>
+                                    <th>Mã tour</th>
+                                    <td>@(Model?.Tour?.MaTour ?? "Không xác định")</td>
+                                </tr>
+                                <tr>
+                                    <th>Ngày khởi hành</th>
+                                    <td>@(Model?.Tour?.NgayKhoiHanh.ToString("dd/MM/yyyy") ?? "Chưa xác định")</td>
+                                </tr>
+                                <tr>
+                                    <th>Ngày kết thúc</th>
+                                    <td>@(Model?.Tour?.NgayKetThuc.ToString("dd/MM/yyyy") ?? "Chưa xác định")</td>
+                                </tr>
+                                <tr>
+                                    <th>Điểm khởi hành</th>
+                                    <td>@(Model?.Tour?.DiemKhoiHanh ?? "Chưa xác định")</td>
+                                </tr>
+                                <tr>
+                                    <th>Điểm đến</th>
+                                    <td>@(Model?.Tour?.DiemDen ?? "Chưa xác định")</td>
+                                </tr>
+                                <tr>
+                                    <th>Mô tả</th>
+                                    <td>@Html.Raw(Model?.Tour?.MoTa ?? "Không có mô tả")</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                @if (Model?.BookingNotes?.Any() == true)
+                {
+                    <div class="row mt-4">
+                        <div class="col-lg-12">
+                            <h4>Lịch sử ghi chú</h4>
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Thời gian</th>
+                                            <th>Trạng thái</th>
+                                            <th>Ghi chú</th>
+                                            <th>Người cập nhật</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var note in Model?.BookingNotes ?? Enumerable.Empty<dynamic>())
+                                        {
+                                            <tr>
+                                                <td>@(note?.CreatedAt.ToString("dd/MM/yyyy HH:mm") ?? "N/A")</td>
+                                                <td><span class="badge badge-@(note?.StatusClass ?? "secondary")">@(note?.Status ?? "Không xác định")</span></td>
+                                                <td>@(note?.Note ?? "Không có ghi chú")</td>
+                                                <td>@(note?.StaffName ?? "Không xác định")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

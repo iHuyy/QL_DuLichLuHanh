@@ -1,0 +1,182 @@
+@{
+    ViewData["Title"] = "Chi tiết Tour";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Chi tiết Tour</h4>
+        </div>
+    </div>
+    <div class="col-sm-6 p-md-0 justify-content-end mt-2 mt-sm-0 d-flex">
+        <a href="@Url.Action("Tours", "Staff")" class="btn btn-primary">
+            <i class="fa fa-arrow-left"></i> Quay lại
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-xl-9 col-lg-8">
+                        <div class="tour-detail">
+                            <h2 class="mb-4">@Model.TenTour</h2>
+
+                            <div class="basic-info mb-4">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p><strong>Mã tour:</strong> @Model.MaTour</p>
+                                        <p><strong>Điểm khởi hành:</strong> @Model.DiemKhoiHanh</p>
+                                        <p><strong>Điểm đến:</strong> @Model.DiemDen</p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p><strong>Ngày khởi hành:</strong> @Model.NgayKhoiHanh.ToString("dd/MM/yyyy")
+                                        </p>
+                                        <p><strong>Ngày kết thúc:</strong> @Model.NgayKetThuc.ToString("dd/MM/yyyy")</p>
+                                        <p><strong>Thời gian:</strong> @Model.ThoiGian ngày</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="tour-images mb-4">
+                                <h4>Hình ảnh tour</h4>
+                                <div class="row">
+                                    @foreach (var image in Model.AnhTour)
+                                    {
+                                        <div class="col-md-4 mb-3">
+                                            <img src="@image.DuongDan" alt="@Model.TenTour" class="img-fluid rounded">
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="tour-description mb-4">
+                                <h4>Mô tả tour</h4>
+                                <div>
+                                    @Html.Raw(Model.MoTa)
+                                </div>
+                            </div>
+
+                            <div class="tour-schedule mb-4">
+                                <h4>Lịch trình</h4>
+                                <div>
+                                    @Html.Raw(Model.LichTrinh)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-lg-4">
+                        <div class="tour-sidebar">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h4>Thông tin tour</h4>
+                                    <div class="tour-info-box">
+                                        <div class="info-item">
+                                            <span class="label">Giá tour</span>
+                                            <span class="value text-primary">@Model.Gia.ToString("N0") VNĐ</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="label">Số lượng chỗ</span>
+                                            <span class="value">@Model.SoChoConLai/@Model.SoLuong</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="label">Trạng thái</span>
+                                            <span class="badge badge-@Model.StatusClass">@Model.TrangThai</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="label">Phương tiện</span>
+                                            <span class="value">@Model.PhuongTien</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card mt-3">
+                                <div class="card-body">
+                                    <h4>Thống kê đặt tour</h4>
+                                    <div class="booking-stats">
+                                        <div class="stat-item">
+                                            <span class="label">Tổng số đặt</span>
+                                            <span class="value">@Model.TongSoDat</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="label">Đã xác nhận</span>
+                                            <span class="value">@Model.SoDatXacNhan</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="label">Chờ xác nhận</span>
+                                            <span class="value">@Model.SoDatChoXacNhan</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="label">Đã hủy</span>
+                                            <span class="value">@Model.SoDatHuy</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3">
+                                        <a href="@Url.Action("TourBookings", "Staff", new { tourId = Model.Id })"
+                                            class="btn btn-primary btn-block">
+                                            Xem danh sách đặt tour
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .tour-info-box .info-item {
+        padding: 10px 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .tour-info-box .info-item:last-child {
+        border-bottom: none;
+    }
+
+    .tour-info-box .label {
+        display: block;
+        color: #666;
+        font-size: 0.9rem;
+        margin-bottom: 5px;
+    }
+
+    .tour-info-box .value {
+        font-weight: 600;
+        color: #333;
+    }
+
+    .booking-stats .stat-item {
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .booking-stats .stat-item:last-child {
+        border-bottom: none;
+    }
+
+    .booking-stats .label {
+        font-size: 0.9rem;
+        color: #666;
+    }
+
+    .booking-stats .value {
+        float: right;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .tour-images img {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+    }
+</style>

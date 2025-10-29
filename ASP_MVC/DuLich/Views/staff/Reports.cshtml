@@ -1,0 +1,275 @@
+@{
+    ViewData["Title"] = "Báo cáo";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Báo cáo thống kê</h4>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-xl-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-xl-5">
+                        <div class="form-group">
+                            <label>Thời gian</label>
+                            <select id="timeRange" class="form-control">
+                                <option value="today">Hôm nay</option>
+                                <option value="week">7 ngày qua</option>
+                                <option value="month" selected>Tháng này</option>
+                                <option value="year">Năm nay</option>
+                                <option value="custom">Tùy chỉnh</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-xl-7 custom-date-range" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-5">
+                                <div class="form-group">
+                                    <label>Từ ngày</label>
+                                    <input type="date" id="startDate" class="form-control">
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="form-group">
+                                    <label>Đến ngày</label>
+                                    <input type="date" id="endDate" class="form-control">
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-group">
+                                    <label>&nbsp;</label>
+                                    <button class="btn btn-primary w-100" onclick="loadReports()">Xem</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-xl-3 col-lg-6 col-sm-6">
+        <div class="widget-stat card">
+            <div class="card-body p-4">
+                <div class="media ai-icon">
+                    <span class="mr-3 bgl-primary text-primary">
+                        <i class="fa fa-users"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="mb-0 text-black"><span id="totalBookings">0</span></h3>
+                        <p class="mb-0">Tổng số đơn đặt tour</p>
+                        <small id="bookingChange">0% so với kỳ trước</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-lg-6 col-sm-6">
+        <div class="widget-stat card">
+            <div class="card-body p-4">
+                <div class="media ai-icon">
+                    <span class="mr-3 bgl-success text-success">
+                        <i class="fa fa-money-bill"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="mb-0 text-black"><span id="totalRevenue">0</span></h3>
+                        <p class="mb-0">Doanh thu</p>
+                        <small id="revenueChange">0% so với kỳ trước</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-lg-6 col-sm-6">
+        <div class="widget-stat card">
+            <div class="card-body p-4">
+                <div class="media ai-icon">
+                    <span class="mr-3 bgl-warning text-warning">
+                        <i class="fa fa-user-plus"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="mb-0 text-black"><span id="newCustomers">0</span></h3>
+                        <p class="mb-0">Khách hàng mới</p>
+                        <small id="customerChange">0% so với kỳ trước</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-lg-6 col-sm-6">
+        <div class="widget-stat card">
+            <div class="card-body p-4">
+                <div class="media ai-icon">
+                    <span class="mr-3 bgl-danger text-danger">
+                        <i class="fa fa-times-circle"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="mb-0 text-black"><span id="canceledBookings">0</span></h3>
+                        <p class="mb-0">Đơn hủy</p>
+                        <small id="cancelChange">0% so với kỳ trước</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-xl-8 col-lg-12 col-sm-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Thống kê đặt tour theo thời gian</h4>
+            </div>
+            <div class="card-body">
+                <canvas id="bookingChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4 col-lg-12 col-sm-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Top 5 tour được đặt nhiều</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-responsive-md">
+                        <thead>
+                            <tr>
+                                <th>Tour</th>
+                                <th>Số đơn</th>
+                                <th>Doanh thu</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topToursTable">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            $('#timeRange').change(function() {
+                $('.custom-date-range').toggle($(this).val() === 'custom');
+                if ($(this).val() !== 'custom') {
+                    loadReports();
+                }
+            });
+
+            loadReports();
+        });
+
+        function loadReports() {
+            const timeRange = $('#timeRange').val();
+            let params = { timeRange };
+
+            if (timeRange === 'custom') {
+                params.startDate = $('#startDate').val();
+                params.endDate = $('#endDate').val();
+            }
+
+            // Load overview stats
+            $.get('/staff/api/reports/overview', params, function(data) {
+                $('#totalBookings').text(data.totalBookings);
+                $('#totalRevenue').text(formatCurrency(data.totalRevenue));
+                $('#newCustomers').text(data.newCustomers);
+                $('#canceledBookings').text(data.canceledBookings);
+
+                updateChangePercentage('bookingChange', data.bookingChange);
+                updateChangePercentage('revenueChange', data.revenueChange);
+                updateChangePercentage('customerChange', data.customerChange);
+                updateChangePercentage('cancelChange', data.cancelChange);
+            });
+
+            // Load booking chart
+            $.get('/staff/api/reports/booking-trend', params, function(data) {
+                updateBookingChart(data);
+            });
+
+            // Load top tours
+            $.get('/staff/api/reports/top-tours', params, function(data) {
+                updateTopTours(data);
+            });
+        }
+
+        function updateChangePercentage(elementId, change) {
+            const element = $(`#${elementId}`);
+            if (change >= 0) {
+                element.html(`<i class="fa fa-caret-up text-success"></i> +${change}% so với kỳ trước`);
+            } else {
+                element.html(`<i class="fa fa-caret-down text-danger"></i> ${change}% so với kỳ trước`);
+            }
+        }
+
+        function updateBookingChart(data) {
+            const ctx = document.getElementById('bookingChart').getContext('2d');
+            
+            if (window.bookingChart) {
+                window.bookingChart.destroy();
+            }
+
+            window.bookingChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Số lượng đặt tour',
+                        data: data.values,
+                        borderColor: 'rgb(54, 162, 235)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateTopTours(data) {
+            const tbody = $('#topToursTable');
+            tbody.empty();
+            
+            data.forEach(tour => {
+                tbody.append(`
+                    <tr>
+                        <td>${tour.tenTour}</td>
+                        <td>${tour.soDon}</td>
+                        <td>${formatCurrency(tour.doanhThu)}</td>
+                    </tr>
+                `);
+            });
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+    </script>
+}

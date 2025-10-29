@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "Jj2ULSIY/IQ=",
+  "dgSpecHash": "5gK4IL5pyAI=",
   "success": true,
-  "projectFilePath": "D:\\QuanLyDuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
+  "projectFilePath": "D:\\QuanLyDuLichLuHanh\\GitHub\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\quang\\.nuget\\packages\\microsoft.entityframeworkcore\\9.0.0\\microsoft.entityframeworkcore.9.0.0.nupkg.sha512",
     "C:\\Users\\quang\\.nuget\\packages\\microsoft.entityframeworkcore.abstractions\\9.0.0\\microsoft.entityframeworkcore.abstractions.9.0.0.nupkg.sha512",

@@ -2,17 +2,36 @@
     ViewData["Title"] = "Dashboard";
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
 }
+
+@section Scripts {
+    <script src="~/admin/js/dashboard.js"></script>
+}
 <div class="row">
     <div class="col-xl-3 col-xxl-3 col-sm-6">
         <div class="widget-stat card bg-primary">
             <div class="card-body">
                 <div class="media">
-                    <span class="mr-3 text-primary">
-                        <i class="fa fa-envelope"></i>
+                    <span class="mr-3">
+                        <i class="fa fa-plane text-white fa-3x"></i>
                     </span>
                     <div class="media-body">
-                        <h3 class="text-white">275</h3>
-                        <h5 class="mb-1 text-white"> New Messages</h5>
+                        <h3 class="text-white" id="totalTours">0</h3>
+                        <h5 class="mb-1 text-white">Tổng số Tours</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-xxl-3 col-sm-6">
+        <div class="widget-stat card bg-success">
+            <div class="card-body">
+                <div class="media">
+                    <span class="mr-3">
+                        <i class="fa fa-users text-white fa-3x"></i>
+                    </span>
+                    <div class="media-body">
+                        <h3 class="text-white" id="totalUsers">0</h3>
+                        <h5 class="mb-1 text-white">Tổng số người dùng</h5>
                     </div>
                 </div>
             </div>
@@ -22,27 +41,12 @@
         <div class="widget-stat card bg-warning">
             <div class="card-body">
                 <div class="media">
-                    <span class="mr-3 text-warning">
-                        <i class="fa fa-bookmark"></i>
+                    <span class="mr-3">
+                        <i class="fa fa-calendar-check text-white fa-3x"></i>
                     </span>
                     <div class="media-body">
-                        <h3 class="text-white">150</h3>
-                        <h5 class="mb-1 text-white">New bookmark</h5>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-xxl-3 col-sm-6">
-        <div class="widget-stat card bg-secondary">
-            <div class="card-body">
-                <div class="media">
-                    <span class="mr-3 text-secondary">
-                        <i class="fa fa-star"></i>
-                    </span>
-                    <div class="media-body">
-                        <h3 class="text-white">532</h3>
-                        <h5 class="mb-1 text-white">New Reviews</h5>
+                        <h3 class="text-white" id="todayBookings">0</h3>
+                        <h5 class="mb-1 text-white">Đặt tour hôm nay</h5>
                     </div>
                 </div>
             </div>
@@ -52,12 +56,12 @@
         <div class="widget-stat card bg-danger">
             <div class="card-body">
                 <div class="media">
-                    <span class="mr-3 text-danger">
-                        <i class="fa fa-address-book"></i>
+                    <span class="mr-3">
+                        <i class="fa fa-money-bill text-white fa-3x"></i>
                     </span>
                     <div class="media-body">
-                        <h3 class="text-white">241</h3>
-                        <h5 class="mb-1 text-white">New Booking</h5>
+                        <h3 class="text-white" id="totalRevenue">0</h3>
+                        <h5 class="mb-1 text-white">Tổng doanh thu</h5>
                     </div>
                 </div>
             </div>
@@ -70,12 +74,12 @@
                     <div class="card-body">
                         <div class="media mb-3 justify-content-center">
                             <span class="bg-primary text-white">
-                                <i class="la la-building"></i>
+                                <i class="la la-calendar-check fa-2x"></i>
                             </span>
                         </div>
                         <div class="media-body">
-                            <h2><strong>241</strong></h2>
-                            <h5 class="mb-1">New Hotel Listings</h5>
+                            <h2><strong id="activeTours">0</strong></h2>
+                            <h5 class="mb-1">Tour đang hoạt động</h5>
                         </div>
                     </div>
                 </div>
@@ -85,91 +89,61 @@
                     <div class="card-body">
                         <div class="media mb-3 justify-content-center">
                             <span class="bg-warning text-white">
-                                <i class="la la-car"></i>
+                                <i class="la la-calendar-times fa-2x"></i>
                             </span>
                         </div>
                         <div class="media-body">
-                            <h2><strong>235</strong></h2>
-                            <h5 class="mb-1">New Car Listings</h5>
+                            <h2><strong id="expiredTours">0</strong></h2>
+                            <h5 class="mb-1">Tour hết hạn</h5>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="col">
-                <div class="widget-stat card text-center">
-                    <div class="card-body">
-                        <div class="media mb-3 justify-content-center">
-                            <span class="bg-secondary text-white">
-                                <i class="la la-fighter-jet"></i>
-                            </span>
-                        </div>
-                        <div class="media-body">
-                            <h2><strong>118</strong></h2>
-                            <h5 class="mb-1">New Flight Listings</h5>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col">
-                <div class="widget-stat card text-center">
-                    <div class="card-body">
-                        <div class="media mb-3 justify-content-center">
-                            <span class="bg-danger text-white">
-                                <i class="la la-road"></i>
-                            </span>
-                        </div>
-                        <div class="media-body">
-                            <h2><strong>120</strong></h2>
-                            <h5 class="mb-1">New Tour Listings</h5>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col">
-                <div class="widget-stat card text-center">
-                    <div class="card-body">
-                        <div class="media mb-3 justify-content-center">
-                            <span class="bg-success text-white">
-                                <i class="la la-ship"></i>
-                            </span>
-                        </div>
-                        <div class="media-body">
-                            <h2><strong>180</strong></h2>
-                            <h5 class="mb-1">New Cruise Listings</h5>
-                        </div>
-                    </div>
-                </div>
-            </div>
+
+
         </div>
     </div>
 
     <div class="col-xl-6 col-xxl-6 col-sm-6">
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">Booking Report</h3>
+                <h3 class="card-title">Số lượng đặt tour theo tháng</h3>
             </div>
             <div class="card-body">
-                <canvas id="barChart_2"></canvas>
+                <canvas id="monthlyBookingsChart"></canvas>
             </div>
         </div>
     </div>
     <div class="col-xl-6 col-xxl-6 col-sm-6">
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">Booking Report</h3>
+                <h3 class="card-title">Phân bố tour theo loại</h3>
             </div>
             <div class="card-body">
-                <div id="pie-chart" class="ct-chart ct-golden-section"></div>
+                <div id="tourTypeDistribution" class="ct-chart ct-golden-section"></div>
             </div>
         </div>
     </div>
     <div class="col-xl-12 col-xxl-12 col-sm-12">
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">World Map</h3>
+                <h3 class="card-title">Tour phổ biến</h3>
             </div>
             <div class="card-body">
-                <div id="world-map"></div>
+                <div class="table-responsive">
+                    <table class="table table-hover" id="popularToursTable">
+                        <thead>
+                            <tr>
+                                <th>Tên tour</th>
+                                <th>Số lượng đặt</th>
+                                <th>Đánh giá</th>
+                                <th>Doanh thu</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

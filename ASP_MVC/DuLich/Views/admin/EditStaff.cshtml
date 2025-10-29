@@ -1,0 +1,93 @@
+@model DuLich.Models.NhanVien
+@{
+    ViewData["Title"] = "Sửa thông tin nhân viên";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Sửa thông tin nhân viên</h4>
+        </div>
+    </div>
+    <div class="col-sm-6 p-md-0 justify-content-sm-end mt-2 mt-sm-0 d-flex">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-controller="Admin" asp-action="Dashboard">Home</a></li>
+            <li class="breadcrumb-item"><a asp-controller="Admin" asp-action="Staffs">Staffs</a></li>
+            <li class="breadcrumb-item active">Edit Staff</li>
+        </ol>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form asp-action="EditStaff" method="post">
+                    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                    <input type="hidden" asp-for="MaNhanVien" />
+
+                    <div class="form-group">
+                        <label asp-for="HoTen">Họ tên</label>
+                        <input asp-for="HoTen" class="form-control" />
+                        <span asp-validation-for="HoTen" class="text-danger"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label asp-for="Email">Email</label>
+                        <input asp-for="Email" class="form-control" />
+                        <span asp-validation-for="Email" class="text-danger"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label asp-for="SoDienThoai">Số điện thoại</label>
+                        <input asp-for="SoDienThoai" class="form-control" />
+                        <span asp-validation-for="SoDienThoai" class="text-danger"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label asp-for="ChiNhanh">Chi nhánh</label>
+                        <input asp-for="ChiNhanh" class="form-control" />
+                        <small class="form-text text-muted">Mã hoặc tên chi nhánh cho VPD</small>
+                        <span asp-validation-for="ChiNhanh" class="text-danger"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label asp-for="VaiTro">Vai trò</label>
+                        <select asp-for="VaiTro" class="form-control">
+                            <option value="NhanVien">Nhân viên</option>
+                            <option value="Admin">Admin</option>
+                        </select>
+                        <span asp-validation-for="VaiTro" class="text-danger"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label asp-for="TrangThai">Trạng thái</label>
+                        <select asp-for="TrangThai" class="form-control">
+                            <option value="HoatDong">Hoạt động</option>
+                            <option value="BiKhoa">Bị khóa</option>
+                        </select>
+                        <span asp-validation-for="TrangThai" class="text-danger"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label asp-for="ORACLE_USERNAME">Oracle Username</label>
+                        <input asp-for="ORACLE_USERNAME" class="form-control" readonly />
+                        <small class="form-text text-muted">Username không thể thay đổi sau khi tạo</small>
+                    </div>
+
+                    <div class="form-group mt-3">
+                        <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+                        <a asp-action="Staffs" class="btn btn-link">Quay lại</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

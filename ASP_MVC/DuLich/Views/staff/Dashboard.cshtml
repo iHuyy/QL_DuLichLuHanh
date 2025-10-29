@@ -1,0 +1,201 @@
+@{
+    ViewData["Title"] = "Staff Dashboard";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row">
+    <div class="col-lg-3 col-sm-6">
+        <div class="card">
+            <div class="stat-widget-one card-body">
+                <div class="stat-icon d-inline-block">
+                    <i class="ti-money text-success border-success"></i>
+                </div>
+                <div class="stat-content d-inline-block">
+                    <div class="stat-text">Doanh thu</div>
+                    <div class="stat-digit" id="totalRevenue">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-sm-6">
+        <div class="card">
+            <div class="stat-widget-one card-body">
+                <div class="stat-icon d-inline-block">
+                    <i class="ti-user text-primary border-primary"></i>
+                </div>
+                <div class="stat-content d-inline-block">
+                    <div class="stat-text">Khách hàng</div>
+                    <div class="stat-digit" id="totalCustomers">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-sm-6">
+        <div class="card">
+            <div class="stat-widget-one card-body">
+                <div class="stat-icon d-inline-block">
+                    <i class="ti-layout-grid2 text-pink border-pink"></i>
+                </div>
+                <div class="stat-content d-inline-block">
+                    <div class="stat-text">Tour hiện có</div>
+                    <div class="stat-digit" id="totalTours">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-sm-6">
+        <div class="card">
+            <div class="stat-widget-one card-body">
+                <div class="stat-icon d-inline-block">
+                    <i class="ti-link text-danger border-danger"></i>
+                </div>
+                <div class="stat-content d-inline-block">
+                    <div class="stat-text">Đặt tour</div>
+                    <div class="stat-digit" id="totalBookings">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Tour sắp khởi hành</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive" id="upcomingToursTable">
+                    <table class="table student-data-table m-t-20">
+                        <thead>
+                            <tr>
+                                <th>Tên Tour</th>
+                                <th>Ngày khởi hành</th>
+                                <th>Số lượng</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="4" class="text-center">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Thông báo</h4>
+            </div>
+            <div class="card-body">
+                <div class="recent-notification" id="notificationsContainer">
+                    <div class="text-center">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Đơn đặt tour gần đây</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive" id="recentBookingsTable">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Khách hàng</th>
+                                <th>Tour</th>
+                                <th>Ngày đặt</th>
+                                <th>Số lượng</th>
+                                <th>Tổng tiền</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="7" class="text-center">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            // Load dashboard stats
+            $.get('/staff/api/stats', function (data) {
+                $('#totalRevenue').text(new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(data.totalRevenue));
+                $('#totalCustomers').text(data.totalCustomers);
+                $('#totalTours').text(data.totalTours);
+                $('#totalBookings').text(data.totalBookings);
+            });
+
+            // Load recent bookings
+            $.get('/staff/api/recent-bookings', function (data) {
+                var tbody = $('#recentBookingsTable tbody');
+                tbody.empty();
+                data.forEach(function (booking) {
+                    tbody.append(`
+                            <tr>
+                                <td>${booking.id}</td>
+                                <td>${booking.customerName}</td>
+                                <td>${booking.tourName}</td>
+                                <td>${new Date(booking.bookingDate).toLocaleDateString('vi-VN')}</td>
+                                <td>${booking.quantity}</td>
+                                <td>${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(booking.totalAmount)}</td>
+                                <td><span class="badge badge-${booking.statusClass}">${booking.status}</span></td>
+                            </tr>
+                        `);
+                });
+            });
+
+            // Load upcoming tours
+            $.get('/staff/api/upcoming-tours', function (data) {
+                var tbody = $('#upcomingToursTable tbody');
+                tbody.empty();
+                data.forEach(function (tour) {
+                    tbody.append(`
+                            <tr>
+                                <td>${tour.name}</td>
+                                <td>${new Date(tour.startDate).toLocaleDateString('vi-VN')}</td>
+                                <td>${tour.currentBookings}/${tour.maxCapacity}</td>
+                                <td><span class="badge badge-${tour.statusClass}">${tour.status}</span></td>
+                            </tr>
+                        `);
+                });
+            });
+
+            // Load notifications
+            $.get('/staff/api/notifications', function (data) {
+                var container = $('#notificationsContainer');
+                container.empty();
+                data.forEach(function (notification) {
+                    container.append(`
+                            <div class="notification-row">
+                                <div class="notification-icon">
+                                    <i class="${notification.icon} text-${notification.type}"></i>
+                                </div>
+                                <div class="notification-content">
+                                    <h6>${notification.title}</h6>
+                                    <p>${notification.message}</p>
+                                    <small class="text-muted">${notification.time}</small>
+                                </div>
+                            </div>
+                        `);
+                });
+            });
+        });
+    </script>
+}
