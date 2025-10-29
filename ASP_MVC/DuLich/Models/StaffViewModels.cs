@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel.DataAnnotations;
 
 namespace DuLich.Models
 {
@@ -27,25 +28,44 @@ namespace DuLich.Models
     public class TourViewModel
     {
         public int Id { get; set; }
-        public string? MaTour { get; set; }
-        public string? TenTour { get; set; }
-        public string? DiemDen { get; set; }
-        public DateTime NgayKhoiHanh { get; set; }
-        public decimal Gia { get; set; }
-        public int SoChoConLai { get; set; }
-        public int SoLuong { get; set; }
-        public string? TrangThai { get; set; }
-        public string? StatusClass { get; set; }
 
-        public TourViewModel()
-        {
-            MaTour = "";
-            TenTour = "Chưa đặt tên";
-            DiemDen = "Chưa xác định";
-            NgayKhoiHanh = DateTime.Now;
-            TrangThai = "Chưa xác định";
-            StatusClass = "secondary";
-        }
+        [Display(Name = "Mã Tour")]
+        public string MaTour { get; set; }
+
+        [Display(Name = "Tên Tour")]
+        public string TenTour { get; set; }
+
+        [Display(Name = "Điểm đến")]
+        public string DiemDen { get; set; }
+
+        [Display(Name = "Ngày khởi hành")]
+        [DataType(DataType.Date)]
+        public DateTime NgayKhoiHanh { get; set; }
+
+        [Display(Name = "Giá")]
+        [DataType(DataType.Currency)]
+        public decimal Gia { get; set; }
+
+        [Display(Name = "Số chỗ còn lại")]
+        public int SoChoConLai { get; set; }
+
+        [Display(Name = "Tổng số chỗ")]
+        public int SoLuong { get; set; }
+
+        [Display(Name = "Trạng thái")]
+        public string TrangThai { get; set; }
+
+        [Display(Name = "QR Code")]
+        public string QR { get; set; }
+
+        // Thêm property để xác định class CSS cho trạng thái
+        public string StatusClass { get; set; }
+
+        // Thêm các properties khác nếu cần
+        public string NoiKhoiHanh { get; set; }
+        public decimal? GiaTreEm { get; set; }
+        public string MoTa { get; set; }
+        public string ChiNhanh { get; set; }
     }
 
     public class CustomerViewModel

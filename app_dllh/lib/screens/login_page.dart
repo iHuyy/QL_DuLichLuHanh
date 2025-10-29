@@ -1,0 +1,397 @@
+import 'package:app_dllh/services/auth_service.dart';
+import 'package:flutter/material.dart';
+import 'home_page.dart';
+import 'qr_login_scanner_page.dart';
+import 'register_page.dart';
+
+// Định nghĩa màu xanh chính được sử dụng trong giao diện.
+const Color primaryBlue = Color(0xFF007AFF);
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+  
+  @override
+  _LoginPageState createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  // Controllers cho form
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
+
+  // State quản lý trạng thái tải và thông báo lỗi
+  bool _isLoading = false;
+  String _message = "";
+  bool _isPasswordVisible = false; // Thêm state cho việc ẩn/hiện mật khẩu
+
+  // =========================================================
+  // LOGIC CHỨC NĂNG
+  // =========================================================
+  
+  Future<void> _login() async {
+    setState(() {
+      _isLoading = true;
+      _message = "";
+    });
+
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (username.isEmpty || password.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _message = "Vui lòng nhập đầy đủ thông tin";
+      });
+      _showSnackBar("Vui lòng nhập đầy đủ thông tin", Colors.orange);
+      return;
+    }
+
+    try {
+      // GỌI API mà không truyền role. Server (login.php) sẽ tự quyết định.
+      final Map<String, dynamic> result = await _authService.login(username, password);
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (result['success'] == true) {
+        final serverRole = result['role']?.toString() ?? 'DEFAULT';
+        final userID = result['userID'].toString();
+
+        // Điều hướng đến HomePage sau khi đăng nhập thành công
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => HomePage(
+              userID: userID,
+              role: serverRole,
+            ),
+          ),
+        );
+      } else {
+        setState(() {
+          _usernameController.clear();
+          _passwordController.clear();
+          _message = result['message'] ?? 'Đăng nhập thất bại.';
+        });
+        _showSnackBar(_message, Colors.red);
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _message = "Lỗi kết nối hoặc xử lý: $e";
+      });
+      _showSnackBar(_message, Colors.red);
+    }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // Hàm điều hướng đến màn hình Đăng ký
+  void _navigateToSignUp() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => RegisterPage(), // Sử dụng RegisterPage đã có
+      ),
+    );
+  }
+
+  // Hàm mô phỏng điều hướng đến màn hình Đăng nhập bằng QR
+  void _navigateToQRLogin() {
+    // Trong môi trường thực tế, bạn sẽ Navigator.push đến một trang Scanner QR
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Đăng nhập bằng QR Code',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryBlue),
+              ),
+              const SizedBox(height: 30),
+              // 
+              const Icon(Icons.qr_code_scanner, size: 150, color: Colors.black54),
+              const SizedBox(height: 30),
+              const Text(
+                'Vui lòng quét Mã QR từ thiết bị đã đăng nhập của bạn.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.black87),
+              ),
+              const SizedBox(height: 50),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryBlue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Đóng', style: TextStyle(fontSize: 18)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // =========================================================
+  // WIDGETS GIAO DIỆN
+  // =========================================================
+
+  // Widget riêng để xây dựng ô nhập liệu
+  Widget _buildInputField({
+    required String hintText,
+    required TextEditingController controller,
+    bool isPassword = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2F2F7), // Màu nền nhẹ cho input field
+        borderRadius: BorderRadius.circular(10), // Bo góc
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        obscureText: isPassword && !_isPasswordVisible, // Ẩn văn bản nếu là mật khẩu và chưa được toggle
+        decoration: InputDecoration(
+          hintText: hintText,
+          border: InputBorder.none, 
+          // Icon ở bên phải (chỉ hiện thị cho trường mật khẩu)
+          suffixIcon: isPassword 
+              ? IconButton(
+                  icon: Icon(
+                    _isPasswordVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined, 
+                    color: Colors.grey[600],
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _isPasswordVisible = !_isPasswordVisible; // Toggle hiển thị mật khẩu
+                    });
+                  },
+                )
+              : null,
+          contentPadding: const EdgeInsets.symmetric(vertical: 18),
+          hintStyle: TextStyle(
+            color: Colors.grey[600],
+            fontSize: 16,
+          ),
+        ),
+        style: const TextStyle(fontSize: 16, color: Colors.black87),
+      ),
+    );
+  }
+
+  // Widget riêng để xây dựng nút Đăng nhập
+  Widget _buildSignInButton() {
+    return SizedBox(
+      width: double.infinity, 
+      height: 56, 
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _login, // Gọi hàm _login
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryBlue,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          elevation: 0,
+          textStyle: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        child: _isLoading 
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 3,
+                ),
+              )
+            : const Text('Sign In'),
+      ),
+    );
+  }
+  
+  // Widget mới: Nút Đăng nhập bằng QR
+  Widget _buildQRLoginButton() {
+    return SizedBox(
+      width: double.infinity, 
+      height: 56, 
+      child: OutlinedButton.icon(
+        onPressed: _navigateToQRLogin,
+        icon: const Icon(Icons.qr_code_scanner, color: primaryBlue),
+        label: const Text(
+          'Đăng nhập bằng QR', 
+          style: TextStyle(
+            fontSize: 18, 
+            fontWeight: FontWeight.bold, 
+            color: primaryBlue
+          )
+        ),
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: primaryBlue, width: 2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    
+    return Scaffold(
+      backgroundColor: Colors.white,
+      // Bỏ FloatingActionButton
+      // floatingActionButton: _buildQRButton(), 
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 32.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Vùng chứa hình ảnh minh họa
+              SizedBox(
+                height: screenHeight * 0.35,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.flight_takeoff, size: 80, color: primaryBlue), // Icon minh họa
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Tour & Travel App',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: primaryBlue),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Tiêu đề "Sign In"
+              const Text(
+                'Sign In',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+
+              const SizedBox(height: 32),
+
+              // Ô nhập liệu Tên đăng nhập
+              _buildInputField(
+                hintText: 'Tên đăng nhập (Username)',
+                controller: _usernameController,
+                keyboardType: TextInputType.text,
+              ),
+
+              const SizedBox(height: 16),
+
+              // Ô nhập liệu Mật khẩu
+              _buildInputField(
+                hintText: 'Mật khẩu',
+                controller: _passwordController,
+                isPassword: true,
+              ),
+
+              const SizedBox(height: 32),
+
+              // 1. Nút Đăng nhập (Sign In Button)
+              _buildSignInButton(),
+
+              const SizedBox(height: 16), // Khoảng cách giữa Sign In và QR
+
+              // 2. Nút Đăng nhập bằng QR (Vị trí mới)
+              _buildQRLoginButton(),
+
+              const SizedBox(height: 20),
+
+              // Hiển thị thông báo lỗi (nếu có)
+              if (_message.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Text(
+                    _message,
+                    style: const TextStyle(color: Colors.red, fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+
+              // 3. Quên mật khẩu (Vị trí mới: sau QR)
+              TextButton(
+                onPressed: () {
+                  _showSnackBar("Tính năng Quên mật khẩu chưa khả dụng", Colors.blueGrey);
+                },
+                child: const Text(
+                  'Forget Password?',
+                  style: TextStyle(
+                    color: Colors.black54,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+
+              // Dãn cách để bố cục cân đối
+              SizedBox(height: screenHeight * 0.05),
+
+              // Đăng ký (Sign Up)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    "Don't have an Account?",
+                    style: TextStyle(
+                      color: Colors.black54,
+                      fontSize: 16,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _navigateToSignUp, // Gọi hàm chuyển màn hình đăng ký
+                    child: const Text(
+                      'Sign Up',
+                      style: TextStyle(
+                        color: primaryBlue,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

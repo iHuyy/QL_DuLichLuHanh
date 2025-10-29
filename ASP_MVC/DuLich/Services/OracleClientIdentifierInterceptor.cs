@@ -5,6 +5,7 @@ using DuLich.Models.Data;
 using Microsoft.Extensions.DependencyInjection;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DuLich.Services
 {
@@ -13,11 +14,13 @@ namespace DuLich.Services
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IServiceProvider _provider;
+        private readonly ILogger<OracleClientIdentifierInterceptor> _logger;
 
-        public OracleClientIdentifierInterceptor(IHttpContextAccessor httpContextAccessor, IServiceProvider provider)
+        public OracleClientIdentifierInterceptor(IHttpContextAccessor httpContextAccessor, IServiceProvider provider, ILogger<OracleClientIdentifierInterceptor> logger)
         {
             _httpContextAccessor = httpContextAccessor;
             _provider = provider;
+            _logger = logger;
         }
 
         public override async Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData, CancellationToken cancellationToken = default)
@@ -37,14 +40,19 @@ namespace DuLich.Services
                 using var scope = _provider.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-                // Use FromSqlRaw with parameters to prevent SQL injection
+                // Use FromSqlRaw with parameters to prevent SQL injection, and UPPER for case-insensitivity
                 var staff = await db.NhanViens
-                    .FromSqlRaw("SELECT * FROM TADMIN.NHANVIEN WHERE ORACLE_USERNAME = :username",
+                    .FromSqlRaw("SELECT * FROM TADMIN.NHANVIEN WHERE UPPER(ORACLE_USERNAME) = UPPER(:username)",
                               new Oracle.ManagedDataAccess.Client.OracleParameter("username", username))
                     .FirstOrDefaultAsync(cancellationToken);
 
                 var branch = staff?.ChiNhanh;
-                if (string.IsNullOrEmpty(branch)) return;
+                if (string.IsNullOrEmpty(branch)) 
+                {
+                    // Log if branch is not found for a logged-in staff member
+                    _logger.LogWarning($"Branch not found for staff user: {username}");
+                    return;
+                }
 
                 using var cmd = connection.CreateCommand();
                 cmd.CommandText = "BEGIN DBMS_SESSION.SET_IDENTIFIER(:id); END;";
@@ -54,8 +62,10 @@ namespace DuLich.Services
                 cmd.Parameters.Add(p);
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
-            catch
+            catch (Exception ex)
             {
+                // Log the exception
+                _logger.LogError(ex, "Error in OracleClientIdentifierInterceptor.");
                 // swallow - don't want to break normal DB ops if interceptor fails
             }
         }

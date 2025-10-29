@@ -22,5 +22,9 @@ namespace DuLich.Models
 
         [Column("NGAYTAILEN")]
         public System.DateTime? NgayTaiLen { get; set; }
+
+        // Sửa thêm: navigation property và ForeignKey để EF dùng cột MATOUR thay vì tạo shadow FK "TourMaTour"
+        [ForeignKey(nameof(MaTour))]
+        public Tour? Tour { get; set; }
     }
 }

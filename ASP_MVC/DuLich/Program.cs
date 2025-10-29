@@ -19,16 +19,15 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 // HttpContext accessor needed by DB connection interceptor
 builder.Services.AddHttpContextAccessor();
 
-// Register interceptor
-builder.Services.AddScoped<OracleClientIdentifierInterceptor>();
+// Register OracleSessionInterceptor (constructor will receive IHttpContextAccessor via DI)
+builder.Services.AddScoped<OracleSessionInterceptor>();
 
-// Đăng ký DbContext
+// Đăng ký DbContext với interceptor
 builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
 {
-    options.UseOracle(builder.Configuration.GetConnectionString("DefaultConnection"));
-    // Add interceptor resolved from DI to set CLIENT_IDENTIFIER for Oracle sessions
-    var interceptor = sp.GetService<OracleClientIdentifierInterceptor>();
-    if (interceptor != null) options.AddInterceptors(interceptor);
+    var interceptor = sp.GetRequiredService<OracleSessionInterceptor>();
+    options.UseOracle(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .AddInterceptors(interceptor);
 });
 
 // Đăng ký OracleAuthService
@@ -40,7 +39,6 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
@@ -56,6 +54,5 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Customer}/{action=Index}/{id?}")
     .WithStaticAssets();
-
 
 app.Run();

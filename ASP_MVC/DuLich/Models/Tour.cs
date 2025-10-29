@@ -51,6 +51,8 @@ namespace DuLich.Models
         [Column("CHINHANH")]
         public string? ChiNhanh { get; set; }
 
-        public virtual ICollection<AnhTour> AnhTours { get; set; } = new List<AnhTour>();
+        // Thêm navigation collection để EF không tạo shadow FK "TourMaTour"
+        public ICollection<AnhTour> AnhTours { get; set; } = new List<AnhTour>();
     }
 }
+

@@ -42,6 +42,23 @@ namespace DuLich.Models.Data
             {
                 entity.Property(e => e.TongTien).HasPrecision(12, 2);
             });
+
+            // Sửa thêm: map quan hệ ANHTOUR <-> TOUR, dùng MATOUR làm FK (tránh shadow FK TourMaTour)
+            modelBuilder.Entity<AnhTour>(eb =>
+            {
+                eb.ToTable("ANHTOUR", schema: "TADMIN");
+                eb.HasKey(a => a.MaAnh);
+                eb.Property(a => a.MaAnh).HasColumnName("MAANH");
+                eb.Property(a => a.MaTour).HasColumnName("MATOUR");
+                eb.Property(a => a.DuongDanAnh).HasColumnName("DUONGDANANH");
+                eb.Property(a => a.MoTa).HasColumnName("MOTA");
+                eb.Property(a => a.NgayTaiLen).HasColumnName("NGAYTAILEN");
+
+                eb.HasOne(a => a.Tour)
+                  .WithMany(t => t.AnhTours)
+                  .HasForeignKey(a => a.MaTour)
+                  .HasConstraintName("FK_ANHTOUR_TOUR");
+            });
         }
     }
 }
