@@ -1,70 +1,131 @@
-@model IEnumerable<DuLich.Models.Tour>
+@model List<DuLich.Models.TourViewModel>
 @{
+    ViewData["Title"] = "Quản lý Tour";
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
 }
 
-<h2>Quản lí Tour</h2>
-<p><a class="btn btn-primary" asp-controller="TourManagement" asp-action="Create">Thêm tour mới</a></p>
-<table class="table table-striped">
-    <thead>
-        <tr>
-            <th>#</th>
-            <th>Tiêu đề</th>
-            <th>Nơi khởi hành</th>
-            <th>Nơi đến</th>
-            <th>Thành phố</th>
-            <th>Thời gian</th>
-            <th>Giá (NL/TE)</th>
-            <th>Số lượng</th>
-            <th>QR</th>
-            <th>Trạng thái</th>
-            <th>Hành động</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var t in Model)
-        {
-            <tr>
-                <td>@t.MaTour</td>
-                <td>@t.TieuDe</td>
-                <td>@t.NoiKhoiHanh</td>
-                <td>@t.NoiDen</td>
-                <td>@t.ThanhPho</td>
-                <td>@(t.ThoiGian.HasValue ? t.ThoiGian.Value.ToString("yyyy-MM-dd") : "-")</td>
-                <td>@(t.GiaNguoiLon?.ToString("N0") ?? "-") / @(t.GiaTreEm?.ToString("N0") ?? "-")</td>
-                <td>@(t.SoLuong?.ToString() ?? "-")</td>
-                <td>
-                    @if (!string.IsNullOrEmpty(t.QR))
-                    {
-                        <a href="@t.QR" target="_blank"><img src="@t.QR" style="max-width:60px;max-height:60px" /></a>
-                    }
-                    else
-                    {
-                        <span class="text-muted">(chưa)</span>
-                    }
-                </td>
-                <td>
-                    <form method="post" asp-controller="TourManagement" asp-action="ChangeStatus">
-                        <input type="hidden" name="id" value="@t.MaTour" />
-                        <select name="status" class="form-control form-control-sm" onchange="this.form.submit()">
-                            @{
-                                var options = new[]{"Hoạt động","Tạm ngưng","Đã kết thúc","Đã hủy","Ẩn"};
-                                foreach(var o in options){
-                                    <option value="@o" selected="@(t.TrangThai==o)">@o</option>
-                                }
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Quản lý Tour</h4>
+        </div>
+    </div>
+    <div class="col-sm-6 p-md-0 justify-content-sm-end mt-2 mt-sm-0 d-flex">
+        <!-- 'Thêm Tour mới' intentionally removed for Admin as per requirement -->
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                @if (TempData["Success"] != null)
+                {
+                    <div class="alert alert-success">@TempData["Success"]</div>
+                }
+                @if (TempData["Error"] != null)
+                {
+                    <div class="alert alert-danger">@TempData["Error"]</div>
+                }
+
+                <div class="table-responsive">
+                    <table id="example" class="display table" style="min-width: 845px">
+                        <thead>
+                            <tr>
+                                <th>Mã Tour</th>
+                                <th>Tên Tour</th>
+                                <th>Điểm đến</th>
+                                <th>Chi nhánh</th>
+                                <th>Ngày khởi hành</th>
+                                <th>Giá</th>
+                                <th>Số chỗ còn lại</th>
+                                <th>Trạng thái</th>
+                                <th>QR Code</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var tour in Model)
+                            {
+                                <tr>
+                                    <td>@tour.MaTour</td>
+                                    <td>@tour.TenTour</td>
+                                    <td>@tour.DiemDen</td>
+                                    <td>@tour.ChiNhanh</td>
+                                    <td>@tour.NgayKhoiHanh.ToString("dd/MM/yyyy")</td>
+                                    <td>@tour.Gia.ToString("N0") VNĐ</td>
+                                    <td>@tour.SoChoConLai / @tour.SoLuong</td>
+                                    <td>
+                                        <form asp-controller="TourManagement" asp-action="ChangeStatus" method="post">
+                                            <input type="hidden" name="id" value="@tour.Id" />
+                                            <select name="status" class="form-control form-control-sm" onchange="this.form.submit()">
+                                                <option value="Hoạt động" selected="@(tour.TrangThai == "Hoạt động")">Hoạt động</option>
+                                                <option value="Không hoạt động" selected="@(tour.TrangThai == "Không hoạt động")">Không hoạt động</option>
+                                            </select>
+                                        </form>
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(tour.QR))
+                                        {
+                                            <button class="btn btn-info btn-sm" onclick="showQR('@tour.QR')">
+                                                <i class="fas fa-qrcode"></i>
+                                            </button>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="d-flex">
+                                            <a href="@Url.Action("TourDetails", "Admin", new { id = tour.Id })" class="btn btn-info shadow btn-xs sharp mr-1" title="Xem chi tiết"><i class="fa fa-eye"></i></a>
+                                            <a href="@Url.Action("EditTour", "Admin", new { id = tour.Id })"
+                                                class="btn btn-primary shadow btn-xs sharp mr-1">
+                                                <i class="fa fa-pencil"></i>
+                                            </a>
+                                            <form action="/Admin/DeleteTour/@tour.Id" method="post" style="display:inline-block;">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-danger shadow btn-xs sharp"
+                                                    onclick="return confirm('Bạn có chắc muốn xóa tour này?');">
+                                                    <i class="fa fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
                             }
-                        </select>
-                    </form>
-                </td>
-                <td>
-                    <a class="btn btn-sm btn-primary" asp-controller="TourManagement" asp-action="Edit" asp-route-id="@t.MaTour">Sửa</a>
-                    <form method="post" asp-controller="TourManagement" asp-action="Delete" asp-route-id="@t.MaTour" style="display:inline">
-                        <input type="hidden" name="id" value="@t.MaTour" />
-                        <button class="btn btn-sm btn-danger" type="submit" onclick="return confirm('Bạn có chắc muốn xóa tour này?')">Xóa</button>
-                    </form>
-                    <a class="btn btn-sm btn-secondary" asp-controller="TourManagement" asp-action="Detail" asp-route-id="@t.MaTour">Chi tiết</a>
-                </td>
-            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal hiển thị QR Code -->
+<div class="modal fade" id="qrModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">QR Code</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="qrImage" src="" alt="QR Code" style="max-width: 100%;" />
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#example').DataTable({
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Vietnamese.json'
+                }
+            });
+        });
+
+        function showQR(qrPath) {
+            $('#qrImage').attr('src', qrPath);
+            $('#qrModal').modal('show');
         }
-    </tbody>
-</table>
+    </script>
+}

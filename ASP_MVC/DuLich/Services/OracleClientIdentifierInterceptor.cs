@@ -46,8 +46,8 @@ namespace DuLich.Services
                               new Oracle.ManagedDataAccess.Client.OracleParameter("username", username))
                     .FirstOrDefaultAsync(cancellationToken);
 
-                var branch = staff?.ChiNhanh;
-                if (string.IsNullOrEmpty(branch)) 
+                var branchId = staff?.MaChiNhanh?.ToString();
+                if (string.IsNullOrEmpty(branchId)) 
                 {
                     // Log if branch is not found for a logged-in staff member
                     _logger.LogWarning($"Branch not found for staff user: {username}");
@@ -58,7 +58,7 @@ namespace DuLich.Services
                 cmd.CommandText = "BEGIN DBMS_SESSION.SET_IDENTIFIER(:id); END;";
                 var p = cmd.CreateParameter();
                 p.ParameterName = "id";
-                p.Value = branch;
+                p.Value = branchId;
                 cmd.Parameters.Add(p);
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }

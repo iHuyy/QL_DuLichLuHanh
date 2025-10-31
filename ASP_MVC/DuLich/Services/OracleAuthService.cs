@@ -303,7 +303,7 @@ namespace DuLich.Services
         }
 
         // Register a staff account (created by admin). Staff use staff_profile and get ROLE_STAFF
-        public async Task<(bool success, string message)> RegisterStaffAsync(string username, string password, string hoTen, string email, string? soDienThoai = null, string? chiNhanh = null)
+        public async Task<(bool success, string message)> RegisterStaffAsync(string username, string password, string hoTen, string email, string? soDienThoai = null, int? maChiNhanh = null)
         {
             using var adminConnection = new OracleConnection(_connectionString);
             await adminConnection.OpenAsync();
@@ -365,15 +365,15 @@ namespace DuLich.Services
                     using (var insertCommand = adminConnection.CreateCommand())
                     {
                         insertCommand.CommandText = @"
-                            INSERT INTO TADMIN.NHANVIEN (HoTen, Email, SoDienThoai, ORACLE_USERNAME, VaiTro, ChiNhanh)
-                            VALUES (:HoTen, :Email, :SoDienThoai, :Username, :VaiTro, :ChiNhanh)";
+                            INSERT INTO TADMIN.NHANVIEN (HoTen, Email, SoDienThoai, ORACLE_USERNAME, VaiTro, MACHINHANH)
+                            VALUES (:HoTen, :Email, :SoDienThoai, :Username, :VaiTro, :MaChiNhanh)";
 
                         insertCommand.Parameters.Add("HoTen", OracleDbType.NVarchar2).Value = hoTen;
                         insertCommand.Parameters.Add("Email", OracleDbType.NVarchar2).Value = email;
                         insertCommand.Parameters.Add("SoDienThoai", OracleDbType.NVarchar2).Value = (object?)soDienThoai ?? DBNull.Value;
                         insertCommand.Parameters.Add("Username", OracleDbType.NVarchar2).Value = username.ToUpper();
                         insertCommand.Parameters.Add("VaiTro", OracleDbType.NVarchar2).Value = "NhanVien";
-                        insertCommand.Parameters.Add("ChiNhanh", OracleDbType.NVarchar2).Value = (object?)chiNhanh ?? DBNull.Value;
+                        insertCommand.Parameters.Add("MaChiNhanh", OracleDbType.Int32).Value = (object?)maChiNhanh ?? DBNull.Value;
 
                         await insertCommand.ExecuteNonQueryAsync();
                     }

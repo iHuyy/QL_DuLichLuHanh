@@ -32,6 +32,6 @@ namespace DuLich.Models
         public string? Role { get; set; } = "KhachHang"; // KhachHang | Admin | NhanVien
 
         [Display(Name = "Chi nhánh")]
-        public string? ChiNhanh { get; set; }
+        public int? MaChiNhanh { get; set; }
     }
 }

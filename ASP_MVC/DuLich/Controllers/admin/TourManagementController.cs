@@ -21,54 +21,7 @@ namespace DuLich.Controllers.admin
             _env = env;
         }
 
-        [HttpGet]
-        public IActionResult Create()
-        {
-            return View(new Tour());
-        }
 
-        [HttpPost]
-        public async Task<IActionResult> Create(Tour model, List<IFormFile>? images)
-        {
-            if (!ModelState.IsValid)
-            {
-                // expose modelstate errors to view for debugging
-                TempData["ModelErrors"] = string.Join("; ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
-                return View(model);
-            }
-
-            // 1) Save tour to get MaTour
-            _db.Tours.Add(model);
-            await _db.SaveChangesAsync();
-
-            // 2) Save images if provided
-            if (images != null && images.Count > 0)
-            {
-                var imgFolder = Path.Combine(_env.WebRootPath, "images", "tour");
-                Directory.CreateDirectory(imgFolder);
-                foreach (var f in images)
-                {
-                    if (f.Length <= 0) continue;
-                    var fileName = $"tour_{model.MaTour}_{Guid.NewGuid()}{Path.GetExtension(f.FileName)}";
-                    var full = Path.Combine(imgFolder, fileName);
-                    using (var fs = System.IO.File.Create(full))
-                    {
-                        await f.CopyToAsync(fs);
-                    }
-                    var rel = $"/images/tour/{fileName}";
-                    _db.AnhTours.Add(new AnhTour { MaTour = model.MaTour, DuongDanAnh = rel, MoTa = f.FileName, NgayTaiLen = DateTime.UtcNow });
-                }
-                await _db.SaveChangesAsync();
-            }
-
-            // 3) Generate QR and save
-            var qr = await GenerateQRCodeForTour(model.MaTour);
-            model.QR = qr;
-            await _db.SaveChangesAsync();
-
-            TempData["Success"] = "Tạo tour thành công";
-            return RedirectToAction("Detail", new { id = model.MaTour });
-        }
 
         [HttpGet]
         public async Task<IActionResult> Detail(int id)
@@ -170,16 +123,65 @@ namespace DuLich.Controllers.admin
         {
             var t = await _db.Tours.FindAsync(id);
             if (t == null) return NotFound();
+
+            // Delete associated images records
+            var images = _db.AnhTours.Where(a => a.MaTour == id).ToList();
+            if (images.Any())
+            {
+                _db.AnhTours.RemoveRange(images);
+            }
+
             _db.Tours.Remove(t);
-            await _db.SaveChangesAsync();
-            TempData["Success"] = "Xóa tour thành công";
+
+            try
+            {
+                await _db.SaveChangesAsync();
+
+                // Delete image files after successful DB transaction
+                foreach (var image in images)
+                {
+                    if (!string.IsNullOrEmpty(image.DuongDanAnh))
+                    {
+                        var imagePath = Path.Combine(_env.WebRootPath, image.DuongDanAnh.TrimStart('/'));
+                        if (System.IO.File.Exists(imagePath))
+                        {
+                            System.IO.File.Delete(imagePath);
+                        }
+                    }
+                }
+
+                // Delete QR code file after successful DB transaction
+                if (!string.IsNullOrEmpty(t.QR))
+                {
+                    var qrPath = Path.Combine(_env.WebRootPath, t.QR.TrimStart('/'));
+                    if (System.IO.File.Exists(qrPath))
+                    {
+                        System.IO.File.Delete(qrPath);
+                    }
+                }
+
+                TempData["Success"] = "Xóa tour thành công";
+            }
+            catch (DbUpdateException ex)
+            {
+                var innerException = ex.InnerException;
+                if (innerException is Oracle.ManagedDataAccess.Client.OracleException oracleEx && oracleEx.Number == 2292)
+                {
+                    TempData["Error"] = "Không thể xóa tour. Có thể do đã có khách hàng đặt tour này hoặc có dữ liệu liên quan khác.";
+                }
+                else
+                {
+                    TempData["Error"] = "Đã xảy ra lỗi khi xóa tour: " + (innerException?.Message ?? ex.Message);
+                }
+            }
+
             return RedirectToAction("Tours", "Admin");
         }
 
         private async Task<string> GenerateQRCodeForTour(int maTour)
         {
             // Build URL
-            var url = Url.Action("Detail", "Tour", new { id = maTour }, Request.Scheme) ?? $"/Tour/Detail/{maTour}";
+            var url = Url.Action("Detail", "TourManagement", new { id = maTour }, Request.Scheme) ?? $"/TourManagement/Detail/{maTour}";
 
             // Create QR image using QRCoder
             using var qrGen = new QRCodeGenerator();

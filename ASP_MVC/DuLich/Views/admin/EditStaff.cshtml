@@ -46,10 +46,11 @@
                     </div>
 
                     <div class="form-group">
-                        <label asp-for="ChiNhanh">Chi nhánh</label>
-                        <input asp-for="ChiNhanh" class="form-control" />
-                        <small class="form-text text-muted">Mã hoặc tên chi nhánh cho VPD</small>
-                        <span asp-validation-for="ChiNhanh" class="text-danger"></span>
+                        <label asp-for="MaChiNhanh">Chi nhánh</label>
+                        <select asp-for="MaChiNhanh" class="form-control" asp-items="@(new SelectList(ViewBag.ChiNhanhs, "MaChiNhanh", "TenChiNhanh"))">
+                            <option value="">-- Chọn chi nhánh --</option>
+                        </select>
+                        <span asp-validation-for="MaChiNhanh" class="text-danger"></span>
                     </div>
 
                     <div class="form-group">

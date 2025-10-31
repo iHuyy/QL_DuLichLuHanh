@@ -1,0 +1,47 @@
+@model DuLich.Models.ChiNhanh
+
+@{ 
+    ViewData["Title"] = "Xóa Chi nhánh";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="container-fluid">
+    <div class="row page-titles">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item active"><a href="javascript:void(0)">Quản lý</a></li>
+            <li class="breadcrumb-item"><a asp-controller="ChiNhanh" asp-action="Index">Chi nhánh</a></li>
+            <li class="breadcrumb-item"><a href="javascript:void(0)">Xóa</a></li>
+        </ol>
+    </div>
+    <!-- row -->
+
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Xóa Chi nhánh</h4>
+                </div>
+                <div class="card-body">
+                    <h3>Bạn có chắc chắn muốn xóa chi nhánh này?</h3>
+                    <div>
+                        <hr />
+                        <dl class="row">
+                            <dt class="col-sm-2">Tên Chi Nhánh</dt>
+                            <dd class="col-sm-10">@Model.TenChiNhanh</dd>
+                            <dt class="col-sm-2">Địa chỉ</dt>
+                            <dd class="col-sm-10">@Model.DiaChi</dd>
+                            <dt class="col-sm-2">Số điện thoại</dt>
+                            <dd class="col-sm-10">@Model.SoDienThoai</dd>
+                        </dl>
+    
+                        <form asp-action="Delete">
+                            <input type="hidden" asp-for="MaChiNhanh" />
+                            <input type="submit" value="Xóa" class="btn btn-danger" /> |
+                            <a asp-action="Index">Trở về danh sách</a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

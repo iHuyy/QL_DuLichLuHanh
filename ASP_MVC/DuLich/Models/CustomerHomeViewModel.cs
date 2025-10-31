@@ -16,5 +16,6 @@ namespace DuLich.Models
         public string Time { get; set; } = string.Empty;
         public decimal PriceAdult { get; set; }
         public List<string> Images { get; set; } = new List<string>();
+        public decimal Rating { get; set; }
     }
 }

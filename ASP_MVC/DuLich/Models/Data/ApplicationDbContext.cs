@@ -20,6 +20,8 @@ namespace DuLich.Models.Data
         public DbSet<HoaDon> HoaDons { get; set; } = null!;
         public DbSet<DanhGiaTour> DanhGiaTours { get; set; } = null!;
         public DbSet<NhatKyHeThong> NhatKyHeThongs { get; set; } = null!;
+        public DbSet<ChiNhanh> ChiNhanhs { get; set; } = null!;
+        public DbSet<QR_Login> QR_Logins { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

@@ -1,4 +1,4 @@
-@model DuLich.Models.RegisterModel
+@model DuLich.Models.CreateUserViewModel
 @{
     ViewData["Title"] = "Tạo người dùng";
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
@@ -39,10 +39,12 @@
     </div>
 
     <div class="form-group">
-        <label asp-for="ChiNhanh"></label>
-        <input asp-for="ChiNhanh" class="form-control" />
-        <small class="form-text text-muted">(Chỉ dành cho Nhân viên — mã/ tên chi nhánh để VPD)</small>
-        <span asp-validation-for="ChiNhanh" class="text-danger"></span>
+        <label asp-for="MaChiNhanh">Chi Nhánh</label>
+        <select asp-for="MaChiNhanh" class="form-control" asp-items="Model.ChiNhanhSelectList">
+            <option value="">-- Chọn chi nhánh --</option>
+        </select>
+        <small class="form-text text-muted">(Chỉ dành cho Nhân viên)</small>
+        <span asp-validation-for="MaChiNhanh" class="text-danger"></span>
     </div>
 
     <div class="form-group">

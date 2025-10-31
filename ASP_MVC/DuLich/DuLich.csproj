@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+
   <ItemGroup>
     <PackageReference Include="Oracle.EntityFrameworkCore" Version="9.23.26000" />
     <PackageReference Include="QRCoder" Version="1.7.0" />

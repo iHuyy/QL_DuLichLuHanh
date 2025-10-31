@@ -1,0 +1,51 @@
+@model DuLich.Models.ChiNhanh
+
+@{ 
+    ViewData["Title"] = "Tạo mới Chi nhánh";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="container-fluid">
+    <div class="row page-titles">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item active"><a href="javascript:void(0)">Quản lý</a></li>
+            <li class="breadcrumb-item"><a asp-controller="ChiNhanh" asp-action="Index">Chi nhánh</a></li>
+            <li class="breadcrumb-item"><a href="javascript:void(0)">Tạo mới</a></li>
+        </ol>
+    </div>
+    <!-- row -->
+
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Tạo mới Chi nhánh</h4>
+                </div>
+                <div class="card-body">
+                    <form asp-action="Create">
+                        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                        <div class="form-group">
+                            <label asp-for="TenChiNhanh" class="control-label">Tên Chi Nhánh</label>
+                            <input asp-for="TenChiNhanh" class="form-control" />
+                            <span asp-validation-for="TenChiNhanh" class="text-danger"></span>
+                        </div>
+                        <div class="form-group">
+                            <label asp-for="DiaChi" class="control-label">Địa chỉ</label>
+                            <input asp-for="DiaChi" class="form-control" />
+                            <span asp-validation-for="DiaChi" class="text-danger"></span>
+                        </div>
+                        <div class="form-group">
+                            <label asp-for="SoDienThoai" class="control-label">Số điện thoại</label>
+                            <input asp-for="SoDienThoai" class="form-control" />
+                            <span asp-validation-for="SoDienThoai" class="text-danger"></span>
+                        </div>
+                        <div class="form-group">
+                            <input type="submit" value="Tạo" class="btn btn-primary" />
+                            <a asp-action="Index" class="btn btn-light">Trở về</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

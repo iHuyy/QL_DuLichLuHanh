@@ -5,37 +5,133 @@
     Layout = "~/Views/Shared/_AuthLayout.cshtml";
 }
 
-@if (ViewBag.SuccessMessage != null)
-{
-    <div class="alert alert-success">
-        @ViewBag.SuccessMessage
-    </div>
-}
+<div class="authincation h-100">
+    <div class="container h-100">
+        <div class="row justify-content-center h-100 align-items-center">
+            <div class="col-md-6">
+                <div class="authincation-content">
+                    <div class="row no-gutters">
+                        <div class="col-xl-12">
+                            <div class="auth-form">
+                                @if (ViewBag.SuccessMessage != null)
+                                {
+                                    <div class="alert alert-success">
+                                        @ViewBag.SuccessMessage
+                                    </div>
+                                }
+                                <h4 class="text-center mb-4">@ViewData["Title"]</h4>
+                                <form asp-action="Login" method="post">
+                                    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
 
-<h4 class="text-center mb-4">@ViewData["Title"]</h4>
-<form asp-action="Login" method="post">
-    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                                    <div class="form-group">
+                                        <label><strong>Tên đăng nhập</strong></label>
+                                        <input asp-for="Username" class="form-control" placeholder="Tên đăng nhập" />
+                                        <span asp-validation-for="Username" class="text-danger"></span>
+                                    </div>
 
-    <div class="form-group">
-        <label asp-for="Username"></label>
-        <input asp-for="Username" class="form-control" />
-        <span asp-validation-for="Username" class="text-danger"></span>
-    </div>
+                                    <div class="form-group">
+                                        <label><strong>Mật khẩu</strong></label>
+                                        <input asp-for="Password" class="form-control" placeholder="Mật khẩu" />
+                                        <span asp-validation-for="Password" class="text-danger"></span>
+                                    </div>
 
-    <div class="form-group">
-        <label asp-for="Password"></label>
-        <input asp-for="Password" class="form-control" />
-        <span asp-validation-for="Password" class="text-danger"></span>
+                                    <div class="form-row d-flex justify-content-between mt-4 mb-2">
+                                        <div class="form-group">
+                                            <div class="custom-control custom-checkbox ml-1">
+                                                <input type="checkbox" class="custom-control-input" id="basic_checkbox_1">
+                                                <label class="custom-control-label" for="basic_checkbox_1">Ghi nhớ đăng nhập</label>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <a href="#">Quên mật khẩu?</a>
+                                        </div>
+                                    </div>
+                                    <div class="text-center">
+                                        <button type="submit" class="btn btn-primary btn-block">Đăng nhập</button>
+                                        <button type="button" class="btn btn-secondary btn-block mt-2" data-toggle="modal" data-target="#qrModal" onclick="generateQrCode()">Đăng nhập bằng QR</button>
+                                    </div>
+                                </form>
+                                <div class="new-account mt-3">
+                                    <p>Chưa có tài khoản? <a class="text-primary" asp-action="Register">Đăng ký</a></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+</div>
 
-    <div class="form-group mt-3">
-        <button type="submit" class="btn btn-primary btn-block">Đăng nhập</button>
-        <a asp-action="Register" class="btn btn-link">Đăng ký tài khoản mới</a>
+<!-- QR Code Modal -->
+<div class="modal fade" id="qrModal" tabindex="-1" role="dialog" aria-labelledby="qrModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="qrModalLabel">Đăng nhập bằng QR Code</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body text-center">
+                <p>Quét mã QR này bằng ứng dụng di động của bạn để đăng nhập.</p>
+                <img id="qrCodeImage" src="" alt="QR Code" style="max-width: 100%;" />
+                <div id="qrSpinner" class="spinner-border" role="status" style="display: none;">
+                    <span class="sr-only">Loading...</span>
+                </div>
+            </div>
+        </div>
     </div>
-</form>
+</div>
 
 @section Scripts {
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
+
+    <script>
+        let qrPollingInterval;
+        let sessionKey;
+
+        function generateQrCode() {
+            $('#qrCodeImage').hide();
+            $('#qrSpinner').show();
+
+            $.get("/QrLogin/GenerateQrCode", function (data) {
+                sessionKey = data.sessionKey;
+                $('#qrCodeImage').attr('src', 'data:image/png;base64,' + data.qrCodeImage);
+                $('#qrSpinner').hide();
+                $('#qrCodeImage').show();
+                startPolling();
+            }).fail(function(jqXHR, textStatus, errorThrown) {
+                console.error("Error generating QR code: ", textStatus, errorThrown);
+                alert("Có lỗi xảy ra khi tạo mã QR. Vui lòng thử lại.");
+                $('#qrSpinner').hide();
+            });
+        }
+
+        function startPolling() {
+            qrPollingInterval = setInterval(function () {
+                $.get("/QrLogin/CheckQrLoginStatus", { sessionKey: sessionKey }, function (data) {
+                    if (data.status === "Authenticated") {
+                        clearInterval(qrPollingInterval);
+                        window.location.href = "/Customer"; // Redirect to customer dashboard
+                    } else if (data.status === "Expired") {
+                        clearInterval(qrPollingInterval);
+                        alert("Mã QR đã hết hạn. Vui lòng thử lại.");
+                        $('#qrModal').modal('hide');
+                    }
+                }).fail(function(jqXHR, textStatus, errorThrown) {
+                    console.error("Error checking QR login status: ", textStatus, errorThrown);
+                    clearInterval(qrPollingInterval);
+                    alert("Có lỗi xảy ra khi kiểm tra trạng thái đăng nhập QR. Vui lòng thử lại.");
+                    $('#qrModal').modal('hide');
+                });
+            }, 2000); // Poll every 2 seconds
+        }
+
+        $('#qrModal').on('hidden.bs.modal', function () {
+            clearInterval(qrPollingInterval);
+        });
+    </script>
 }

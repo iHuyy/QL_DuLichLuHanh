@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace DuLich.Models
 {
     // Use uppercase names so EF/Oracle provider doesn't emit quoted mixed-case identifiers
-    [Table("KHACHHANG", Schema = "tAdmin")]
+    [Table("KHACHHANG", Schema = "TADMIN")]
     public class KhachHang
     {
         [Key]

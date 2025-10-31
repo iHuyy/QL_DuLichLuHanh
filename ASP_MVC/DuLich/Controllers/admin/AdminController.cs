@@ -6,23 +6,28 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using DuLich.Models.Data;
+using Microsoft.AspNetCore.Hosting;
+using System.IO;
 
 namespace DuLich.Controllers
 {
     [Authorize(Roles = "ROLE_ADMIN")]
-    public class AdminController : Controller
+    public class AdminController : BaseController
     {
         private readonly OracleAuthService _authService;
-        private readonly DuLich.Models.Data.ApplicationDbContext _db;
+        private readonly IWebHostEnvironment _env;
 
-        public AdminController(OracleAuthService authService, DuLich.Models.Data.ApplicationDbContext db)
+        public AdminController(OracleAuthService authService, ApplicationDbContext context, IWebHostEnvironment env) : base(context)
         {
             _authService = authService;
-            _db = db;
+            _env = env;
         }
 
         [AllowAnonymous]
         [HttpGet]
+        [Route("Admin/Login")]
         public IActionResult Login()
         {
             return View();
@@ -30,6 +35,7 @@ namespace DuLich.Controllers
 
         [AllowAnonymous]
         [HttpPost]
+        [Route("Admin/Login")]
         public async Task<IActionResult> Login(LoginModel model)
         {
             if (!ModelState.IsValid)
@@ -43,7 +49,6 @@ namespace DuLich.Controllers
                 return View(model);
             }
 
-            // Accept admin or staff roles here
             if (role == "ROLE_ADMIN" || role == "ROLE_STAFF" || role == "ROLE_CUSTOMER")
             {
                 var claims = new List<Claim>
@@ -51,6 +56,15 @@ namespace DuLich.Controllers
                     new Claim(ClaimTypes.Name, model.Username),
                     new Claim(ClaimTypes.Role, role)
                 };
+
+                if (role == "ROLE_STAFF")
+                {
+                    var staff = await _context.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME == model.Username.ToUpper());
+                    if (staff != null && staff.MaChiNhanh.HasValue)
+                    {
+                        claims.Add(new Claim("MaChiNhanh", staff.MaChiNhanh.Value.ToString()));
+                    }
+                }
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
                 var authProperties = new AuthenticationProperties();
@@ -66,7 +80,6 @@ namespace DuLich.Controllers
                 if (role == "ROLE_STAFF")
                     return RedirectToAction("Index", "Staff");
 
-                // default fallback for customers (if they reach this login)
                 return RedirectToAction("Index", "Home");
             }
 
@@ -75,51 +88,66 @@ namespace DuLich.Controllers
         }
 
         [HttpGet]
+        [Route("Admin/Dashboard")]
         public IActionResult Dashboard()
         {
             return View();
         }
 
         [HttpPost]
+        [Route("Admin/Logout")]
         public async Task<IActionResult> Logout()
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return RedirectToAction("Login");
         }
 
-        // --- Admin management actions (from outer AdminController) ---
-        public async Task<IActionResult> Index()
+        [Route("Admin")]
+        public IActionResult Index()
         {
             return View();
         }
 
+        [Route("admin/customer")]
         public async Task<IActionResult> Users()
         {
-            // Load users from KhachHang table for the management UI
-            var users = await _db.KhachHangs.OrderBy(u => u.MaKhachHang).ToListAsync();
+            var users = await _context.KhachHangs.OrderBy(u => u.MaKhachHang).ToListAsync();
             return View(users);
         }
 
-        // List only staff (NhanVien)
+        [Route("admin/staff")]
         public async Task<IActionResult> Staffs()
         {
-            var staffs = await _db.NhanViens.OrderBy(u => u.MaNhanVien).ToListAsync();
+            var staffs = await _context.NhanViens.Include(n => n.ChiNhanh).OrderBy(u => u.MaNhanVien).ToListAsync();
+            ViewBag.ChiNhanhs = await _context.ChiNhanhs.ToListAsync();
+            ViewBag.Roles = new List<string> { "Admin", "NhanVien" };
             return View(staffs);
         }
 
         [HttpGet]
+        [Route("Admin/CreateUser")]
         public IActionResult CreateUser(string? role)
         {
-            var model = new RegisterModel();
+            var chiNhanhs = _context.ChiNhanhs.ToList() ?? new List<ChiNhanh>();
+            var model = new CreateUserViewModel
+            {
+                ChiNhanhSelectList = new SelectList(chiNhanhs, "MaChiNhanh", "TenChiNhanh")
+            };
+
             if (!string.IsNullOrEmpty(role)) model.Role = role;
             return View(model);
         }
 
         [HttpPost]
-        public async Task<IActionResult> CreateUser(RegisterModel model)
+        [Route("Admin/CreateUser")]
+        public async Task<IActionResult> CreateUser(CreateUserViewModel model)
         {
             if (!ModelState.IsValid)
+            {
+                var chiNhanhs = _context.ChiNhanhs.ToList() ?? new List<ChiNhanh>();
+                model.ChiNhanhSelectList = new SelectList(chiNhanhs, "MaChiNhanh", "TenChiNhanh", model.MaChiNhanh);
                 return View(model);
+            }
 
             var role = model.Role ?? "KhachHang";
 
@@ -127,7 +155,7 @@ namespace DuLich.Controllers
 
             if (role == "NhanVien")
             {
-                result = await _authService.RegisterStaffAsync(model.Username, model.Password, model.HoTen, model.Email, model.SoDienThoai, model.ChiNhanh);
+                result = await _authService.RegisterStaffAsync(model.Username, model.Password, model.HoTen, model.Email, model.SoDienThoai, model.MaChiNhanh);
             }
             else if (role == "Admin")
             {
@@ -141,19 +169,19 @@ namespace DuLich.Controllers
             if (result.success)
             {
                 TempData["Success"] = result.message;
-                // Redirect to staff list when creating staff
                 if (role == "NhanVien") return RedirectToAction("Staffs");
                 return RedirectToAction("Users");
             }
 
             ModelState.AddModelError(string.Empty, result.message ?? "Không thể tạo người dùng");
+            var allChiNhanhs = _context.ChiNhanhs.ToList() ?? new List<ChiNhanh>();
+            model.ChiNhanhSelectList = new SelectList(allChiNhanhs, "MaChiNhanh", "TenChiNhanh", model.MaChiNhanh);
             return View(model);
         }
 
         public async Task<IActionResult> Details(string username)
         {
-            // Try to find by ORACLE_USERNAME first, otherwise lookup in Oracle
-            var kh = await _db.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME == username.ToUpper() || k.ORACLE_USERNAME == username);
+            var kh = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME == username.ToUpper() || k.ORACLE_USERNAME == username);
             if (kh != null)
             {
                 return View(kh);
@@ -180,22 +208,21 @@ namespace DuLich.Controllers
             return RedirectToAction("Details", new { username });
         }
 
-        // --- KhachHang edit endpoints ---
         [HttpGet]
         public async Task<IActionResult> EditUser(int id)
         {
-            var kh = await _db.KhachHangs.FindAsync(id);
+            var kh = await _context.KhachHangs.FindAsync(id);
             if (kh == null) return NotFound();
             return View(kh);
         }
 
         [HttpPost]
-        public async Task<IActionResult> EditUser(DuLich.Models.KhachHang model)
+        public async Task<IActionResult> EditUser(KhachHang model)
         {
             if (!ModelState.IsValid)
                 return View(model);
 
-            var kh = await _db.KhachHangs.FindAsync(model.MaKhachHang);
+            var kh = await _context.KhachHangs.FindAsync(model.MaKhachHang);
             if (kh == null) return NotFound();
 
             kh.HoTen = model.HoTen;
@@ -206,7 +233,7 @@ namespace DuLich.Controllers
             kh.TrangThai = model.TrangThai;
             kh.ORACLE_USERNAME = model.ORACLE_USERNAME;
 
-            await _db.SaveChangesAsync();
+            await _context.SaveChangesAsync();
 
             TempData["Success"] = "Cập nhật thông tin người dùng thành công";
             return RedirectToAction("Users");
@@ -215,13 +242,12 @@ namespace DuLich.Controllers
         [HttpPost]
         public async Task<IActionResult> ChangeUserRole(int id, string vaiTro)
         {
-            var kh = await _db.KhachHangs.FindAsync(id);
+            var kh = await _context.KhachHangs.FindAsync(id);
             if (kh == null) return NotFound();
 
             kh.VaiTro = vaiTro;
-            await _db.SaveChangesAsync();
+            await _context.SaveChangesAsync();
 
-            // If ORACLE_USERNAME exists and role corresponds to DB roles, propagate to Oracle via GrantRole
             if (!string.IsNullOrEmpty(kh.ORACLE_USERNAME))
             {
                 var oracleRole = vaiTro == "Admin" ? "ROLE_ADMIN" : (vaiTro == "NhanVien" ? "ROLE_STAFF" : "ROLE_CUSTOMER");
@@ -232,20 +258,60 @@ namespace DuLich.Controllers
             return RedirectToAction("Users");
         }
 
-        // --- NhanVien (staff) management ---
+        [HttpPost]
+        public async Task<IActionResult> ChangeUserStatus(int id, string trangThai)
+        {
+            var kh = await _context.KhachHangs.FindAsync(id);
+            if (kh == null) return NotFound();
+
+            kh.TrangThai = trangThai;
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Đã thay đổi trạng thái người dùng";
+            return RedirectToAction("Users");
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> DeleteUserById(int id)
+        {
+            var kh = await _context.KhachHangs.FindAsync(id);
+            if (kh == null)
+            {
+                TempData["Error"] = "Không tìm thấy người dùng.";
+                return RedirectToAction("Users");
+            }
+
+            if (!string.IsNullOrEmpty(kh.ORACLE_USERNAME))
+            {
+                var (success, message) = await _authService.DeleteUserAsync(kh.ORACLE_USERNAME);
+                if (!success)
+                {
+                    TempData["Error"] = message;
+                    return RedirectToAction("Users");
+                }
+            }
+            
+            _context.KhachHangs.Remove(kh);
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Đã xóa người dùng thành công.";
+            return RedirectToAction("Users");
+        }
+
         [HttpGet]
         public async Task<IActionResult> EditStaff(int id)
         {
-            var nv = await _db.NhanViens.FindAsync(id);
+            ViewBag.ChiNhanhs = await _context.ChiNhanhs.ToListAsync();
+            var nv = await _context.NhanViens.FindAsync(id);
             if (nv == null) return NotFound();
             return View(nv);
         }
 
         [HttpPost]
-        public async Task<IActionResult> EditStaff(DuLich.Models.NhanVien model)
+        public async Task<IActionResult> EditStaff(NhanVien model)
         {
             if (!ModelState.IsValid) return View(model);
-            var nv = await _db.NhanViens.FindAsync(model.MaNhanVien);
+            var nv = await _context.NhanViens.FindAsync(model.MaNhanVien);
             if (nv == null) return NotFound();
             nv.HoTen = model.HoTen;
             nv.Email = model.Email;
@@ -253,8 +319,8 @@ namespace DuLich.Controllers
             nv.VaiTro = model.VaiTro;
             nv.TrangThai = model.TrangThai;
             nv.ORACLE_USERNAME = model.ORACLE_USERNAME;
-            nv.ChiNhanh = model.ChiNhanh;
-            await _db.SaveChangesAsync();
+            nv.MaChiNhanh = model.MaChiNhanh;
+            await _context.SaveChangesAsync();
             TempData["Success"] = "Cập nhật nhân viên thành công";
             return RedirectToAction("Staffs");
         }
@@ -262,10 +328,10 @@ namespace DuLich.Controllers
         [HttpPost]
         public async Task<IActionResult> ChangeStaffRole(int id, string vaiTro)
         {
-            var nv = await _db.NhanViens.FindAsync(id);
+            var nv = await _context.NhanViens.FindAsync(id);
             if (nv == null) return NotFound();
             nv.VaiTro = vaiTro;
-            await _db.SaveChangesAsync();
+            await _context.SaveChangesAsync();
             if (!string.IsNullOrEmpty(nv.ORACLE_USERNAME))
             {
                 var oracleRole = vaiTro == "Admin" ? "ROLE_ADMIN" : (vaiTro == "NhanVien" ? "ROLE_STAFF" : "ROLE_CUSTOMER");
@@ -276,47 +342,109 @@ namespace DuLich.Controllers
         }
 
         [HttpPost]
+        public async Task<IActionResult> ChangeStaffBranch(int id, int maChiNhanh)
+        {
+            var nv = await _context.NhanViens.FindAsync(id);
+            if (nv == null) return NotFound();
+            nv.MaChiNhanh = maChiNhanh;
+            await _context.SaveChangesAsync();
+            TempData["Success"] = "Đã thay đổi chi nhánh nhân viên";
+            return RedirectToAction("Staffs");
+        }
+
+        [HttpPost]
         public async Task<IActionResult> DeleteStaff(string username)
         {
-            // delete NHANVIEN record then drop oracle user
-            var nv = await _db.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME == username.ToUpper() || n.ORACLE_USERNAME == username);
+            var nv = await _context.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME == username.ToUpper() || n.ORACLE_USERNAME == username);
             if (nv != null)
             {
-                _db.NhanViens.Remove(nv);
-                await _db.SaveChangesAsync();
+                _context.NhanViens.Remove(nv);
+                await _context.SaveChangesAsync();
             }
             var (success, message) = await _authService.DeleteUserAsync(username);
             TempData[success ? "Success" : "Error"] = message;
             return RedirectToAction("Staffs");
         }
 
-        // --- Tour management ---
         public async Task<IActionResult> Tours()
         {
-            var tours = await _db.Tours.OrderBy(t => t.MaTour).ToListAsync();
-            return View(tours);
+            var toursData = await _context.Tours
+                .AsNoTracking()
+                .Include(t => t.ChiNhanh)
+                .OrderByDescending(t => t.MaTour)
+                .Select(t => new
+                {
+                    Tour = t,
+                    SoLuongDat = _context.DatTours
+                        .Where(d => d.MaTour == t.MaTour && d.TrangThaiDat == "Đã xác nhận")
+                        .Sum(d => (int?)(d.SoNguoiLon ?? 0) + (d.SoTreEm ?? 0)) ?? 0
+                })
+                .ToListAsync();
+
+            var tourViewModels = toursData.Select(t_data => new TourViewModel
+            {
+                Id = t_data.Tour.MaTour,
+                MaTour = t_data.Tour.MaTour.ToString(),
+                TenTour = t_data.Tour.TieuDe ?? "Chưa đặt tên",
+                DiemDen = t_data.Tour.NoiDen ?? "Chưa xác định",
+                NgayKhoiHanh = t_data.Tour.ThoiGian ?? DateTime.Now,
+                Gia = t_data.Tour.GiaNguoiLon ?? 0,
+                SoLuong = t_data.Tour.SoLuong ?? 0,
+                SoChoConLai = (t_data.Tour.SoLuong ?? 0) - t_data.SoLuongDat,
+                TrangThai = t_data.Tour.TrangThai ?? "Chưa xác định",
+                QR = t_data.Tour.QR ?? "",
+                ChiNhanh = t_data.Tour.ChiNhanh?.TenChiNhanh,
+                StatusClass = GetTourStatusClass(t_data.Tour.TrangThai ?? "")
+            }).ToList();
+
+            return View(tourViewModels);
         }
 
         [HttpGet]
-        public IActionResult CreateTour()
+        public async Task<IActionResult> TourDetails(int id)
         {
-            return View();
-        }
+            var tour = await _context.Tours
+               .Include(t => t.AnhTours)
+               .Include(t => t.ChiNhanh)
+               .AsNoTracking()
+               .FirstOrDefaultAsync(m => m.MaTour == id);
 
-        [HttpPost]
-        public async Task<IActionResult> CreateTour(Tour model)
-        {
-            if (!ModelState.IsValid) return View(model);
-            _db.Tours.Add(model);
-            await _db.SaveChangesAsync();
-            TempData["Success"] = "Tạo tour thành công";
-            return RedirectToAction("Tours");
+            if (tour == null)
+            {
+                return NotFound();
+            }
+
+            var soLuongDat = await _context.DatTours
+                .Where(d => d.MaTour == id && d.TrangThaiDat == "Đã xác nhận")
+                .SumAsync(d => (int?)(d.SoNguoiLon ?? 0) + (d.SoTreEm ?? 0)) ?? 0;
+
+            var tourViewModel = new TourViewModel
+            {
+                Id = tour.MaTour,
+                MaTour = tour.MaTour.ToString(),
+                TenTour = tour.TieuDe ?? "Chưa đặt tên",
+                DiemDen = tour.NoiDen ?? "Chưa xác định",
+                NoiKhoiHanh = tour.NoiKhoiHanh ?? "Chưa xác định",
+                NgayKhoiHanh = tour.ThoiGian ?? DateTime.Now,
+                Gia = tour.GiaNguoiLon ?? 0,
+                GiaTreEm = tour.GiaTreEm,
+                SoLuong = tour.SoLuong ?? 0,
+                SoChoConLai = (tour.SoLuong ?? 0) - soLuongDat,
+                TrangThai = tour.TrangThai ?? "Chưa xác định",
+                MoTa = tour.MoTa ?? "",
+                QR = tour.QR ?? "",
+                ChiNhanh = tour.ChiNhanh?.TenChiNhanh ?? "",
+                StatusClass = GetTourStatusClass(tour.TrangThai ?? ""),
+                AnhTours = tour.AnhTours
+            };
+
+            return View(tourViewModel);
         }
 
         [HttpGet]
         public async Task<IActionResult> EditTour(int id)
         {
-            var t = await _db.Tours.FindAsync(id);
+            var t = await _context.Tours.FindAsync(id);
             if (t == null) return NotFound();
             return View(t);
         }
@@ -325,7 +453,7 @@ namespace DuLich.Controllers
         public async Task<IActionResult> EditTour(Tour model)
         {
             if (!ModelState.IsValid) return View(model);
-            var t = await _db.Tours.FindAsync(model.MaTour);
+            var t = await _context.Tours.FindAsync(model.MaTour);
             if (t == null) return NotFound();
             t.TieuDe = model.TieuDe;
             t.MoTa = model.MoTa;
@@ -338,39 +466,81 @@ namespace DuLich.Controllers
             t.TrangThai = model.TrangThai;
             t.SoLuong = model.SoLuong;
             t.QR = model.QR;
-            await _db.SaveChangesAsync();
+            await _context.SaveChangesAsync();
             TempData["Success"] = "Cập nhật tour thành công";
             return RedirectToAction("Tours");
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Route("Admin/DeleteTour/{id}")]
         public async Task<IActionResult> DeleteTour(int id)
         {
-            var t = await _db.Tours.FindAsync(id);
+            var t = await _context.Tours.FindAsync(id);
             if (t == null) return NotFound();
-            _db.Tours.Remove(t);
-            await _db.SaveChangesAsync();
-            TempData["Success"] = "Xóa tour thành công";
-            return RedirectToAction("Tours");
+
+            var images = await _context.AnhTours.Where(a => a.MaTour == id).ToListAsync();
+            if (images.Any())
+            {
+                _context.AnhTours.RemoveRange(images);
+            }
+
+            _context.Tours.Remove(t);
+
+            try
+            {
+                await _context.SaveChangesAsync();
+
+                foreach (var image in images)
+                {
+                    if (!string.IsNullOrEmpty(image.DuongDanAnh))
+                    {
+                        var imagePath = Path.Combine(_env.WebRootPath, image.DuongDanAnh.TrimStart('/'));
+                        if (System.IO.File.Exists(imagePath))
+                        {
+                            System.IO.File.Delete(imagePath);
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(t.QR))
+                {
+                    var qrPath = Path.Combine(_env.WebRootPath, t.QR.TrimStart('/'));
+                    if (System.IO.File.Exists(qrPath))
+                    {
+                        System.IO.File.Delete(qrPath);
+                    }
+                }
+
+                TempData["Success"] = "Xóa tour thành công";
+            }
+            catch (DbUpdateException ex)
+            {
+                var innerException = ex.InnerException;
+                if (innerException is Oracle.ManagedDataAccess.Client.OracleException oracleEx && oracleEx.Number == 2292)
+                {
+                    TempData["Error"] = "Không thể xóa tour. Có thể do đã có khách hàng đặt tour này hoặc có dữ liệu liên quan khác.";
+                }
+                else
+                {
+                    TempData["Error"] = "Đã xảy ra lỗi khi xóa tour: " + (innerException?.Message ?? ex.Message);
+                }
+            }
+
+            return RedirectToAction(nameof(Tours));
         }
 
-        // Manage images for a tour
-        public async Task<IActionResult> ManageImages(int tourId)
+        private static string GetTourStatusClass(string status)
         {
-            var images = await _db.AnhTours.Where(a => a.MaTour == tourId).ToListAsync();
-            ViewBag.TourId = tourId;
-            return View(images);
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> DeleteImage(int id, int tourId)
-        {
-            var img = await _db.AnhTours.FindAsync(id);
-            if (img == null) return NotFound();
-            _db.AnhTours.Remove(img);
-            await _db.SaveChangesAsync();
-            TempData["Success"] = "Xóa ảnh thành công";
-            return RedirectToAction("ManageImages", new { tourId });
+            return status?.ToLower() switch
+            {
+                "hoạt động" => "success",
+                "tạm ngưng" => "warning",
+                "đã kết thúc" => "info",
+                "đã hủy" => "danger",
+                "ẩn" => "secondary",
+                _ => "secondary"
+            };
         }
     }
 }

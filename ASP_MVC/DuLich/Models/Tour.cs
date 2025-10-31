@@ -48,8 +48,12 @@ namespace DuLich.Models
         [Column("QR")]
         public string? QR { get; set; }
 
-        [Column("CHINHANH")]
-        public string? ChiNhanh { get; set; }
+        // Branch Foreign Key
+        [Column("MACHINHANH")]
+        public int? MaChiNhanh { get; set; }
+
+        [ForeignKey("MaChiNhanh")]
+        public virtual ChiNhanh? ChiNhanh { get; set; }
 
         // Thêm navigation collection để EF không tạo shadow FK "TourMaTour"
         public ICollection<AnhTour> AnhTours { get; set; } = new List<AnhTour>();

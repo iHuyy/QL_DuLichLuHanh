@@ -1,0 +1,61 @@
+@model IEnumerable<DuLich.Models.ChiNhanh>
+
+@{ 
+    ViewData["Title"] = "Quản lý Chi nhánh";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="container-fluid">
+    <div class="row page-titles">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item active"><a href="javascript:void(0)">Quản lý</a></li>
+            <li class="breadcrumb-item"><a href="javascript:void(0)">Chi nhánh</a></li>
+        </ol>
+    </div>
+    <!-- row -->
+
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Danh sách Chi nhánh</h4>
+                    <a asp-action="Create" class="btn btn-primary">Thêm mới</a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-responsive-md">
+                            <thead>
+                                <tr>
+                                    <th>Tên Chi Nhánh</th>
+                                    <th>Địa chỉ</th>
+                                    <th>Số điện thoại</th>
+                                    <th>Số nhân viên</th>
+                                    <th>Số tour</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in Model)
+                                {
+                                    <tr>
+                                        <td>@item.TenChiNhanh</td>
+                                        <td>@item.DiaChi</td>
+                                        <td>@item.SoDienThoai</td>
+                                        <td>@item.NhanViens.Count()</td>
+                                        <td>@item.Tours.Count()</td>
+                                        <td>
+                                            <div class="d-flex">
+                                                <a asp-action="Edit" asp-route-id="@item.MaChiNhanh" class="btn btn-primary shadow btn-xs sharp me-1"><i class="fas fa-pencil-alt"></i></a>
+                                                <a asp-action="Delete" asp-route-id="@item.MaChiNhanh" class="btn btn-danger shadow btn-xs sharp"><i class="fa fa-trash"></i></a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

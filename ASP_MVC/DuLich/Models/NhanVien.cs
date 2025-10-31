@@ -33,8 +33,11 @@ namespace DuLich.Models
         [Column("ORACLE_USERNAME")]
         public string? ORACLE_USERNAME { get; set; }
 
-        // Branch code used for VPD filtering
-        [Column("CHINHANH")]
-        public string? ChiNhanh { get; set; }
+        // Branch Foreign Key
+        [Column("MACHINHANH")]
+        public int? MaChiNhanh { get; set; }
+
+        [ForeignKey("MaChiNhanh")]
+        public virtual ChiNhanh? ChiNhanh { get; set; }
     }
 }

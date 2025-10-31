@@ -56,9 +56,13 @@
                                     <td>@tour.Gia.ToString("N0") VNĐ</td>
                                     <td>@tour.SoChoConLai / @tour.SoLuong</td>
                                     <td>
-                                        <span class="badge badge-@tour.StatusClass">
-                                            @tour.TrangThai
-                                        </span>
+                                        <select class="form-control form-control-sm" onchange="updateTourStatus(this, @tour.Id)">
+                                            <option value="Hoạt động" selected="@(tour.TrangThai == "Hoạt động" ? "selected" : (string?)null)">Hoạt động</option>
+                                            <option value="Tạm ngưng" selected="@(tour.TrangThai == "Tạm ngưng" ? "selected" : (string?)null)">Tạm ngưng</option>
+                                            <option value="Đã hủy" selected="@(tour.TrangThai == "Đã hủy" ? "selected" : (string?)null)">Đã hủy</option>
+                                            <option value="Đã kết thúc" selected="@(tour.TrangThai == "Đã kết thúc" ? "selected" : (string?)null)">Đã kết thúc</option>
+                                            <option value="Ẩn" selected="@(tour.TrangThai == "Ẩn" ? "selected" : (string?)null)">Ẩn</option>
+                                        </select>
                                     </td>
                                     <td>
                                         @if (!string.IsNullOrEmpty(tour.QR))
@@ -70,14 +74,17 @@
                                     </td>
                                     <td>
                                         <div class="d-flex">
-                                            <a href="@Url.Action("EditTour", "Staff", new { id = tour.Id })" 
-                                               class="btn btn-primary shadow btn-xs sharp mr-1">
-                                                <i class="fa fa-pencil"></i>
+                                            <a href="@Url.Action("TourDetails", "Staff", new { id = tour.Id })"
+                                               class="btn btn-info shadow btn-xs sharp mr-1">
+                                                <i class="fa fa-eye"></i>
                                             </a>
-                                            <button class="btn btn-info shadow btn-xs sharp mr-1"
-                                                    onclick="showUpdateStatus('@tour.Id', '@tour.TrangThai')">
-                                                <i class="fas fa-sync-alt"></i>
-                                            </button>
+                                            <form asp-controller="Staff" asp-action="DeleteTour" asp-route-id="@tour.Id"
+                                                  method="post" style="display:inline-block;">
+                                                <button type="submit" class="btn btn-danger shadow btn-xs sharp"
+                                                        onclick="return confirm('Bạn có chắc muốn xóa tour này?');">
+                                                    <i class="fa fa-trash"></i>
+                                                </button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -105,35 +112,6 @@
     </div>
 </div>
 
-<!-- Modal cập nhật trạng thái -->
-<div class="modal fade" id="updateStatusModal">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Cập nhật trạng thái tour</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="updateStatusForm">
-                    <input type="hidden" id="tourId" name="tourId" />
-                    <div class="form-group">
-                        <label>Trạng thái mới</label>
-                        <select class="form-control" id="newStatus" name="newStatus">
-                            <option value="Hoạt động">Hoạt động</option>
-                            <option value="Tạm ngưng">Tạm ngưng</option>
-                            <option value="Đã hủy">Đã hủy</option>
-                        </select>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
-                <button type="button" class="btn btn-primary" onclick="updateStatus()">Cập nhật</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 @section Scripts {
     <script>
         $(document).ready(function() {
@@ -149,26 +127,26 @@
             $('#qrModal').modal('show');
         }
 
-        function showUpdateStatus(tourId, currentStatus) {
-            $('#tourId').val(tourId);
-            $('#newStatus').val(currentStatus);
-            $('#updateStatusModal').modal('show');
-        }
+        function updateTourStatus(selectElement, tourId) {
+            var newStatus = $(selectElement).val();
 
-        function updateStatus() {
-            var tourId = $('#tourId').val();
-            var newStatus = $('#newStatus').val();
+            if (!confirm('Bạn có chắc muốn đổi trạng thái của tour #' + tourId + ' thành "' + newStatus + '" không?')) {
+                location.reload();
+                return;
+            }
 
-            $.post('/Staff/UpdateTourStatus', { tourId: tourId, newStatus: newStatus })
+            $.post('@Url.Action("UpdateTourStatus", "Staff")', { tourId: tourId, newStatus: newStatus })
                 .done(function(response) {
                     if (response.success) {
                         location.reload();
                     } else {
-                        alert('Có lỗi xảy ra: ' + response.message);
+                        alert('Có lỗi xảy ra khi cập nhật: ' + response.message);
+                        location.reload();
                     }
                 })
                 .fail(function() {
-                    alert('Có lỗi xảy ra khi cập nhật trạng thái.');
+                    alert('Không thể kết nối đến máy chủ để cập nhật trạng thái.');
+                    location.reload();
                 });
         }
     </script>

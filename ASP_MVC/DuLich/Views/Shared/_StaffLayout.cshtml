@@ -81,11 +81,12 @@
                                         <i class="fa fa-user"></i>
                                         <span class="ml-2">Thông tin cá nhân</span>
                                     </a>
-                                    <a asp-area="Staff" asp-controller="Auth" asp-action="Logout"
-                                        class="dropdown-item ai-icon">
-                                        <i class="fa fa-sign-out-alt"></i>
-                                        <span class="ml-2">Đăng xuất</span>
-                                    </a>
+                                    <form asp-controller="Staff" asp-action="Logout" method="post">
+                                        <button type="submit" class="dropdown-item ai-icon">
+                                            <i class="fa fa-sign-out-alt"></i>
+                                            <span class="ml-2">Đăng xuất</span>
+                                        </button>
+                                    </form>
                                 </div>
                             </li>
                         </ul>

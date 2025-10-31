@@ -9,15 +9,13 @@ using System.Security.Claims;
 
 namespace DuLich.Controllers
 {
-    public class CustomerController : Controller
+    public class CustomerController : BaseController
     {
         private readonly OracleAuthService _authService;
-        private readonly ApplicationDbContext _db;
 
-        public CustomerController(OracleAuthService authService, ApplicationDbContext db)
+        public CustomerController(OracleAuthService authService, ApplicationDbContext context) : base(context)
         {
             _authService = authService;
-            _db = db;
         }
 
         [HttpGet]
@@ -43,7 +41,7 @@ namespace DuLich.Controllers
                 var claims = new List<Claim>
                 {
                     new Claim(ClaimTypes.Name, model.Username),
-                    new Claim(ClaimTypes.Role, "Customer")
+                    new Claim(ClaimTypes.Role, "ROLE_CUSTOMER")
                 };
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -70,8 +68,7 @@ namespace DuLich.Controllers
         [HttpGet]
         public async Task<IActionResult> Index(string? destination, string? start_date, string? end_date, string? keyword)
         {
-            // Load tours and apply optional search filters from the banner form
-            var q = _db.Tours.AsQueryable();
+            var q = _context.Tours.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(keyword))
             {
@@ -94,7 +91,6 @@ namespace DuLich.Controllers
 
             if (hasFrom && hasTo)
             {
-                // ensure from <= to
                 if (fromDate > toDate) (fromDate, toDate) = (toDate, fromDate);
                 q = q.Where(t => t.ThoiGian.HasValue && t.ThoiGian.Value.Date >= fromDate.Date && t.ThoiGian.Value.Date <= toDate.Date);
             }
@@ -108,28 +104,32 @@ namespace DuLich.Controllers
             }
 
             var tours = await q.OrderBy(t => t.MaTour).Take(20).ToListAsync();
-            var model = new DuLich.Models.CustomerHomeViewModel();
+            var model = new CustomerHomeViewModel();
 
             foreach (var t in tours)
             {
-                var images = await _db.AnhTours
+                var images = await _context.AnhTours
                     .Where(a => a.MaTour == t.MaTour)
                     .OrderBy(a => a.MaAnh)
                     .Select(a => a.DuongDanAnh)
                     .ToListAsync();
 
-                model.Tours.Add(new DuLich.Models.TourItem
+                var rating = await _context.DanhGiaTours
+                    .Where(d => d.MaTour == t.MaTour)
+                    .AverageAsync(d => (decimal?)d.SoSao) ?? 0;
+
+                model.Tours.Add(new TourItem
                 {
                     MaTour = t.MaTour,
                     Title = t.TieuDe ?? string.Empty,
                     Destination = t.NoiDen ?? t.NoiKhoiHanh ?? t.ThanhPho ?? string.Empty,
                     Time = t.ThoiGian?.ToString("yyyy-MM-dd") ?? string.Empty,
                     PriceAdult = t.GiaNguoiLon ?? 0,
-                    Images = images.Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToList()
+                    Images = images.Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToList(),
+                    Rating = rating
                 });
             }
 
-            // For now use the same set as popular
             model.PopularTours = model.Tours.Take(4).ToList();
 
             return View("Home", model);
