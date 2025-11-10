@@ -350,6 +350,76 @@ namespace DuLich.Controllers
             return View(model);
         }
 
+        [HttpPost]
+        [Authorize(Roles = "ROLE_CUSTOMER")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Booking([FromForm] CreateBookingViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            var tour = await _context.Tours.FindAsync(model.TourId);
+            if (tour == null)
+            {
+                return NotFound();
+            }
+
+            var username = User.Identity?.Name;
+            if (string.IsNullOrEmpty(username))
+            {
+                return Unauthorized();
+            }
+
+            var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+            if (customer == null)
+            {
+                return Unauthorized();
+            }
+
+            var totalQuantity = model.NumAdults + model.NumChildren;
+            if (tour.SoLuong.HasValue && totalQuantity > tour.SoLuong.Value)
+            {
+                ModelState.AddModelError(string.Empty, "Số lượng người đặt vượt quá số chỗ còn trống");
+                return View(model);
+            }
+
+            var booking = new DatTour
+            {
+                MaTour = model.TourId,
+                MaKhachHang = customer.MaKhachHang,
+                NgayDat = DateTime.Now,
+                SoNguoiLon = model.NumAdults,
+                SoTreEm = model.NumChildren,
+                TongTien = (model.NumAdults * (tour.GiaNguoiLon ?? 0)) + (model.NumChildren * (tour.GiaTreEm ?? 0)),
+                TrangThaiDat = "Chờ xác nhận",
+                TrangThaiThanhToan = "Chưa thanh toán",
+                YeuCauDacBiet = model.SpecialRequest
+            };
+
+            _context.DatTours.Add(booking);
+            await _context.SaveChangesAsync();
+
+            // Create invoice
+            var hoaDon = new HoaDon
+            {
+                MaDatTour = booking.MaDatTour,
+                NgayXuat = DateTime.Now,
+                SoTien = booking.TongTien,
+                TrangThai = "Chưa thanh toán"
+            };
+
+            // Generate signature data for the invoice
+            var signatureData = $"{booking.MaDatTour}|{booking.MaKhachHang}|{booking.MaTour}|{booking.TongTien}|{hoaDon.NgayXuat:yyyy-MM-dd HH:mm:ss}";
+            hoaDon.ChuKySo = _digitalSignatureService.SignData(signatureData);
+
+            _context.HoaDons.Add(hoaDon);
+            await _context.SaveChangesAsync();
+
+            return RedirectToAction("MyTour");
+        }
+
         [HttpGet]
         [Authorize(Roles = "ROLE_CUSTOMER")]
         public async Task<IActionResult> Profile()
@@ -478,22 +548,93 @@ namespace DuLich.Controllers
         [Authorize(Roles = "ROLE_CUSTOMER")]
         public async Task<IActionResult> Payment(int bookingId)
         {
-            var username = User.Identity.Name;
-            var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+            var username = User.Identity?.Name;
+            if (string.IsNullOrEmpty(username))
+            {
+                return RedirectToAction("Login");
+            }
 
+            var customer = await _context.KhachHangs
+                .FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
             if (customer == null)
             {
                 return RedirectToAction("Login");
             }
 
             var booking = await _context.DatTours
-                .Where(dt => dt.MaDatTour == bookingId && dt.MaKhachHang == customer.MaKhachHang)
-                .Include(dt => dt.HoaDon)
-                .FirstOrDefaultAsync();
+                .Include(b => b.Tour)
+                .Include(b => b.HoaDon)
+                .FirstOrDefaultAsync(b => b.MaDatTour == bookingId && b.MaKhachHang == customer.MaKhachHang);
+
+            if (booking == null || booking.HoaDon == null || booking.Tour == null)
+            {
+                TempData["ErrorMessage"] = "Không tìm thấy thông tin đặt tour hoặc hóa đơn";
+                return RedirectToAction("MyTour");
+            }
+
+            // Tạo dữ liệu để xác thực chữ ký số
+            var signatureData = $"{booking.MaDatTour}|{booking.MaKhachHang}|{booking.MaTour}|{booking.TongTien}|{booking.HoaDon.NgayXuat:yyyy-MM-dd HH:mm:ss}";
+            
+            // Đọc public key
+            var publicKeyPath = Path.Combine(Directory.GetCurrentDirectory(), "Keys", "public_key.pem");
+            var publicKeyPem = await System.IO.File.ReadAllTextAsync(publicKeyPath);
+            
+            // Xác thực chữ ký số
+            bool isValid = _digitalSignatureService.VerifySignature(
+                signatureData,
+                booking.HoaDon.ChuKySo ?? "",
+                publicKeyPem
+            );
+
+            var model = new InvoiceViewModel
+            {
+                MaHoaDon = booking.HoaDon.MaHoaDon,
+                NgayXuat = booking.HoaDon.NgayXuat,
+                SoTien = booking.HoaDon.SoTien,
+                TrangThai = booking.HoaDon.TrangThai,
+                IsSignatureValid = isValid,
+
+                // Thông tin tour
+                TenTour = booking.Tour.TieuDe,
+                NgayKhoiHanh = booking.Tour.ThoiGian,
+                SoNguoiLon = booking.SoNguoiLon,
+                SoTreEm = booking.SoTreEm,
+
+                // Thông tin khách hàng
+                TenKhachHang = customer.HoTen,
+                Email = customer.Email,
+                SoDienThoai = customer.SoDienThoai,
+                DiaChi = customer.DiaChi
+            };
+
+            return View(model);
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "ROLE_CUSTOMER")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ConfirmPayment(int bookingId)
+        {
+            var username = User.Identity?.Name;
+            if (string.IsNullOrEmpty(username))
+            {
+                return RedirectToAction("Login");
+            }
+
+            var customer = await _context.KhachHangs
+                .FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+            if (customer == null)
+            {
+                return RedirectToAction("Login");
+            }
+
+            var booking = await _context.DatTours
+                .Include(b => b.HoaDon)
+                .FirstOrDefaultAsync(b => b.MaDatTour == bookingId && b.MaKhachHang == customer.MaKhachHang);
 
             if (booking == null || booking.HoaDon == null)
             {
-                TempData["ErrorMessage"] = "Không tìm thấy thông tin đặt tour hoặc hóa đơn.";
+                TempData["ErrorMessage"] = "Không tìm thấy thông tin đặt tour hoặc hóa đơn";
                 return RedirectToAction("MyTour");
             }
 
@@ -503,10 +644,6 @@ namespace DuLich.Controllers
                 _context.HoaDons.Update(booking.HoaDon);
                 await _context.SaveChangesAsync();
                 TempData["SuccessMessage"] = "Thanh toán thành công!";
-            }
-            else
-            {
-                TempData["InfoMessage"] = "Tour này đã được thanh toán.";
             }
 
             return RedirectToAction("TourBooked", new { bookingId = bookingId });

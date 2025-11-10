@@ -1,0 +1,82 @@
+@model DuLich.Models.InvoiceViewModel
+@{
+    ViewData["Title"] = "Xác nhận thanh toán";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-5 mb-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Hóa đơn đặt tour</h4>
+                </div>
+                <div class="card-body">
+                    @if (!Model.IsSignatureValid)
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Cảnh báo: Chữ ký số không hợp lệ. Hóa đơn này có thể đã bị chỉnh sửa!
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-success" role="alert">
+                            <i class="fas fa-check-circle"></i>
+                            Hóa đơn hợp lệ - Chữ ký số đã được xác thực
+                        </div>
+                    }
+
+                    <div class="row mb-4">
+                        <div class="col-sm-6">
+                            <h6 class="mb-3">Thông tin hóa đơn:</h6>
+                            <div><strong>Mã hóa đơn:</strong> @Model.MaHoaDon</div>
+                            <div><strong>Ngày xuất:</strong> @Model.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss")</div>
+                            <div><strong>Trạng thái:</strong> @Model.TrangThai</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <h6 class="mb-3">Thông tin khách hàng:</h6>
+                            <div><strong>Họ tên:</strong> @Model.TenKhachHang</div>
+                            <div><strong>Email:</strong> @Model.Email</div>
+                            <div><strong>Số điện thoại:</strong> @Model.SoDienThoai</div>
+                            <div><strong>Địa chỉ:</strong> @Model.DiaChi</div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <h6 class="mb-3">Chi tiết tour:</h6>
+                            <div><strong>Tên tour:</strong> @Model.TenTour</div>
+                            <div><strong>Ngày khởi hành:</strong> @Model.NgayKhoiHanh?.ToString("dd/MM/yyyy")</div>
+                            <div><strong>Số người lớn:</strong> @Model.SoNguoiLon</div>
+                            <div><strong>Số trẻ em:</strong> @Model.SoTreEm</div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="text-end">
+                                <h5>Tổng tiền: @Model.SoTien?.ToString("#,##0") VNĐ</h5>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (Model.TrangThai != "Đã thanh toán")
+                    {
+                        <div class="text-center mt-4">
+                            <button class="btn btn-primary" onclick="window.print()">In hóa đơn</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @@media print {
+        .alert { display: none; }
+        .btn { display: none; }
+        body { font-size: 12pt; }
+    }
+</style>

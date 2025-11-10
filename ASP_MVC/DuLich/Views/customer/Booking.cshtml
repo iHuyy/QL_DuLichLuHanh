@@ -24,7 +24,7 @@
 <!-- Page Banner End -->
 
 <section class="container" style="margin-top:50px; margin-bottom: 100px">
-    <form asp-action="Booking" method="post" class="booking-container">
+    <form asp-controller="Customer" asp-action="Booking" asp-route-id="@Model.TourId" method="post" class="booking-container">
         @Html.AntiForgeryToken()
         <input type="hidden" asp-for="TourId" />
 
