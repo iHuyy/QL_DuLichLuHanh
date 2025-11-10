@@ -1,9 +1,11 @@
 using DuLich.Models;
+using DuLich.Models;
 using DuLich.Services;
 using DuLich.Models.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
@@ -164,6 +166,150 @@ namespace DuLich.Controllers
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return RedirectToAction("Index", "Home");
+        }
+        
+        [HttpGet]
+        public async Task<IActionResult> TourDetail(int id)
+        {
+            var tour = await _context.Tours.FindAsync(id);
+
+            if (tour == null)
+            {
+                return NotFound();
+            }
+
+            var model = new TourDetailViewModel
+            {
+                MaTour = tour.MaTour,
+                TenTour = tour.TieuDe ?? "Chưa có tên",
+                MoTa = tour.MoTa,
+                DiemKhoiHanh = tour.NoiKhoiHanh ?? "Chưa xác định",
+                DiemDen = tour.NoiDen ?? tour.ThanhPho ?? "Chưa xác định",
+                NgayKhoiHanh = tour.ThoiGian ?? DateTime.Now,
+                NgayKetThuc = tour.ThoiGian?.AddDays(5) ?? DateTime.Now.AddDays(5), // Giả sử tour kéo dài 5 ngày
+                Gia = tour.GiaNguoiLon ?? 0,
+                SoLuong = tour.SoLuong ?? 0
+            };
+
+            ViewBag.Images = await _context.AnhTours
+                .Where(a => a.MaTour == id)
+                .OrderBy(a => a.MaAnh)
+                .Select(a => a.DuongDanAnh)
+                .Where(s => !string.IsNullOrEmpty(s))
+                .Select(s => s!)
+                .ToListAsync();
+
+            ViewBag.Rating = await _context.DanhGiaTours
+                .Where(d => d.MaTour == id)
+                .AverageAsync(d => (decimal?)d.SoSao) ?? 0;
+
+            ViewBag.RelatedTours = await _context.Tours
+                .Where(t => t.MaTour != id && (t.NoiDen == model.DiemDen || t.ThanhPho == model.DiemDen))
+                .OrderBy(t => t.MaTour)
+                .Take(3)
+                .Select(t => new TourDetailViewModel {
+                    MaTour = t.MaTour,
+                    TenTour = t.TieuDe ?? "Chưa có tên",
+                    Gia = t.GiaNguoiLon ?? 0
+                })
+                .ToListAsync();
+
+            return View(model);
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "ROLE_CUSTOMER")]
+        public async Task<IActionResult> Booking(int id)
+        {
+            var tour = await _context.Tours.FindAsync(id);
+            if (tour == null)
+            {
+                return NotFound();
+            }
+
+            var username = User.Identity.Name;
+            var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+
+            var model = new CreateBookingViewModel
+            {
+                TourId = tour.MaTour,
+                TourTitle = tour.TieuDe,
+                StartDate = tour.ThoiGian,
+                PriceAdult = tour.GiaNguoiLon ?? 0,
+                PriceChild = tour.GiaTreEm ?? 0,
+                AvailableSlots = tour.SoLuong ?? 0,
+                FullName = customer?.HoTen,
+                Email = customer?.Email,
+                PhoneNumber = customer?.SoDienThoai,
+                Address = customer?.DiaChi
+            };
+
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "ROLE_CUSTOMER")]
+        public async Task<IActionResult> Booking(CreateBookingViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                // Repopulate tour info if model is invalid
+                var tour = await _context.Tours.FindAsync(model.TourId);
+                if (tour != null)
+                {
+                    model.TourTitle = tour.TieuDe;
+                    model.StartDate = tour.ThoiGian;
+                    model.PriceAdult = tour.GiaNguoiLon ?? 0;
+                    model.PriceChild = tour.GiaTreEm ?? 0;
+                    model.AvailableSlots = tour.SoLuong ?? 0;
+                }
+                return View(model);
+            }
+
+            var username = User.Identity.Name;
+            var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+
+            if (customer == null)
+            {
+                ModelState.AddModelError(string.Empty, "Bạn cần đăng nhập để đặt tour.");
+                // Repopulate tour info if model is invalid
+                var tour = await _context.Tours.FindAsync(model.TourId);
+                if (tour != null)
+                {
+                    model.TourTitle = tour.TieuDe;
+                    model.StartDate = tour.ThoiGian;
+                    model.PriceAdult = tour.GiaNguoiLon ?? 0;
+                    model.PriceChild = tour.GiaTreEm ?? 0;
+                    model.AvailableSlots = tour.SoLuong ?? 0;
+                }
+                return View(model);
+            }
+
+            var tourForPrice = await _context.Tours.FindAsync(model.TourId);
+            if (tourForPrice == null)
+            {
+                ModelState.AddModelError(string.Empty, "Tour không tồn tại.");
+                return View(model);
+            }
+
+            var booking = new DatTour
+            {
+                MaKhachHang = customer.MaKhachHang,
+                MaTour = model.TourId,
+                SoNguoiLon = model.NumAdults,
+                SoTreEm = model.NumChildren,
+                TongTien = (model.NumAdults * (tourForPrice.GiaNguoiLon ?? 0)) + (model.NumChildren * (tourForPrice.GiaTreEm ?? 0)),
+                YeuCauDacBiet = model.SpecialRequest,
+                TrangThaiThanhToan = "Chưa thanh toán",
+                TrangThaiDat = "Đã xác nhận"
+            };
+
+            _context.DatTours.Add(booking);
+            await _context.SaveChangesAsync();
+
+            TempData["SuccessMessage"] = "Chúc mừng bạn đã đặt tour thành công!";
+            return RedirectToAction("TourDetail", new { id = model.TourId });
         }
     }
 }

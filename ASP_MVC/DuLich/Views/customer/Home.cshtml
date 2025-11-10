@@ -28,7 +28,7 @@
                         <p class="card-text">Giá từ:
                             @string.Format(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), "{0:N0}",
                             tour.PriceAdult) VND</p>
-                    <a asp-controller="Customer" asp-action="Index" class="btn btn-primary">Xem chi tiết</a>
+                    <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@tour.MaTour" class="btn btn-primary">Xem chi tiết</a>
                 </div>
             </div>
         </div>

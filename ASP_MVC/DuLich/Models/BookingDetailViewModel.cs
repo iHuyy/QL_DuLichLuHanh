@@ -24,18 +24,6 @@ namespace DuLich.Models
         public string? SoDienThoai { get; set; }
     }
 
-    public class TourDetailViewModel
-    {
-        public string? TenTour { get; set; }
-        public string? MaTour { get; set; }
-        public DateTime NgayKhoiHanh { get; set; }
-        public DateTime NgayKetThuc { get; set; }
-        public string? DiemKhoiHanh { get; set; }
-        public string? DiemDen { get; set; }
-        public string? MoTa { get; set; }
-        public decimal Gia { get; set; }
-    }
-
     public class BookingNoteViewModel
     {
         public DateTime CreatedAt { get; set; }

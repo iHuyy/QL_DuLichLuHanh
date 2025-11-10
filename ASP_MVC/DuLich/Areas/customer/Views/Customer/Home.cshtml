@@ -1,0 +1,44 @@
+@model DuLich.Models.CustomerHomeViewModel
+@{
+    ViewData["Title"] = "Trang chủ";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12 text-center mb-4">
+            <h2>Khám phá các tour</h2>
+            <p>Những hành trình được yêu thích nhất</p>
+        </div>
+    </div>
+
+    <div class="row">
+        @foreach (var tour in Model.Tours)
+        {
+            var img = tour.Images.FirstOrDefault();
+            var imgUrl = string.IsNullOrEmpty(img) ? Url.Content("~/customer/assets/images/default-tour.jpg") :
+            Url.Content($"~/customer/{img}");
+            <div class="col-md-3 mb-4">
+                <div class="card">
+                    <img src="@imgUrl" class="card-img-top" alt="@tour.Title" style="height:200px; object-fit:cover;">
+                    <div class="card-body">
+                        <h5 class="card-title">@tour.Title</h5>
+                        <p class="card-text">@tour.Destination</p>
+                        <p class="card-text"><small class="text-muted">@tour.Time</small></p>
+                        <p class="card-text">Giá từ:
+                            @string.Format(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), "{0:N0}",
+                            tour.PriceAdult) VND</p>
+                    <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@tour.MaTour" class="btn btn-primary">Xem chi tiết</a>
+                </div>
+            </div>
+        </div>
+                }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // small interactive initialization for customer home if needed
+        console.log('Customer Home loaded');
+    </script>
+}
