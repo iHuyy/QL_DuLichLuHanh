@@ -1,0 +1,19 @@
+-- Tạo một thư mục để chứa các script:
+mkdir -p /home/oracle/scripts
+
+-- Tạo một file script tên là list_backups.sh bên trong thư mục đó:
+nano /home/oracle/scripts/list_backups.sh
+
+-- file list_backups.sh
+# Đường dẫn đến thư mục sao lưu
+BACKUP_DIR="/home/oracle/backups"
+
+# Lệnh find an toàn hơn ls...
+/usr/bin/find "$BACKUP_DIR" -maxdepth 1 -type f -name "*.dmp"
+
+# Luôn thoát với mã 0...
+exit 0
+
+-- Tạo thư mục lưu các backups
+mkdir backups
+

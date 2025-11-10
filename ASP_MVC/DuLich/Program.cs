@@ -33,6 +33,14 @@ builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
 // Đăng ký OracleAuthService
 builder.Services.AddScoped<OracleAuthService>();
 
+// Register DigitalSignatureService
+builder.Services.AddSingleton<DigitalSignatureService>(sp =>
+{
+    var privateKeyPath = Path.Combine(builder.Environment.ContentRootPath, "Keys", "private_key_unencrypted.pem");
+    var publicKeyPath = Path.Combine(builder.Environment.ContentRootPath, "Keys", "public_key.pem");
+    return new DigitalSignatureService(privateKeyPath, publicKeyPath);
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

@@ -4,28 +4,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace DuLich.Models
 {
-    public class BookingViewModel
-    {
-        public int Id { get; set; }
-        public string? CustomerName { get; set; }
-        public string? TourName { get; set; }
-        public DateTime BookingDate { get; set; }
-        public int Quantity { get; set; }
-        public decimal TotalAmount { get; set; }
-        public string? Status { get; set; }
-        public string? StatusClass { get; set; }
-        public bool CanCancel { get; set; }
-
-        public BookingViewModel()
-        {
-            CustomerName = "Không xác định";
-            TourName = "Không xác định";
-            BookingDate = DateTime.Now;
-            Status = "Chưa xác định";
-            StatusClass = "secondary";
-        }
-    }
-
     public class TourViewModel
     {
         public int Id { get; set; }
@@ -89,5 +67,26 @@ namespace DuLich.Models
             SoDienThoai = "";
             DiaChi = "";
         }
+    }
+
+    public class AuditLogViewModel
+    {
+        [Display(Name = "Loại hành động")]
+        public string LoaiHanhDong { get; set; } = string.Empty;
+
+        [Display(Name = "Tên cột")]
+        public string? TenCot { get; set; }
+
+        [Display(Name = "Giá trị cũ")]
+        public string? GiaTriCu { get; set; }
+
+        [Display(Name = "Giá trị mới")]
+        public string? GiaTriMoi { get; set; }
+
+        [Display(Name = "Người thực hiện")]
+        public string? NguoiThucHien { get; set; }
+
+        [Display(Name = "Thời gian thực hiện")]
+        public DateTime ThoiGianThucHien { get; set; }
     }
 }

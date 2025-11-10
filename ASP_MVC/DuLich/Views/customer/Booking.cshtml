@@ -1,0 +1,190 @@
+@model DuLich.Models.CreateBookingViewModel
+@{
+    ViewData["Title"] = "Đặt Tour";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<!-- Page Banner Start -->
+<section class="page-banner-area pt-50 pb-35 rel z-1 bgs-cover"
+    style="background-image: url(@Url.Content("~/customer/assets/images/banner/banner.jpg"));">
+    <div class="container">
+        <div class="banner-inner text-white">
+            <h2 class="page-title mb-10" data-aos="fade-left" data-aos-duration="1500" data-aos-offset="50">@ViewData["Title"]
+            </h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb justify-content-center mb-20" data-aos="fade-right" data-aos-delay="200"
+                    data-aos-duration="1500" data-aos-offset="50">
+                    <li class="breadcrumb-item"><a href="/">Trang chủ</a></li>
+                    <li class="breadcrumb-item active">@ViewData["Title"]</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+</section>
+<!-- Page Banner End -->
+
+<section class="container" style="margin-top:50px; margin-bottom: 100px">
+    <form asp-action="Booking" method="post" class="booking-container">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="TourId" />
+
+        <!-- Contact Information -->
+        <div class="booking-info">
+            <h2 class="booking-header">Thông Tin Liên Lạc</h2>
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <div class="booking__infor">
+                <div class="form-group">
+                    <label asp-for="FullName">Họ và tên*</label>
+                    <input asp-for="FullName" class="form-control" placeholder="Nhập Họ và tên">
+                    <span asp-validation-for="FullName" class="text-danger"></span>
+                </div>
+
+                <div class="form-group">
+                    <label asp-for="Email">Email*</label>
+                    <input asp-for="Email" class="form-control" placeholder="sample@gmail.com">
+                    <span asp-validation-for="Email" class="text-danger"></span>
+                </div>
+
+                <div class="form-group">
+                    <label asp-for="PhoneNumber">Số điện thoại*</label>
+                    <input asp-for="PhoneNumber" class="form-control" placeholder="Nhập số điện thoại liên hệ">
+                    <span asp-validation-for="PhoneNumber" class="text-danger"></span>
+                </div>
+
+                <div class="form-group">
+                    <label asp-for="Address">Địa chỉ</label>
+                    <input asp-for="Address" class="form-control" placeholder="Nhập địa chỉ liên hệ">
+                    <span asp-validation-for="Address" class="text-danger"></span>
+                </div>
+            </div>
+
+            <!-- Passenger Details -->
+            <h2 class="booking-header">Hành Khách</h2>
+            <div class="booking__quantity">
+                <div class="form-group quantity-selector">
+                    <label>Người lớn</label>
+                    <div class="input__quanlity">
+                        <button type="button" class="quantity-btn" onclick="updateQuantity('numAdults', -1)">-</button>
+                        <input asp-for="NumAdults" id="NumAdults" class="quantity-input" min="1" readonly>
+                        <button type="button" class="quantity-btn" onclick="updateQuantity('numAdults', 1)">+</button>
+                    </div>
+                    <span asp-validation-for="NumAdults" class="text-danger"></span>
+                </div>
+
+                <div class="form-group quantity-selector">
+                    <label>Trẻ em</label>
+                    <div class="input__quanlity">
+                        <button type="button" class="quantity-btn"
+                            onclick="updateQuantity('numChildren', -1)">-</button>
+                        <input asp-for="NumChildren" id="NumChildren" class="quantity-input" min="0" readonly>
+                        <button type="button" class="quantity-btn" onclick="updateQuantity('numChildren', 1)">+</button>
+                    </div>
+                    <span asp-validation-for="NumChildren" class="text-danger"></span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="SpecialRequest">Yêu cầu đặc biệt</label>
+                <textarea asp-for="SpecialRequest" class="form-control" rows="3"
+                    placeholder="Nếu bạn có yêu cầu đặc biệt, hãy cho chúng tôi biết."></textarea>
+            </div>
+
+            <!-- Privacy Agreement Section -->
+            <div class="privacy-section">
+                <p>Bằng cách nhấp chuột vào nút "Xác Nhận" dưới đây, Khách hàng đồng ý rằng các điều kiện điều khoản này
+                    sẽ được áp dụng.</p>
+                <div class="privacy-checkbox">
+                    <input asp-for="AgreeToTerms" type="checkbox">
+                    <label asp-for="AgreeToTerms">Tôi đã đọc và đồng ý với <a href="#" target="_blank">Điều khoản thanh
+                            toán</a></label>
+                </div>
+                <span asp-validation-for="AgreeToTerms" class="text-danger"></span>
+            </div>
+        </div>
+
+        <!-- Order Summary -->
+        <div class="booking-summary">
+            <div class="summary-section">
+                <div>
+                    <p>Mã tour : @Model.TourId</p>
+                    <h5 class="widget-title">@Model.TourTitle</h5>
+                    <p>Ngày khởi hành : @Model.StartDate?.ToString("dd-MM-yyyy")</p>
+                    <p class="quantityAvailable">Số chỗ còn nhận : @Model.AvailableSlots</p>
+                </div>
+
+                <div class="order-summary">
+                    <!-- Hidden numeric values for reliable JS parsing -->
+                    <input type="hidden" id="PriceAdultValue" value="@Model.PriceAdult" />
+                    <input type="hidden" id="PriceChildValue" value="@Model.PriceChild" />
+                    <div class="summary-item">
+                        <span>Người lớn:</span>
+                        <div>
+                            <span id="summaryAdults">@Model.NumAdults</span>
+                            <span>X</span>
+                            <span id="pricePerAdult">@Model.PriceAdult.ToString("N0") VNĐ</span>
+                        </div>
+                    </div>
+                    <div class="summary-item">
+                        <span>Trẻ em:</span>
+                        <div>
+                            <span id="summaryChildren">@Model.NumChildren</span>
+                            <span>X</span>
+                            <span id="pricePerChild">@Model.PriceChild.ToString("N0") VNĐ</span>
+                        </div>
+                    </div>
+                    <div class="summary-item total-price">
+                        <span>Tổng cộng:</span>
+                        <span id="totalPrice">@((Model.NumAdults * Model.PriceAdult + Model.NumChildren * Model.PriceChild).ToString("N0")) VNĐ</span>
+                    </div>
+                </div>
+
+                <button type="submit" class="theme-btn style-two w-100">Xác Nhận Đặt Tour <i class="fas fa-angle-right"></i></button>
+            </div>
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    <script>
+    // Read numeric values from hidden inputs to avoid formatting/locale issues
+    const priceAdult = Number(document.getElementById('PriceAdultValue').value) || 0;
+    const priceChild = Number(document.getElementById('PriceChildValue').value) || 0;
+
+        function updateQuantity(field, change) {
+            const input = document.getElementById(field === 'numAdults' ? 'NumAdults' : 'NumChildren');
+            let currentValue = parseInt(input.value) || 0;
+            let newValue = currentValue + change;
+
+            if (field === 'numAdults' && newValue < 1) {
+                newValue = 1;
+            }
+            if (newValue < 0) {
+                newValue = 0;
+            }
+
+            input.value = newValue;
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const numAdults = parseInt(document.getElementById('NumAdults').value) || 0;
+            const numChildren = parseInt(document.getElementById('NumChildren').value) || 0;
+
+            const total = (numAdults * priceAdult) + (numChildren * priceChild);
+
+            document.getElementById('summaryAdults').innerText = numAdults;
+            document.getElementById('summaryChildren').innerText = numChildren;
+            document.getElementById('pricePerAdult').innerText = priceAdult.toLocaleString('vi-VN') + ' VNĐ';
+            document.getElementById('pricePerChild').innerText = priceChild.toLocaleString('vi-VN') + ' VNĐ';
+            document.getElementById('totalPrice').innerText = total.toLocaleString('vi-VN') + ' VNĐ';
+        }
+
+        // Initial call to set summary
+        document.addEventListener('DOMContentLoaded', function () {
+            updateSummary();
+            
+            document.getElementById('NumAdults').addEventListener('input', updateSummary);
+            document.getElementById('NumChildren').addEventListener('input', updateSummary);
+        });
+    </script>
+}

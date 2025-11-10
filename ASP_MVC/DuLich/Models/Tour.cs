@@ -57,6 +57,9 @@ namespace DuLich.Models
 
         // Thêm navigation collection để EF không tạo shadow FK "TourMaTour"
         public ICollection<AnhTour> AnhTours { get; set; } = new List<AnhTour>();
+
+        [NotMapped]
+        public List<string> Images { get; set; } = new List<string>();
     }
 }
 

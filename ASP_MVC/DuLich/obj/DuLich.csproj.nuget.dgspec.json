@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\QuanLyDuLichLuHanh\\V1\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj": {}
+    "D:\\QuanLyDuLichLuHanh\\v2\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj": {}
   },
   "projects": {
-    "D:\\QuanLyDuLichLuHanh\\V1\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj": {
+    "D:\\QuanLyDuLichLuHanh\\v2\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\QuanLyDuLichLuHanh\\V1\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
+        "projectUniqueName": "D:\\QuanLyDuLichLuHanh\\v2\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
         "projectName": "DuLich",
-        "projectPath": "D:\\QuanLyDuLichLuHanh\\V1\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
+        "projectPath": "D:\\QuanLyDuLichLuHanh\\v2\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
         "packagesPath": "C:\\Users\\quang\\.nuget\\packages\\",
-        "outputPath": "D:\\QuanLyDuLichLuHanh\\V1\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\obj\\",
+        "outputPath": "D:\\QuanLyDuLichLuHanh\\v2\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\quang\\AppData\\Roaming\\NuGet\\NuGet.Config",

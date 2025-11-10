@@ -36,5 +36,8 @@ namespace DuLich.Models
 
         [Column("ORACLE_USERNAME")]
         public string? ORACLE_USERNAME { get; set; }
+
+        [Column("QR_CODE")]
+        public string? QR_CODE { get; set; } // Added to force recompilation
     }
 }

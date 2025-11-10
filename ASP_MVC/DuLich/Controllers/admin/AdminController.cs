@@ -542,5 +542,48 @@ namespace DuLich.Controllers
                 _ => "secondary"
             };
         }
+
+        [HttpGet]
+        [Route("Admin/AuditLogs")]
+        [Authorize(Roles = "ROLE_ADMIN")]
+        public async Task<IActionResult> AuditLogs()
+        {
+            var auditLogs = await _context.NhanVienAuditLogs
+                                        .OrderByDescending(log => log.ThoiGianThucHien)
+                                        .ToListAsync();
+
+            var userNames = auditLogs.Select(l => l.NguoiThucHien).Distinct().ToList();
+
+            var staffUsers = await _context.NhanViens
+                                     .Where(n => userNames.Contains(n.ORACLE_USERNAME))
+                                     .ToDictionaryAsync(n => n.ORACLE_USERNAME, n => n.HoTen);
+
+            var customerUsers = await _context.KhachHangs
+                                     .Where(k => userNames.Contains(k.ORACLE_USERNAME))
+                                     .ToDictionaryAsync(k => k.ORACLE_USERNAME, k => k.HoTen);
+
+            var userMappings = staffUsers;
+            foreach (var customer in customerUsers)
+            {
+                if (!userMappings.ContainsKey(customer.Key))
+                {
+                    userMappings.Add(customer.Key, customer.Value);
+                }
+            }
+
+            var viewModel = auditLogs.Select(log => new AuditLogViewModel
+            {
+                LoaiHanhDong = log.LoaiHanhDong,
+                TenCot = log.TenCot,
+                GiaTriCu = log.GiaTriCu,
+                GiaTriMoi = log.GiaTriMoi,
+                ThoiGianThucHien = log.ThoiGianThucHien,
+                NguoiThucHien = userMappings.TryGetValue(log.NguoiThucHien ?? "", out var hoTen)
+                                 ? $"{hoTen} ({log.NguoiThucHien})"
+                                 : log.NguoiThucHien
+            }).ToList();
+
+            return View(viewModel);
+        }
     }
 }

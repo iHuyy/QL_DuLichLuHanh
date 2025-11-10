@@ -1,0 +1,102 @@
+@model IEnumerable<DuLich.Models.AuditLogViewModel>
+
+@{
+    ViewData["Title"] = "Nhật ký kiểm toán nhân viên";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="container-fluid">
+    <h1 class="mt-4">Nhật ký kiểm toán nhân viên</h1>
+    <ol class="breadcrumb mb-4">
+        <li class="breadcrumb-item"><a href="/Admin/Dashboard">Bảng điều khiển</a></li>
+        <li class="breadcrumb-item active">Nhật ký kiểm toán</li>
+    </ol>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-table mr-1"></i>
+            Danh sách nhật ký
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">Hành động</th>
+                            <th>Chi tiết</th>
+                            <th style="width: 15%;">Người thực hiện</th>
+                            <th style="width: 15%;">Thời gian</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in Model)
+                        {
+                            <tr>
+                                <td>
+                                    @{
+                                        var actionClass = "";
+                                        var actionText = "";
+                                        switch (log.LoaiHanhDong?.ToUpper())
+                                        {
+                                            case "INSERT":
+                                                actionText = "Thêm mới";
+                                                actionClass = "badge badge-success";
+                                                break;
+                                            case "UPDATE":
+                                                actionText = "Cập nhật";
+                                                actionClass = "badge badge-warning";
+                                                break;
+                                            case "DELETE":
+                                                actionText = "Xóa";
+                                                actionClass = "badge badge-danger";
+                                                break;
+                                            default:
+                                                actionText = log.LoaiHanhDong;
+                                                actionClass = "badge badge-secondary";
+                                                break;
+                                        }
+                                        <span class="@actionClass" style="font-size: 0.9em; padding: 0.4em 0.6em;">@actionText</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (log.LoaiHanhDong?.ToUpper() == "UPDATE")
+                                    {
+                                        <div><strong>Cột:</strong> @log.TenCot</div>
+                                        <div><strong>Giá trị cũ:</strong> <span class="text-muted">@log.GiaTriCu</span></div>
+                                        <div><strong>Giá trị mới:</strong> <span class="text-primary">@log.GiaTriMoi</span></div>
+                                    }
+                                    else if (log.LoaiHanhDong?.ToUpper() == "INSERT")
+                                    {
+                                        <div><strong>Dữ liệu mới:</strong> <div style="max-width: 400px; word-wrap: break-word;">@log.GiaTriMoi</div></div>
+                                    }
+                                    else if (log.LoaiHanhDong?.ToUpper() == "DELETE")
+                                    {
+                                        <div><strong>Dữ liệu đã xóa:</strong> <div style="max-width: 400px; word-wrap: break-word;">@log.GiaTriCu</div></div>
+                                    }
+                                </td>
+                                <td>@log.NguoiThucHien</td>
+                                <td>@log.ThoiGianThucHien.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <link href="https://cdn.datatables.net/1.10.20/css/dataTables.bootstrap4.min.css" rel="stylesheet" crossorigin="anonymous" />
+    <script src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.datatables.net/1.10.20/js/dataTables.bootstrap4.min.js" crossorigin="anonymous"></script>
+    <script>
+        $(document).ready(function() {
+            $('#dataTable').DataTable({
+                "order": [[ 3, "desc" ]], // Sắp xếp theo cột Thời gian giảm dần
+                "language": {
+                    "url": "//cdn.datatables.net/plug-ins/1.10.20/i18n/Vietnamese.json"
+                }
+            });
+        });
+    </script>
+}
