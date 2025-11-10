@@ -44,5 +44,7 @@ namespace DuLich.Models
 
         [ForeignKey("MaTour")]
         public Tour? Tour { get; set; }
+
+        public HoaDon? HoaDon { get; set; }
     }
 }

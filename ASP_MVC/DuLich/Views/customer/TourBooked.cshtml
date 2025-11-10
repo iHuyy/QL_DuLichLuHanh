@@ -1,0 +1,132 @@
+@model DuLich.Models.TourBookedViewModel
+
+@{
+    ViewData["Title"] = "Tour Đã Đặt";
+    Layout = "~/Views/Shared/_Layout.cshtml"; // Assuming this is your main layout
+}
+
+<section class="container" style="margin-top:50px; margin-bottom: 100px">
+    <form asp-controller="Customer" asp-action="CancelBooking" method="POST" class="booking-container">
+        @Html.AntiForgeryToken()
+        <!-- Contact Information -->
+        <div class="booking-info">
+            <h2 class="booking-header">Thông Tin Liên Lạc</h2>
+            <div class="booking__infor">
+                <div class="form-group">
+                    <label for="username">Họ và tên*</label>
+                    <input type="text" id="username" placeholder="Nhập Họ và tên" name="fullName"
+                        value="@Model.TourBooked.FullName" readonly>
+                    <span class="error-message" id="usernameError"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email*</label>
+                    <input type="email" id="email" placeholder="sample@gmail.com" name="email"
+                        value="@Model.TourBooked.Email" readonly>
+                    <span class="error-message" id="emailError"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="tel">Số điện thoại*</label>
+                    <input type="number" id="tel" placeholder="Nhập số điện thoại liên hệ" name="tel"
+                        value="@Model.TourBooked.PhoneNumber" readonly>
+                    <span class="error-message" id="telError"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="address">Địa chỉ*</label>
+                    <input type="text" id="address" placeholder="Nhập địa chỉ liên hệ" name="address"
+                        value="@Model.TourBooked.Address" readonly>
+                    <span class="error-message" id="addressError"></span>
+                </div>
+
+            </div>
+
+            <!-- Privacy Agreement Section -->
+            <div class="privacy-section">
+                <p>Bằng cách nhấp chuột vào nút "ĐỒNG Ý" dưới đây, Khách hàng đồng ý rằng các điều kiện điều khoản
+                    này sẽ được áp dụng. Vui lòng đọc kỹ điều kiện điều khoản trước khi lựa chọn sử dụng dịch vụ của
+                    Travela.</p>
+                <div class="privacy-checkbox">
+                    <input type="checkbox" id="agree" name="agree" checked disabled>
+                    <label for="agree">Tôi đã đọc và đồng ý với <a href="#" target="_blank">Điều khoản thanh
+                            toán</a></label>
+                </div>
+                        </div>
+
+        </div>
+
+        <!-- Order Summary -->
+        <div class="booking-summary">
+            <div class="summary-section">
+                <div>
+                    <p>Mã tour : @Model.TourBooked.TourId</p>
+                    <input type="hidden" name="tourId" id="tourId" value="@Model.TourBooked.TourId">
+                    <h5 class="widget-title">@Model.TourBooked.Title</h5>
+                    <p>Ngày khởi hành : @(Model.TourBooked.StartDate?.ToString("dd-MM-yyyy"))</p>
+                    <p>Ngày kết thúc : @(Model.TourBooked.EndDate?.ToString("dd-MM-yyyy"))</p>
+                </div>
+
+                <div class="order-summary" style="border-bottom: 1px solid #d6d6d6; margin-bottom:20px">
+                    <div class="summary-item">
+                        <span>Người lớn:</span>
+                        <div>
+                            <span class="quantity__adults-booked">@String.Format("{0:N0}", Model.TourBooked.NumAdults)</span>
+                            <input type="hidden" name="quantity__adults" value="@Model.TourBooked.NumAdults">
+                            <span>X</span>
+                            <span class="total-price-booked">@String.Format("{0:N0}", Model.TourBooked.PriceAdult) VNĐ</span>
+                        </div>
+                    </div>
+                    <div class="summary-item">
+                        <span>Trẻ em:</span>
+                        <div>
+                            <span class="quantity__children-booked">@String.Format("{0:N0}", Model.TourBooked.NumChildren)</span>
+                            <input type="hidden" name="quantity__children" value="@Model.TourBooked.NumChildren">
+                            <span>X</span>
+                            <span class="total-price-booked">@String.Format("{0:N0}", Model.TourBooked.PriceChild) VNĐ</span>
+                        </div>
+                    </div>
+                    <div class="summary-item">
+                        <span>Giảm giá:</span>
+                        <div>
+                            <span class="total-price-booked">
+                                @String.Format("{0:N0}", (Model.TourBooked.NumAdults * Model.TourBooked.PriceAdult + Model.TourBooked.NumChildren * Model.TourBooked.PriceChild - Model.TourBooked.TotalPrice))
+                                VNĐ
+                            </span>
+                        </div>
+                    </div>
+                    <div class="summary-item total-price-booked">
+                        <span>Tổng cộng:</span>
+                        <span>@String.Format("{0:N0}", Model.TourBooked.TotalPrice) VNĐ</span>
+                    </div>
+                    <div class="summary-item">
+                        <span>Trạng thái thanh toán:</span>
+                        <span>@(Model.TourBooked.IsPaid ? "Đã thanh toán" : "Chưa thanh toán")</span>
+                    </div>
+                </div>
+
+                <input type="hidden" name="bookingId" value="@Model.BookingId">
+
+                @if (Model.TourBooked.BookingStatus == "f")
+                {
+                    <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@Model.TourBooked.TourId" class="booking-btn" style="display: inline-block; text-align: center;">
+                       Đánh giá
+                    </a>
+                }
+                else
+                {
+                    @if (!Model.TourBooked.IsPaid)
+                    {
+                        <button type="button" class="booking-btn" onclick="location.href='@Url.Action("Payment", "Customer", new { bookingId = Model.BookingId })'">Thanh toán</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="booking-btn" disabled>Đã thanh toán</button>
+                    }
+                    <button type="submit" class="booking-btn btn-cancel-booking @(Model.HideCancelButton ? "d-none" : "")">Hủy Tour</button>
+                }
+
+            </div>
+        </div>
+    </form>
+</section>
