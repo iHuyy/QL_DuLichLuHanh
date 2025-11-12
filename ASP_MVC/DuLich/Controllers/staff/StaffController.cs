@@ -368,6 +368,29 @@ namespace DuLich.Controllers.staff
             return View(customers);
         }
 
+        [HttpPost]
+        public async Task<IActionResult> RemoteLogout(int userId, string userType)
+        {
+            // Only staff/admin should call this. This action marks active sessions for the user as inactive.
+            try
+            {
+                var sessions = _context.UserSessions.Where(s => s.UserId == userId && s.UserType == userType);
+                if (sessions.Any())
+                {
+                    _context.UserSessions.RemoveRange(sessions);
+                }
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Đã đăng xuất các phiên của người dùng.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to remote logout user {UserId}", userId);
+                TempData["Error"] = "Không thể đăng xuất người dùng lúc này.";
+            }
+
+            return RedirectToAction(nameof(Customers));
+        }
+
         public IActionResult Reports() => View();
 
         public async Task<IActionResult> Profile()

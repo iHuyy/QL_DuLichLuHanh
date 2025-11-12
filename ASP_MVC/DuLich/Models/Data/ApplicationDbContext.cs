@@ -22,6 +22,7 @@ namespace DuLich.Models.Data
         public DbSet<NhatKyHeThong> NhatKyHeThongs { get; set; } = null!;
         public DbSet<ChiNhanh> ChiNhanhs { get; set; } = null!;
         public DbSet<QR_Login> QR_Logins { get; set; } = null!;
+    public DbSet<UserSession> UserSessions { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -38,6 +39,21 @@ namespace DuLich.Models.Data
             modelBuilder.Entity<HoaDon>(entity =>
             {
                 entity.Property(e => e.SoTien).HasPrecision(12, 2);
+            });
+
+            modelBuilder.Entity<UserSession>(eb =>
+            {
+                eb.ToTable("USER_SESSIONS", schema: "TADMIN");
+                eb.HasKey(u => u.SessionId);
+                eb.Property(u => u.SessionId).HasColumnName("SESSION_ID");
+                eb.Property(u => u.UserId).HasColumnName("USER_ID");
+                eb.Property(u => u.UserType).HasColumnName("USER_TYPE");
+                eb.Property(u => u.DeviceType).HasColumnName("DEVICE_TYPE");
+                eb.Property(u => u.LoginTime).HasColumnName("LOGIN_TIME");
+                eb.Property(u => u.LastActivity).HasColumnName("LAST_ACTIVITY");
+                eb.Property(u => u.IpAddress).HasColumnName("IP_ADDRESS");
+                eb.Property(u => u.DeviceInfo).HasColumnName("DEVICE_INFO");
+                eb.Property(u => u.IsActive).HasColumnName("IS_ACTIVE");
             });
 
             modelBuilder.Entity<DatTour>(entity =>

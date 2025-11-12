@@ -1,5 +1,6 @@
 using DuLich.Models.Data;
 using DuLich.Services;
+using DuLich.Middlewares;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,9 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     {
         options.LoginPath = "/Customer/Login";
         options.AccessDeniedPath = "/Home/AccessDenied";
+        // Make cookie policy developer-friendly: when running on HTTP (local dev), avoid SameSite=None without Secure
+        options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
     });
 
 // HttpContext accessor needed by DB connection interceptor
@@ -54,6 +58,8 @@ app.UseHttpsRedirection();
 app.UseRouting();
 
 app.UseAuthentication();
+// Validate session right after authentication and before authorization
+app.UseMiddleware<SessionValidationMiddleware>();
 app.UseAuthorization();
 
 app.MapStaticAssets();

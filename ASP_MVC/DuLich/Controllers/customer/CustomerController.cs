@@ -15,11 +15,13 @@ namespace DuLich.Controllers
     {
         private readonly OracleAuthService _authService;
         private readonly DigitalSignatureService _digitalSignatureService;
+    private readonly ApplicationDbContext _dbContext;
 
         public CustomerController(OracleAuthService authService, ApplicationDbContext context, DigitalSignatureService digitalSignatureService) : base(context)
         {
             _authService = authService;
             _digitalSignatureService = digitalSignatureService;
+            _dbContext = context;
         }
 
         [HttpGet]
@@ -39,6 +41,7 @@ namespace DuLich.Controllers
                 return View(model);
 
             var (success, role) = await _authService.ValidateLoginAsync(model.Username, model.Password);
+            Console.WriteLine($"ValidateLoginAsync returned success={success}, role={role} for user={model.Username}");
 
             if (success && role == "ROLE_CUSTOMER")
             {
@@ -55,6 +58,57 @@ namespace DuLich.Controllers
                     CookieAuthenticationDefaults.AuthenticationScheme,
                     new ClaimsPrincipal(claimsIdentity),
                     authProperties);
+                Console.WriteLine("SignInAsync completed for user: " + model.Username);
+
+                // Create a persistent session record in DB for centralized session management
+                try
+                {
+                    var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == model.Username.ToUpper());
+                    var sessionId = GenerateSessionId();
+
+                    if (customer != null)
+                    {
+                        var userSession = new UserSession
+                        {
+                            SessionId = sessionId,
+                            UserId = customer.MaKhachHang,
+                            UserType = "KhachHang",
+                            DeviceType = "WEB",
+                            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                            DeviceInfo = Request.Headers["User-Agent"].ToString(),
+                            IsActive = "Y",
+                            LoginTime = DateTime.UtcNow,
+                            LastActivity = DateTime.UtcNow
+                        };
+
+                               // Remove any previous sessions for this user (global) to enforce single active session and avoid table growth
+                               var prev = _dbContext.UserSessions.Where(s => s.UserId == customer.MaKhachHang && s.UserType == "KhachHang").ToList();
+                               if (prev.Any())
+                               {
+                                   _dbContext.UserSessions.RemoveRange(prev);
+                               }
+
+                        _dbContext.UserSessions.Add(userSession);
+                        await _dbContext.SaveChangesAsync();
+
+                        // store session id in cookie for later validation if needed
+                        var cookieOptions = new Microsoft.AspNetCore.Http.CookieOptions
+                        {
+                            HttpOnly = true,
+                            Secure = Request.IsHttps,
+                            // Browsers require SameSite=None to be paired with Secure; to avoid the cookie being dropped on HTTP during local development,
+                            // use Lax when not using HTTPS and None when using HTTPS.
+                            SameSite = Request.IsHttps ? Microsoft.AspNetCore.Http.SameSiteMode.None : Microsoft.AspNetCore.Http.SameSiteMode.Lax
+                        };
+                        Response.Cookies.Append("USER_SESSION_ID", sessionId, cookieOptions);
+                        Console.WriteLine($"Set USER_SESSION_ID cookie={sessionId} Secure={cookieOptions.Secure} SameSite={cookieOptions.SameSite}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // log but don't fail login if session creation fails
+                    Console.WriteLine("Failed to create user session: " + ex.Message);
+                }
 
                 return RedirectToAction("Index", "Customer");
             }
@@ -166,8 +220,35 @@ namespace DuLich.Controllers
         [HttpPost]
         public async Task<IActionResult> Logout()
         {
+            // Invalidate session in DB if present
+            try
+            {
+                var sessionId = Request.Cookies["USER_SESSION_ID"];
+                if (!string.IsNullOrEmpty(sessionId))
+                {
+                    var sess = await _dbContext.UserSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                    if (sess != null)
+                    {
+                        _dbContext.UserSessions.Remove(sess);
+                        await _dbContext.SaveChangesAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Failed to deactivate session on logout: " + ex.Message);
+            }
+
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            // remove cookie
+            Response.Cookies.Delete("USER_SESSION_ID");
             return RedirectToAction("Index", "Home");
+        }
+
+        private static string GenerateSessionId()
+        {
+            // Use GUID without dashes for compactness
+            return Guid.NewGuid().ToString("N");
         }
 
         [HttpGet]
@@ -647,6 +728,28 @@ namespace DuLich.Controllers
             }
 
             return RedirectToAction("TourBooked", new { bookingId = bookingId });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> CheckSession()
+        {
+            try
+            {
+                var sessionId = Request.Cookies["USER_SESSION_ID"];
+                if (string.IsNullOrEmpty(sessionId))
+                {
+                    return Json(new { valid = false });
+                }
+
+                var sess = await _dbContext.UserSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                var valid = sess != null && sess.IsActive == "Y";
+
+                return Json(new { valid });
+            }
+            catch
+            {
+                return Json(new { valid = false });
+            }
         }
     }
 }

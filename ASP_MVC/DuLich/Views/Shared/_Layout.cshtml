@@ -331,6 +331,29 @@
             <script src="~/customer/assets/js/custom-js.js"></script>
             <script src="~/customer/assets/js/jquery.datetimepicker.full.min.js"></script>
 
+            <script>
+                // Poll session validity every 10 seconds. If invalid, force reload to login.
+                (function pollSession(){
+                        try {
+                            // Only poll when user is authenticated
+                            var isAuth = @(User?.Identity?.IsAuthenticated == true ? "true" : "false");
+                            // rendered as JS boolean (true/false) by Razor - check truthiness
+                            if (isAuth) {
+                                fetch('/Customer/CheckSession')
+                                    .then(r => r.json())
+                                    .then(j => {
+                                        if (!j.valid) {
+                                            // session invalidated remotely -> sign out
+                                            window.location.href = '/Customer/Login';
+                                        }
+                                    }).catch(()=>{/* ignore */});
+                            }
+                        } catch(e) { }
+                        // poll every 5s
+                        setTimeout(pollSession, 5000);
+                })();
+            </script>
+
         </footer>
         @await RenderSectionAsync("Scripts", required: false)
 
