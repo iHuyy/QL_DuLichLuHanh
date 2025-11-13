@@ -1,9 +1,8 @@
-// File: qr_login_scanner_page.dart (CHỈ DÙNG mobile_scanner & image_picker)
-
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart'; 
-import 'package:image_picker/image_picker.dart'; // 🔑 Cần thiết để chọn ảnh
-// Bạn có thể cần import 'dart:io'; nếu muốn làm việc với File, nhưng image.path là đủ.
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 const Color primaryBlue = Color(0xFF007AFF);
 
@@ -18,69 +17,103 @@ class _QRLoginScannerPageState extends State<QRLoginScannerPage> {
   MobileScannerController cameraController = MobileScannerController();
   final ImagePicker _picker = ImagePicker(); 
 
-  // =========================================================
-  // LOGIC QUÉT TRỰC TIẾP
-  // =========================================================
-  void _onDetect(BarcodeCapture capture) {
+  final String apiUrl = "http://localhost:5127/QrLogin/AuthenticateQrSession";
+
+  final int currentUserId = 123; // ⚠️ TODO: Lấy từ session hoặc SharedPrefs thực tế
+
+  void _onDetect(BarcodeCapture capture) async {
     final List<Barcode> barcodes = capture.barcodes;
     
     if (barcodes.isNotEmpty) {
-      final String? rawValue = barcodes.first.rawValue;
-      if (rawValue != null) {
+      final String? sessionKey = barcodes.first.rawValue;
+      if (sessionKey != null) {
         cameraController.stop(); 
-        Navigator.pop(context, rawValue);
+        await _authenticateWithServer(sessionKey);
       }
     }
   }
 
-  // =========================================================
-  // 🔑 LOGIC ĐỌC QR TỪ THƯ VIỆN ẢNH (Dùng mobile_scanner.analyzeImage)
-  // =========================================================
   Future<void> _scanImageFromGallery() async {
-  try {
-    cameraController.stop(); 
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    try {
+      cameraController.stop(); 
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
 
-    if (image == null) {
-      cameraController.start();
-      return;
-    }
-    
-    // 🔑 DÒNG SỬA LỖI: Ép kiểu kết quả trả về thành Barcode? một cách an toàn
-    final Barcode? result = await cameraController.analyzeImage(image.path) as Barcode?;
-
-    // Kiểm tra an toàn Barcode? và thuộc tính rawValue
-    if (result != null && result.rawValue != null) {
-      final String qrData = result.rawValue!;
-      
-      if (mounted) {
-          Navigator.pop(context, qrData);
+      if (image == null) {
+        cameraController.start();
+        return;
       }
 
-    } else {
-      // Bao gồm trường hợp kết quả là null hoặc không phải Barcode
+      final Barcode? result =
+          await cameraController.analyzeImage(image.path) as Barcode?;
+
+      if (result != null && result.rawValue != null) {
+        final String sessionKey = result.rawValue!;
+        await _authenticateWithServer(sessionKey);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Không tìm thấy mã QR hợp lệ trong hình ảnh.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        cameraController.start();
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Không tìm thấy mã QR hợp lệ trong hình ảnh. Vui lòng thử lại.'),
+          SnackBar(
+            content: Text('Lỗi quét ảnh: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
       }
+      cameraController.start();
     }
-    
-    cameraController.start();
+  }
 
-  } catch (e) {
+  // =========================================================
+  // 🔐 Gửi yêu cầu xác thực QR tới Web API
+  // =========================================================
+  Future<void> _authenticateWithServer(String sessionKey) async {
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'sessionKey': sessionKey,
+          'userId': currentUserId,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Xác thực thành công! Bạn có thể quay lại trình duyệt.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, sessionKey);
+        }
+      } else if (response.statusCode == 404) {
+        _showError('Mã QR không hợp lệ hoặc đã hết hạn.');
+      } else {
+        _showError('Lỗi server: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showError('Không thể kết nối máy chủ: $e');
+    } finally {
+      cameraController.start();
+    }
+  }
+
+  void _showError(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Lỗi quét ảnh: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
-    }
-    cameraController.start();
     }
   }
 
@@ -141,7 +174,7 @@ class _QRLoginScannerPageState extends State<QRLoginScannerPage> {
             ),
           ),
           
-          // 2. Nút Đọc QR từ Thư viện Ảnh (Vị trí ở dưới)
+          // 2. Nút Đọc QR từ Thư viện Ảnh
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(

@@ -1,9 +1,14 @@
 // File: HomePage.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:app_dllh/services/auth_service.dart';
-import 'login_page.dart'; 
-import 'tour_scanner_page.dart'; // Import màn hình QR Scanner Tour
-import 'qr_login_scanner_page.dart'; // 🔑 Import màn hình QR Scanner Đăng nhập Web
+import 'package:app_dllh/models/tour.dart'; // <-- sử dụng model mới
+import 'tour_detail_page.dart'; // <-- thêm import để điều hướng sang trang chi tiết
+import 'profile_page.dart';
+import 'login_page.dart';
+import 'tour_scanner_page.dart';
+import 'qr_login_scanner_page.dart';
 
 // Màu xanh chính (Primary Blue) và Màu đen đậm (Dark Black)
 const Color primaryBlue = Color(0xFF007AFF);
@@ -29,35 +34,45 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final AuthService _authService = AuthService();
-  bool _loggingOut = false; // trạng thái khi đang logout
-  
-  // State quản lý tab đang được chọn trong Bottom Navigation Bar
-  int _selectedIndex = 0; 
-  
-  // Dữ liệu mẫu (mock data) cho giao diện
-  final List<Map<String, dynamic>> _exclusivePackages = [
-    {
-      'title': 'Golden Temple Tour',
-      'subtitle': 'Khám phá Ấn Độ',
-      'price': '450\$',
-      'image': 'https://placehold.co/150x180/007AFF/ffffff?text=Golden+Temple',
-      'rating': 4.5
-    },
-    {
-      'title': 'Machu Picchu Trek',
-      'subtitle': 'Phiêu lưu ở Peru',
-      'price': '899\$',
-      'image': 'https://placehold.co/150x180/FF6347/ffffff?text=Machu+Picchu',
-      'rating': 4.8
-    },
-    {
-      'title': 'Great Wall Hike',
-      'subtitle': 'Chinh phục Trung Quốc',
-      'price': '350\$',
-      'image': 'https://placehold.co/150x180/3CB371/ffffff?text=Great+Wall',
-      'rating': 4.2
-    },
-  ];
+  bool _loggingOut = false;
+  int _selectedIndex = 0;
+
+  late Future<List<Tour>> _toursFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _toursFuture = _fetchTours();
+  }
+
+  Future<List<Tour>> _fetchTours() async {
+    final uri = Uri.parse('http://10.0.2.2/KLTN/get_tours.php');
+    final response = await http.get(uri);
+
+    // Nếu server trả HTML warning/error, báo rõ để debug
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
+    }
+    final body = response.body.trim();
+    if (body.startsWith('<')) {
+      // server trả HTML (warning/notice) trước JSON
+      throw Exception('Server returned HTML instead of JSON: ${body.substring(0, body.length.clamp(0, 200))}');
+    }
+
+    try {
+      final decoded = json.decode(body);
+      if (decoded is List) {
+        return decoded.map<Tour>((e) {
+          if (e is Map<String, dynamic>) return Tour.fromJson(e);
+          return Tour.fromJson(Map<String, dynamic>.from(e));
+        }).toList();
+      } else {
+        throw Exception('Invalid JSON structure for tours');
+      }
+    } catch (e) {
+      throw Exception('Failed to parse tours JSON: $e\nBody: ${body.length > 500 ? body.substring(0,500) : body}');
+    }
+  }
 
   final List<Map<String, dynamic>> _exploreCategories = [
     {'icon': Icons.airplane_ticket, 'title': 'Flights'},
@@ -137,7 +152,7 @@ class _HomePageState extends State<HomePage> {
       // Giữ cho Home (index 0) vẫn sáng trên thanh navigation sau khi quay lại
       // Không cần gọi setState nếu không muốn thay đổi trạng thái index của thanh nav
     } else {
-      // Xử lý chuyển tab thông thường (Home, Favorite, Inbox, Setting)
+      // Xử lý chuyển tab thông thường (Home, Favorite, Inbox, Profile)
       setState(() {
         _selectedIndex = index;
       });
@@ -150,9 +165,11 @@ class _HomePageState extends State<HomePage> {
   // =========================================================
 
   Widget _buildHeader(BuildContext context) {
-    // Lấy tên hiển thị: ưu tiên 'fullname' nếu có, không thì dùng userID
-    final displayedName = widget.userData?['fullname']?.toString().isNotEmpty == true
-        ? widget.userData!['fullname'].toString()
+    final fullnameFromData = widget.userData != null
+        ? (widget.userData!['fullname'] ?? widget.userData!['username'] ?? '')
+        : '';
+    final displayedName = (fullnameFromData != null && fullnameFromData.toString().trim().isNotEmpty)
+        ? fullnameFromData.toString()
         : widget.userID;
 
     return Container(
@@ -290,70 +307,143 @@ class _HomePageState extends State<HomePage> {
   }
 
   // Danh sách các gói độc quyền
-  Widget _buildPackageList(BuildContext context) {
+  Widget _buildPackageList(BuildContext context, List<Tour> tours) {
     return Container(
       height: 200, // Chiều cao cố định cho ListView ngang
       padding: const EdgeInsets.only(left: 24.0),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: _exclusivePackages.length,
+        itemCount: tours.length,
         itemBuilder: (context, index) {
-          final item = _exclusivePackages[index];
-          return Container(
-            width: 150,
-            margin: const EdgeInsets.only(right: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 5,
-                  offset: const Offset(0, 3),
+          final tour = tours[index];
+          return Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => TourDetailPage(tour: tour, userID: widget.userID)),
+                );
+              },
+              child: Container(
+                width: 150,
+                margin: const EdgeInsets.only(top: 8, bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.08), blurRadius: 6)],
                 ),
-              ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                      child: Image.network(
+                        'https://placehold.co/150x100/007AFF/ffffff?text=Tour',
+                        height: 100,
+                        width: 150,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tour.tieuDe,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: darkTextColor),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            tour.noiDen ?? 'N/A',
+                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(Icons.star, color: Colors.amber, size: 14),
+                              const SizedBox(width: 6),
+                              const Text('4.5', style: TextStyle(fontSize: 12)),
+                              const Spacer(),
+                              Text(
+                                tour.giaNguoiLon ?? 'N/A',
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryBlue),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            child: Column(
+          );
+        },
+      ),
+    );
+  }
+
+  // Danh sách Recommended Packages (dạng List dọc)
+  Widget _buildRecommendedPackages(BuildContext context, List<Tour> tours) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Column(
+        children: tours.map((tour) => Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => TourDetailPage(tour: tour,userID: widget.userID,)),
+              );
+            },
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Hình ảnh giả lập
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  borderRadius: BorderRadius.circular(12),
                   child: Image.network(
-                    item['image'] as String,
-                    height: 100,
-                    width: 150,
+                    'https://placehold.co/150x180/3CB371/ffffff?text=Tour',
+                    height: 90,
+                    width: 90,
                     fit: BoxFit.cover,
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
+                const SizedBox(width: 16),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item['title'] as String,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: darkTextColor),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item['subtitle'] as String,
-                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        tour.tieuDe,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: darkTextColor,
+                        ),
                       ),
                       const SizedBox(height: 4),
+                      Text(
+                        tour.noiDen ?? 'N/A',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           const Icon(Icons.star, color: Colors.amber, size: 14),
                           const SizedBox(width: 4),
-                          Text(
-                            item['rating'].toString(),
-                            style: const TextStyle(fontSize: 12, color: Colors.black87),
-                          ),
+                          const Text('4.2'), // Placeholder rating
                           const Spacer(),
+                          // Fix: hiển thị giá an toàn
                           Text(
-                            item['price'] as String,
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryBlue),
+                            tour.giaNguoiLon ?? 'N/A',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryBlue),
                           ),
                         ],
                       ),
@@ -362,134 +452,6 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
-          );
-        },
-      ),
-    );
-  }
-
-  // Danh mục khám phá (Explore Categories)
-  Widget _buildExploreCategories() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: GridView.builder(
-        shrinkWrap: true, // Quan trọng: GridView trong SingleChildScrollView
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4, // 4 cột
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.8, // Tỉ lệ chiều rộng/chiều cao
-        ),
-        itemCount: _exploreCategories.length,
-        itemBuilder: (context, index) {
-          final item = _exploreCategories[index];
-          return Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: lightGreyBackground,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(item['icon'] as IconData, color: primaryBlue, size: 30),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                item['title'] as String,
-                style: const TextStyle(fontSize: 14, color: darkTextColor),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  // Tiêu đề Recommended Packages
-  Widget _buildRecommendedTabs() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Trending Now',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryBlue),
-          ),
-          Text(
-            'New Deals',
-            style: TextStyle(fontSize: 16, color: Colors.black54),
-          ),
-          Text(
-            'Luxury',
-            style: TextStyle(fontSize: 16, color: Colors.black54),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Danh sách Recommended Packages (dạng List dọc)
-  Widget _buildRecommendedPackages(BuildContext context) {
-    // Dùng lại dữ liệu Exclusive Packages làm Recommended
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Column(
-        children: _exclusivePackages.map((item) => Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Hình ảnh giả lập
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  item['image'] as String,
-                  height: 90,
-                  width: 90,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item['title'] as String,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: darkTextColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item['subtitle'] as String,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.black54,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.star, color: Colors.amber, size: 14),
-                        const SizedBox(width: 4),
-                        Text(item['rating'].toString()),
-                        const Spacer(),
-                        Text(
-                          item['price'] as String,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryBlue),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
         )).toList(),
       ),
@@ -525,10 +487,78 @@ class _HomePageState extends State<HomePage> {
           label: 'Inbox',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.settings),
-          label: 'Setting',
+          icon: Icon(Icons.person_outline),
+          label: 'Profile',
         ),
       ],
+    );
+  }
+
+  // Xây dựng tab nội dung Home
+  Widget _buildHomeTab(BuildContext context) {
+    return FutureBuilder<List<Tour>>(
+      future: _toursFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        if (snapshot.hasError) {
+          // Hiển thị lỗi rõ ràng trên giao diện để bạn debug nhanh
+          return Center(child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text('Error loading tours: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+          ));
+        }
+        final tours = snapshot.data ?? <Tour>[];
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(context),
+              const SizedBox(height: 24),
+              _buildSectionTitle('Exclusive Package'),
+              _buildCategoryChips(),
+              _buildPackageList(context, tours),
+              const SizedBox(height: 32),
+              _buildSectionTitle('Explore Category'),
+              const SizedBox(height: 32),
+              _buildSectionTitle('Recommended Package'),
+              _buildRecommendedPackages(context, tours),
+              const SizedBox(height: 40),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Placeholder cho tab Favorite
+  Widget _buildFavoriteTab() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.favorite_border, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          const Text('Favorite Tours', style: TextStyle(fontSize: 18)),
+          const SizedBox(height: 8),
+          const Text('No favorites yet', style: TextStyle(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+
+  // Placeholder cho tab Inbox
+  Widget _buildInboxTab() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.inbox, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          const Text('Messages', style: TextStyle(fontSize: 18)),
+          const SizedBox(height: 8),
+          const Text('No messages yet', style: TextStyle(color: Colors.grey)),
+        ],
+      ),
     );
   }
 
@@ -536,41 +566,26 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      // SafeArea đảm bảo nội dung không bị che bởi thanh trạng thái
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Header Section (Bao gồm thông tin user, nút QR Web và nút logout)
-              _buildHeader(context),
-              
-              const SizedBox(height: 24),
-
-              // 2. Exclusive Package Section
-              _buildSectionTitle('Exclusive Package'),
-              _buildCategoryChips(),
-              _buildPackageList(context),
-
-              const SizedBox(height: 32),
-
-              // 3. Explore Category Section
-              _buildSectionTitle('Explore Category'),
-              _buildExploreCategories(),
-
-              const SizedBox(height: 32),
-
-              // 4. Recommended Package Section
-              _buildSectionTitle('Recommended Package'),
-              _buildRecommendedTabs(),
-              _buildRecommendedPackages(context),
-
-              const SizedBox(height: 40),
-            ],
-          ),
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: [
+            // Tab 0: Home
+            _buildHomeTab(context),
+            // Tab 1: Favorite
+            _buildFavoriteTab(),
+            // Tab 2: QR Code (không hiển thị tại đây vì nó push Navigator)
+            Container(),
+            // Tab 3: Inbox
+            _buildInboxTab(),
+            // Tab 4: Profile
+            ProfileScreen(
+              userID: widget.userID,
+              userName: widget.userData?['username'] ?? widget.userID,
+            ),
+          ],
         ),
       ),
-      // 5. Bottom Navigation Bar
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }

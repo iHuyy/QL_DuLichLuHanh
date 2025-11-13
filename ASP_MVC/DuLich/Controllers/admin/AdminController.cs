@@ -98,6 +98,50 @@ namespace DuLich.Controllers
         [Route("Admin/Logout")]
         public async Task<IActionResult> Logout()
         {
+            try
+            {
+                var username = User?.Identity?.Name;
+                if (!string.IsNullOrEmpty(username))
+                {
+                    int userId = -1;
+                    var kh = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME != null && (k.ORACLE_USERNAME.ToUpper() == username.ToUpper() || k.ORACLE_USERNAME == username));
+                    if (kh != null) userId = kh.MaKhachHang;
+                    else
+                    {
+                        var nv = await _context.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && (n.ORACLE_USERNAME.ToUpper() == username.ToUpper() || n.ORACLE_USERNAME == username));
+                        if (nv != null) userId = nv.MaNhanVien;
+                    }
+
+                    if (userId != -1)
+                    {
+                        var sessions = _context.UserSessions.Where(s => s.UserId == userId).ToList();
+                        if (sessions.Any())
+                        {
+                            _context.UserSessions.RemoveRange(sessions);
+                            await _context.SaveChangesAsync();
+                        }
+                    }
+                    else
+                    {
+                        // fallback cookie removal
+                        var sessionId = Request.Cookies["USER_SESSION_ID"];
+                        if (!string.IsNullOrEmpty(sessionId))
+                        {
+                            var sess = await _context.UserSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                            if (sess != null)
+                            {
+                                _context.UserSessions.Remove(sess);
+                                await _context.SaveChangesAsync();
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // ignore cleanup errors during logout
+            }
+
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return RedirectToAction("Login");
         }

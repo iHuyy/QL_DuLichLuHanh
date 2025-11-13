@@ -23,7 +23,10 @@ class _LoginPageState extends State<LoginPage> {
   // State quản lý trạng thái tải và thông báo lỗi
   bool _isLoading = false;
   String _message = "";
-  bool _isPasswordVisible = false; // Thêm state cho việc ẩn/hiện mật khẩu
+  bool _isPasswordVisible = false; // Biến để quản lý hiển thị mật khẩu
+
+  // Mặc định role là DEFAULT
+  final String _selectedRole = 'DEFAULT';
 
   // =========================================================
   // LOGIC CHỨC NĂNG
@@ -35,53 +38,48 @@ class _LoginPageState extends State<LoginPage> {
       _message = "";
     });
 
-    final username = _usernameController.text.trim();
+    var username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
+
+    // Uppercase username để tương thích với database
+    username = username.toUpperCase();
 
     if (username.isEmpty || password.isEmpty) {
       setState(() {
-        _isLoading = false;
         _message = "Vui lòng nhập đầy đủ thông tin";
+        _isLoading = false;
       });
-      _showSnackBar("Vui lòng nhập đầy đủ thông tin", Colors.orange);
       return;
     }
 
     try {
-      // GỌI API mà không truyền role. Server (login.php) sẽ tự quyết định.
-      final Map<String, dynamic> result = await _authService.login(username, password);
-
-      setState(() {
-        _isLoading = false;
-      });
+      final result = await _authService.login(username, password);
+      
+      setState(() => _isLoading = false);
 
       if (result['success'] == true) {
-        final serverRole = result['role']?.toString() ?? 'DEFAULT';
-        final userID = result['userID'].toString();
-
-        // Điều hướng đến HomePage sau khi đăng nhập thành công
+        // Đăng nhập thành công, điều hướng tới HomePage
+        // Sử dụng userID numeric trả về từ server nếu có
+        final returnedId = result['userID']?.toString() ?? username;
+        final returnedRole = result['role']?.toString() ?? 'DEFAULT';
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => HomePage(
-              userID: userID,
-              role: serverRole,
+            builder: (_) => HomePage(
+              userID: returnedId,
+              role: returnedRole,
             ),
           ),
         );
       } else {
         setState(() {
-          _usernameController.clear();
-          _passwordController.clear();
-          _message = result['message'] ?? 'Đăng nhập thất bại.';
+          _message = result['message'] ?? 'Đăng nhập thất bại';
         });
-        _showSnackBar(_message, Colors.red);
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
         _message = "Lỗi kết nối hoặc xử lý: $e";
       });
-      _showSnackBar(_message, Colors.red);
     }
   }
 
@@ -107,45 +105,12 @@ class _LoginPageState extends State<LoginPage> {
   // Hàm mô phỏng điều hướng đến màn hình Đăng nhập bằng QR
   void _navigateToQRLogin() {
     // Trong môi trường thực tế, bạn sẽ Navigator.push đến một trang Scanner QR
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.7,
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Đăng nhập bằng QR Code',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryBlue),
-              ),
-              const SizedBox(height: 30),
-              // 
-              const Icon(Icons.qr_code_scanner, size: 150, color: Colors.black54),
-              const SizedBox(height: 30),
-              const Text(
-                'Vui lòng quét Mã QR từ thiết bị đã đăng nhập của bạn.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.black87),
-              ),
-              const SizedBox(height: 50),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryBlue,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                child: const Text('Đóng', style: TextStyle(fontSize: 18)),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+     // Navigate to QRLoginScannerPage
+     Navigator.of(context).push(
+       MaterialPageRoute(
+         builder: (context) => const QRLoginScannerPage(),
+       ),
+     );
   }
 
   // =========================================================
@@ -168,7 +133,7 @@ class _LoginPageState extends State<LoginPage> {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        obscureText: isPassword && !_isPasswordVisible, // Ẩn văn bản nếu là mật khẩu và chưa được toggle
+         obscureText: isPassword ? !_isPasswordVisible : false, // Ẩn văn bản nếu là mật khẩu và chưa được toggle
         decoration: InputDecoration(
           hintText: hintText,
           border: InputBorder.none, 
@@ -393,5 +358,12 @@ class _LoginPageState extends State<LoginPage> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 }

@@ -415,6 +415,42 @@ namespace DuLich.Controllers.staff
         [HttpPost]
         public async Task<IActionResult> Logout()
         {
+            try
+            {
+                var username = User?.Identity?.Name;
+                if (!string.IsNullOrEmpty(username))
+                {
+                    var staff = await _context.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+                    if (staff != null)
+                    {
+                        var sessions = _context.UserSessions.Where(s => s.UserId == staff.MaNhanVien).ToList();
+                        if (sessions.Any())
+                        {
+                            _context.UserSessions.RemoveRange(sessions);
+                            await _context.SaveChangesAsync();
+                        }
+                    }
+                    else
+                    {
+                        // fallback: remove by cookie
+                        var sessionId = Request.Cookies["USER_SESSION_ID"];
+                        if (!string.IsNullOrEmpty(sessionId))
+                        {
+                            var sess = await _context.UserSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                            if (sess != null)
+                            {
+                                _context.UserSessions.Remove(sess);
+                                await _context.SaveChangesAsync();
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // ignore DB cleanup errors during logout
+            }
+
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return RedirectToAction("Login", "Admin");
         }

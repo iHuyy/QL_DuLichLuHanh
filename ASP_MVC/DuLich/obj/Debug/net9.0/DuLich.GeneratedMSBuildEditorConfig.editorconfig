@@ -120,6 +120,10 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcY3VzdG9tZXJcUmVnaXN0ZXIuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
+[G:/Study/KLTN/AppQLDVDLLH/Web/QL_DuLichLuHanh/ASP_MVC/DuLich/Views/customer/Sessions.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcY3VzdG9tZXJcU2Vzc2lvbnMuY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
 [G:/Study/KLTN/AppQLDVDLLH/Web/QL_DuLichLuHanh/ASP_MVC/DuLich/Views/customer/TourBooked.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcY3VzdG9tZXJcVG91ckJvb2tlZC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 

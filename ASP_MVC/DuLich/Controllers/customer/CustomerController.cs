@@ -72,7 +72,7 @@ namespace DuLich.Controllers
                         {
                             SessionId = sessionId,
                             UserId = customer.MaKhachHang,
-                            UserType = "KhachHang",
+                            UserType = "CUSTOMER",
                             DeviceType = "WEB",
                             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
                             DeviceInfo = Request.Headers["User-Agent"].ToString(),
@@ -81,12 +81,15 @@ namespace DuLich.Controllers
                             LastActivity = DateTime.UtcNow
                         };
 
-                               // Remove any previous sessions for this user (global) to enforce single active session and avoid table growth
-                               var prev = _dbContext.UserSessions.Where(s => s.UserId == customer.MaKhachHang && s.UserType == "KhachHang").ToList();
-                               if (prev.Any())
-                               {
-                                   _dbContext.UserSessions.RemoveRange(prev);
-                               }
+                            // Remove any previous sessions for this user that share the same device type
+                            // This keeps sessions on other device types (e.g. MOBILE) intact
+                            var prev = _dbContext.UserSessions
+                                .Where(s => s.UserId == customer.MaKhachHang && s.DeviceType == userSession.DeviceType)
+                                .ToList();
+                            if (prev.Any())
+                            {
+                                _dbContext.UserSessions.RemoveRange(prev);
+                            }
 
                         _dbContext.UserSessions.Add(userSession);
                         await _dbContext.SaveChangesAsync();
@@ -223,14 +226,66 @@ namespace DuLich.Controllers
             // Invalidate session in DB if present
             try
             {
-                var sessionId = Request.Cookies["USER_SESSION_ID"];
-                if (!string.IsNullOrEmpty(sessionId))
+                // Prefer removing all session rows for the current user so that other clients
+                // (mobile/web) are freed immediately and DB session limits are not hit.
+                var username = User?.Identity?.Name;
+                if (!string.IsNullOrEmpty(username))
                 {
-                    var sess = await _dbContext.UserSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
-                    if (sess != null)
+                    int userId;
+                    var customer = await _dbContext.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME != null && k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+                    if (customer != null)
                     {
-                        _dbContext.UserSessions.Remove(sess);
-                        await _dbContext.SaveChangesAsync();
+                        userId = customer.MaKhachHang;
+                    }
+                    else
+                    {
+                        var staff = await _dbContext.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+                        if (staff != null)
+                        {
+                            userId = staff.MaNhanVien;
+                        }
+                        else
+                        {
+                            userId = -1;
+                        }
+                    }
+
+                    if (userId != -1)
+                    {
+                        var sessions = _dbContext.UserSessions.Where(s => s.UserId == userId).ToList();
+                        if (sessions.Any())
+                        {
+                            _dbContext.UserSessions.RemoveRange(sessions);
+                            await _dbContext.SaveChangesAsync();
+                        }
+                    }
+                    else
+                    {
+                        // fallback: remove by cookie if we couldn't resolve user id
+                        var sessionId = Request.Cookies["USER_SESSION_ID"];
+                        if (!string.IsNullOrEmpty(sessionId))
+                        {
+                            var sess = await _dbContext.UserSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                            if (sess != null)
+                            {
+                                _dbContext.UserSessions.Remove(sess);
+                                await _dbContext.SaveChangesAsync();
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // no authenticated principal: try cookie-based removal
+                    var sessionId = Request.Cookies["USER_SESSION_ID"];
+                    if (!string.IsNullOrEmpty(sessionId))
+                    {
+                        var sess = await _dbContext.UserSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                        if (sess != null)
+                        {
+                            _dbContext.UserSessions.Remove(sess);
+                            await _dbContext.SaveChangesAsync();
+                        }
                     }
                 }
             }
@@ -728,6 +783,14 @@ namespace DuLich.Controllers
             }
 
             return RedirectToAction("TourBooked", new { bookingId = bookingId });
+        }
+
+        [HttpGet]
+        [Authorize]
+        public IActionResult Sessions()
+        {
+            // Shows the session management UI where users can see active sessions and perform remote logout
+            return View();
         }
 
         [HttpGet]

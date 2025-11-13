@@ -197,7 +197,7 @@ CREATE PROFILE cus_profile LIMIT
     FAILED_LOGIN_ATTEMPTS 3
     PASSWORD_LOCK_TIME 0.0003472        -- Khóa 30s
     PASSWORD_LIFE_TIME 180              -- Khách hàng đổi mật khẩu 6 tháng 1 lần
-    SESSIONS_PER_USER 1                 -- Chỉ 1 phiên đăng nhập duy nhất
+    SESSIONS_PER_USER 3                 -- Chỉ 1 phiên đăng nhập duy nhất
     IDLE_TIME 15                        -- Hết hoạt động 15 phút -> tự ngắt
     CONNECT_TIME 120;                    -- Giới hạn 2 tiếng mỗi lần đăng nhập
 
