@@ -113,18 +113,26 @@
                        Đánh giá
                     </a>
                 }
-                else
-                {
-                    @if (!Model.TourBooked.IsPaid)
-                    {
-                        <button type="button" class="booking-btn" onclick="location.href='@Url.Action("Payment", "Customer", new { bookingId = Model.BookingId })'">Thanh toán</button>
-                    }
                     else
                     {
-                        <button type="button" class="booking-btn" disabled>Đã thanh toán</button>
+                        @if (!Model.TourBooked.IsPaid)
+                        {
+                            <button type="button" class="booking-btn" onclick="location.href='@Url.Action("Payment", "Customer", new { bookingId = Model.BookingId })'">Thanh toán</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="booking-btn" disabled>Đã thanh toán</button>
+                        }
+
+                        @* Print / Download invoice buttons when paid and invoice exists *@
+                        @if (Model.TourBooked.IsPaid && Model.TourBooked.CheckoutId > 0)
+                        {
+                            <a class="booking-btn" target="_blank" href="@Url.Action("PrintInvoice", "Customer", new { hoaDonId = Model.TourBooked.CheckoutId })">In hóa đơn</a>
+                            <a class="booking-btn ms-2" target="_blank" href="@Url.Action("DownloadInvoicePdf", "Customer", new { hoaDonId = Model.TourBooked.CheckoutId })">Tải PDF</a>
+                        }
+
+                        <button type="submit" class="booking-btn btn-cancel-booking">Hủy Tour</button>
                     }
-                    <button type="submit" class="booking-btn btn-cancel-booking">Hủy Tour</button>
-                }
 
             </div>
         </div>

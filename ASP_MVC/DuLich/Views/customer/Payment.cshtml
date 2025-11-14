@@ -64,7 +64,14 @@
                     @if (Model.TrangThai != "Đã thanh toán")
                     {
                         <div class="text-center mt-4">
-                            <button class="btn btn-primary" onclick="window.print()">In hóa đơn</button>
+                            <form asp-action="ConfirmPayment" asp-controller="Customer" method="post" style="display:inline-block;">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="bookingId" value="@ViewBag.BookingId" />
+                                <button type="submit" class="btn btn-success">Thanh toán</button>
+                            </form>
+
+                            <a class="btn btn-primary ms-2" target="_blank" href="@Url.Action("PrintInvoice", "Customer", new { hoaDonId = Model.MaHoaDon })">In hóa đơn</a>
+                            <a class="btn btn-outline-primary ms-2" href="@Url.Action("DownloadInvoicePdf", "Customer", new { hoaDonId = Model.MaHoaDon })">Tải PDF</a>
                         </div>
                     }
                 </div>

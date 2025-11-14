@@ -71,6 +71,55 @@ namespace DuLich.Controllers
                         new ClaimsPrincipal(claimsIdentity),
                         authProperties);
 
+                    // Create a server-side UserSession and set USER_SESSION_ID cookie
+                    try
+                    {
+                        // avoid creating duplicate session if browser already has one
+                        var existingCookie = Request.Cookies["USER_SESSION_ID"];
+                        if (string.IsNullOrEmpty(existingCookie))
+                        {
+                            var sessionId = Guid.NewGuid().ToString("N");
+
+                            // remove previous WEB sessions for this user (keep mobile sessions)
+                            var prev = _context.UserSessions
+                                .Where(s => s.UserId == user.MaKhachHang && s.DeviceType == "WEB")
+                                .ToList();
+                            if (prev.Any())
+                            {
+                                _context.UserSessions.RemoveRange(prev);
+                            }
+
+                            var userSession = new UserSession
+                            {
+                                SessionId = sessionId,
+                                UserId = user.MaKhachHang,
+                                UserType = "CUSTOMER",
+                                DeviceType = "WEB",
+                                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                                DeviceInfo = Request.Headers["User-Agent"].ToString(),
+                                IsActive = "Y",
+                                LoginTime = DateTime.UtcNow,
+                                LastActivity = DateTime.UtcNow
+                            };
+
+                            _context.UserSessions.Add(userSession);
+                            await _context.SaveChangesAsync();
+
+                            var cookieOptions = new Microsoft.AspNetCore.Http.CookieOptions
+                            {
+                                HttpOnly = true,
+                                Secure = Request.IsHttps,
+                                SameSite = Request.IsHttps ? Microsoft.AspNetCore.Http.SameSiteMode.None : Microsoft.AspNetCore.Http.SameSiteMode.Lax
+                            };
+                            Response.Cookies.Append("USER_SESSION_ID", sessionId, cookieOptions);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log but don't break the authenticated flow
+                        Console.WriteLine("QR login: failed to create session: " + ex.Message);
+                    }
+
                     return Json(new { status = "Authenticated" });
                 }
             }

@@ -8,6 +8,11 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using iTextSharp.text;
+using iTextSharp.text.pdf;
 
 namespace DuLich.Controllers
 {
@@ -743,6 +748,9 @@ namespace DuLich.Controllers
                 DiaChi = customer.DiaChi
             };
 
+            // expose booking id to view so the payment form can post it
+            ViewBag.BookingId = booking.MaDatTour;
+
             return View(model);
         }
 
@@ -779,10 +787,303 @@ namespace DuLich.Controllers
                 booking.HoaDon.TrangThai = "Đã thanh toán";
                 _context.HoaDons.Update(booking.HoaDon);
                 await _context.SaveChangesAsync();
-                TempData["SuccessMessage"] = "Thanh toán thành công!";
+                // After marking paid, generate PDF invoice and save it to wwwroot/invoices
+                try
+                {
+                    var hoaDon = booking.HoaDon;
+                    // get signer name
+                    var signer = await _dbContext.NhanViens.FirstOrDefaultAsync(n => n.VaiTro != null && n.VaiTro.ToUpper() == "ADMIN");
+                    if (signer == null)
+                    {
+                        signer = await _dbContext.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == "ADMIN");
+                    }
+                    var signerName = signer?.HoTen ?? "Người quản lý";
+
+                    var pdfBytes = CreateInvoicePdf(hoaDon, booking, booking.Tour, await _context.KhachHangs.FirstOrDefaultAsync(k => k.MaKhachHang == booking.MaKhachHang), signerName);
+
+                    var invoicesDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "invoices");
+                    Directory.CreateDirectory(invoicesDir);
+                    var filePath = Path.Combine(invoicesDir, $"HoaDon_{hoaDon.MaHoaDon}.pdf");
+                    await System.IO.File.WriteAllBytesAsync(filePath, pdfBytes);
+
+                    TempData["SuccessMessage"] = "Thanh toán thành công! Hóa đơn đã được tạo.";
+                    TempData["InvoiceUrl"] = $"/invoices/HoaDon_{hoaDon.MaHoaDon}.pdf";
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Failed to generate/save invoice PDF after payment: " + ex.ToString());
+                    TempData["SuccessMessage"] = "Thanh toán thành công! Nhưng không thể tạo hóa đơn PDF.";
+                }
             }
 
             return RedirectToAction("TourBooked", new { bookingId = bookingId });
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "ROLE_CUSTOMER")]
+        public async Task<IActionResult> DownloadInvoicePdf(int hoaDonId)
+        {
+            var hoaDon = await _context.HoaDons
+                .Include(h => h.DatTour)
+                    .ThenInclude(d => d.Tour)
+                .Include(h => h.DatTour)
+                    .ThenInclude(d => d.KhachHang)
+                .FirstOrDefaultAsync(h => h.MaHoaDon == hoaDonId);
+
+            if (hoaDon == null)
+            {
+                return NotFound();
+            }
+
+            var booking = hoaDon.DatTour;
+            var tour = booking?.Tour;
+            var customer = booking?.KhachHang;
+
+            // Try to get an admin/staff signer name from NhanViens; fallback to a default
+            var signer = await _dbContext.NhanViens.FirstOrDefaultAsync(n => n.VaiTro != null && n.VaiTro.ToUpper() == "ADMIN");
+            if (signer == null)
+            {
+                signer = await _dbContext.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == "ADMIN");
+            }
+            var signerName = signer?.HoTen ?? "Người quản lý";
+
+            try
+            {
+                var pdfBytes = CreateInvoicePdf(hoaDon, booking, tour, customer, signerName);
+                var fileName = $"HoaDon_{hoaDon.MaHoaDon}.pdf";
+                // Return as proper PDF
+                return File(pdfBytes, "application/pdf", fileName);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DownloadInvoicePdf] ERROR: {ex.Message}");
+                Console.WriteLine($"[DownloadInvoicePdf] StackTrace: {ex.StackTrace}");
+                return StatusCode(500, $"Không thể tạo file: {ex.Message}");
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "ROLE_CUSTOMER")]
+        public async Task<IActionResult> PrintInvoice(int hoaDonId)
+        {
+            var hoaDon = await _context.HoaDons
+                .Include(h => h.DatTour)
+                    .ThenInclude(d => d.Tour)
+                .Include(h => h.DatTour)
+                    .ThenInclude(d => d.KhachHang)
+                .FirstOrDefaultAsync(h => h.MaHoaDon == hoaDonId);
+
+            if (hoaDon == null)
+                return NotFound();
+
+            var booking = hoaDon.DatTour;
+            var tour = booking?.Tour;
+            var customer = booking?.KhachHang;
+
+            var model = new InvoiceViewModel
+            {
+                MaHoaDon = hoaDon.MaHoaDon,
+                NgayXuat = hoaDon.NgayXuat,
+                SoTien = hoaDon.SoTien,
+                TrangThai = hoaDon.TrangThai,
+                IsSignatureValid = true,
+                TenTour = tour?.TieuDe,
+                NgayKhoiHanh = tour?.ThoiGian,
+                SoNguoiLon = booking?.SoNguoiLon,
+                SoTreEm = booking?.SoTreEm,
+                TenKhachHang = customer?.HoTen,
+                Email = customer?.Email,
+                SoDienThoai = customer?.SoDienThoai,
+                DiaChi = customer?.DiaChi
+            };
+
+            return View("PrintInvoice", model);
+        }
+
+        private byte[] CreateInvoicePdf(HoaDon hoaDon, DatTour? booking, Tour? tour, KhachHang? customer, string signerName)
+        {
+            try
+            {
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    // Create PDF document
+                    Document document = new Document(PageSize.A4, 50, 50, 50, 50);
+                    PdfWriter writer = PdfWriter.GetInstance(document, ms);
+                    document.Open();
+
+                    // Title
+                    Paragraph title = new Paragraph("HÓA ĐƠN ĐẶT TOUR", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 18));
+                    title.Alignment = Element.ALIGN_CENTER;
+                    document.Add(title);
+                    document.Add(new Paragraph(" "));
+
+                    // Invoice header info
+                    PdfPTable headerTable = new PdfPTable(2);
+                    headerTable.WidthPercentage = 100;
+                    headerTable.AddCell("Mã hóa đơn: " + hoaDon.MaHoaDon);
+                    headerTable.AddCell("Ngày xuất: " + (hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss") ?? ""));
+                    headerTable.AddCell("Trạng thái: " + hoaDon.TrangThai);
+                    headerTable.AddCell(" ");
+                    document.Add(headerTable);
+                    document.Add(new Paragraph(" "));
+
+                    // Customer info section
+                    document.Add(new Paragraph("THÔNG TIN KHÁCH HÀNG", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 12)));
+                    PdfPTable customerTable = new PdfPTable(2);
+                    customerTable.WidthPercentage = 100;
+                    customerTable.AddCell("Tên: " + (customer?.HoTen ?? ""));
+                    customerTable.AddCell("Email: " + (customer?.Email ?? ""));
+                    customerTable.AddCell("Điện thoại: " + (customer?.SoDienThoai ?? ""));
+                    customerTable.AddCell("Địa chỉ: " + (customer?.DiaChi ?? ""));
+                    document.Add(customerTable);
+                    document.Add(new Paragraph(" "));
+
+                    // Tour details
+                    document.Add(new Paragraph("CHI TIẾT TOUR", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 12)));
+                    PdfPTable tourTable = new PdfPTable(2);
+                    tourTable.WidthPercentage = 100;
+                    tourTable.AddCell("Tên tour: " + (tour?.TieuDe ?? ""));
+                    tourTable.AddCell("Ngày khởi hành: " + (tour?.ThoiGian?.ToString("dd/MM/yyyy") ?? ""));
+                    tourTable.AddCell("Số người lớn: " + (booking?.SoNguoiLon ?? 0));
+                    tourTable.AddCell("Số trẻ em: " + (booking?.SoTreEm ?? 0));
+                    document.Add(tourTable);
+                    document.Add(new Paragraph(" "));
+
+                    // Total
+                    Paragraph total = new Paragraph($"TỔNG TIỀN: {(hoaDon.SoTien ?? 0):N0} VNĐ", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 14));
+                    total.Alignment = Element.ALIGN_CENTER;
+                    document.Add(total);
+                    document.Add(new Paragraph(" "));
+
+                    // Signature info
+                    var signatureData = $"{booking?.MaDatTour}|{booking?.MaKhachHang}|{booking?.MaTour}|{booking?.TongTien}|{(hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss") ?? "")}";
+                    byte[] hashBytes;
+                    try
+                    {
+                        hashBytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(signatureData));
+                    }
+                    catch
+                    {
+                        hashBytes = new byte[0];
+                    }
+                    var hashHex = hashBytes.Length > 0 ? BitConverter.ToString(hashBytes).Replace("-", "") : string.Empty;
+                    var authCode = hashHex.Length >= 12 ? hashHex.Substring(0, 12) : hashHex;
+
+                    document.Add(new Paragraph("THÔNG TIN XÁC THỰC", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 12)));
+                    PdfPTable signTable = new PdfPTable(2);
+                    signTable.WidthPercentage = 100;
+                    signTable.AddCell("Chữ ký số:\n" + (hoaDon.ChuKySo ?? ""));
+                    signTable.AddCell("Mã xác thực: " + authCode);
+                    document.Add(signTable);
+                    document.Add(new Paragraph(" "));
+                    document.Add(new Paragraph("Hash (SHA256): " + hashHex, FontFactory.GetFont(FontFactory.HELVETICA, 9)));
+                    document.Add(new Paragraph(" "));
+
+                    // Signature lines
+                    document.Add(new Paragraph("KỲ DỮA", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 12)));
+                    PdfPTable signatureTable = new PdfPTable(2);
+                    signatureTable.WidthPercentage = 100;
+                    PdfPCell cell1 = new PdfPCell(new Phrase("Người lập\n\n\n\n(Ký và ghi rõ họ tên)"));
+                    cell1.MinimumHeight = 80;
+                    PdfPCell cell2 = new PdfPCell(new Phrase($"Người ký: {signerName}\n\n\n"));
+                    cell2.MinimumHeight = 80;
+                    signatureTable.AddCell(cell1);
+                    signatureTable.AddCell(cell2);
+                    document.Add(signatureTable);
+
+                    document.Close();
+                    writer.Close();
+
+                    return ms.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CreateInvoicePdf] Error: {ex.Message}");
+                Console.WriteLine($"[CreateInvoicePdf] StackTrace: {ex.StackTrace}");
+                throw;
+            }
+        }
+
+        private string GenerateInvoiceHtml(HoaDon hoaDon, DatTour? booking, Tour? tour, KhachHang? customer, string signerName)
+        {
+            var signatureData = $"{booking?.MaDatTour}|{booking?.MaKhachHang}|{booking?.MaTour}|{booking?.TongTien}|{(hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss") ?? "")}";
+            byte[] hashBytes;
+            try
+            {
+                hashBytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(signatureData));
+            }
+            catch
+            {
+                hashBytes = new byte[0];
+            }
+            var hashHex = hashBytes.Length > 0 ? BitConverter.ToString(hashBytes).Replace("-", "") : string.Empty;
+            var authCode = hashHex.Length >= 12 ? hashHex.Substring(0, 12) : hashHex;
+            var total = hoaDon.SoTien ?? 0m;
+
+            return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; }}
+        .header {{ text-align: center; margin-bottom: 30px; }}
+        .header h1 {{ font-size: 24px; margin: 0; }}
+        table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
+        td {{ padding: 8px; border: 1px solid #ddd; }}
+        .label {{ font-weight: bold; }}
+        .total {{ font-weight: bold; font-size: 14px; }}
+        @media print {{ body {{ margin: 0; }} }}
+    </style>
+</head>
+<body>
+    <div class='header'>
+        <h1>HÓA ĐƠN ĐẶT TOUR</h1>
+    </div>
+    
+    <table>
+        <tr><td class='label'>Mã hóa đơn:</td><td>{hoaDon.MaHoaDon}</td></tr>
+        <tr><td class='label'>Ngày xuất:</td><td>{hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss")}</td></tr>
+        <tr><td class='label'>Trạng thái:</td><td>{hoaDon.TrangThai}</td></tr>
+    </table>
+    
+    <h3>Khách hàng</h3>
+    <table>
+        <tr><td class='label'>Tên:</td><td>{customer?.HoTen}</td></tr>
+        <tr><td class='label'>Email:</td><td>{customer?.Email}</td></tr>
+        <tr><td class='label'>Điện thoại:</td><td>{customer?.SoDienThoai}</td></tr>
+        <tr><td class='label'>Địa chỉ:</td><td>{customer?.DiaChi}</td></tr>
+    </table>
+    
+    <h3>Chi tiết tour</h3>
+    <table>
+        <tr><td class='label'>Tên tour:</td><td>{tour?.TieuDe}</td></tr>
+        <tr><td class='label'>Ngày khởi hành:</td><td>{tour?.ThoiGian?.ToString("dd/MM/yyyy")}</td></tr>
+        <tr><td class='label'>Số người lớn:</td><td>{booking?.SoNguoiLon}</td></tr>
+        <tr><td class='label'>Số trẻ em:</td><td>{booking?.SoTreEm}</td></tr>
+    </table>
+    
+    <h3 class='total'>Tổng tiền: {total:N0} VNĐ</h3>
+    
+    <h3>Thông tin xác thực</h3>
+    <table>
+        <tr><td class='label'>Chữ ký số:</td><td>{hoaDon.ChuKySo}</td></tr>
+        <tr><td class='label'>Hash (SHA256):</td><td style='word-break: break-all;'>{hashHex}</td></tr>
+        <tr><td class='label'>Mã xác thực:</td><td>{authCode}</td></tr>
+    </table>
+    
+    <h3>Ký duyệt</h3>
+    <table>
+        <tr><td style='text-align: center; padding: 40px;'>Người lập<br/><br/><br/>(Ký và ghi rõ họ tên)</td><td style='text-align: center; padding: 40px;'>Người ký: {signerName}<br/><br/><br/></td></tr>
+    </table>
+    
+    <script>
+        // Auto-print on load (optional)
+        // window.print();
+    </script>
+</body>
+</html>";
         }
 
         [HttpGet]

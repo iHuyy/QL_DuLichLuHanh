@@ -1,0 +1,58 @@
+@model DuLich.Models.InvoiceViewModel
+@{
+    ViewData["Title"] = "In hóa đơn";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4 mb-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card">
+                <div class="card-body">
+                    <h3 class="text-center">HÓA ĐƠN ĐẶT TOUR</h3>
+                    <hr />
+                    <div>
+                        <strong>Mã hóa đơn:</strong> @Model.MaHoaDon<br />
+                        <strong>Ngày xuất:</strong> @Model.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss")<br />
+                        <strong>Trạng thái:</strong> @Model.TrangThai<br />
+                    </div>
+
+                    <hr />
+                    <div>
+                        <strong>Khách hàng</strong><br />
+                        @Model.TenKhachHang<br />
+                        @Model.Email<br />
+                        @Model.SoDienThoai<br />
+                        @Model.DiaChi
+                    </div>
+
+                    <hr />
+                    <div>
+                        <strong>Chi tiết tour</strong><br />
+                        <div><strong>Tên tour:</strong> @Model.TenTour</div>
+                        <div><strong>Ngày khởi hành:</strong> @Model.NgayKhoiHanh?.ToString("dd/MM/yyyy")</div>
+                        <div><strong>Số người lớn:</strong> @Model.SoNguoiLon</div>
+                        <div><strong>Số trẻ em:</strong> @Model.SoTreEm</div>
+                    </div>
+
+                    <hr />
+                    <div class="text-end">
+                        <h4>Tổng tiền: @Model.SoTien?.ToString("#,##0") VNĐ</h4>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <button class="btn btn-primary" onclick="window.print()">In</button>
+                        <a class="btn btn-outline-secondary ms-2" href="@Url.Action("DownloadInvoicePdf", "Customer", new { hoaDonId = Model.MaHoaDon })">Tải PDF</a>
+                        <a class="btn btn-light ms-2" href="@Url.Action("TourBooked", "Customer", new { bookingId = ViewBag.BookingId })">Quay lại</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @@media print {
+        .btn { display:none; }
+    }
+</style>

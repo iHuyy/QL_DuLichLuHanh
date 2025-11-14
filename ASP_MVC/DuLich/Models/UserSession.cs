@@ -12,7 +12,7 @@ namespace DuLich.Models
         public string SessionId { get; set; } = null!; // store GUID as string (no dashes)
 
         [Column("USER_ID")]
-        public int UserId { get; set; }
+        public int? UserId { get; set; }
 
         [Column("USER_TYPE")]
         public string UserType { get; set; } = null!; // 'KhachHang' or 'NhanVien'

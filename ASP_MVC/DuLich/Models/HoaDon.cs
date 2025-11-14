@@ -29,5 +29,7 @@ namespace DuLich.Models
 
         [ForeignKey("MaDatTour")]
         public DatTour? DatTour { get; set; }
+
+        
     }
 }
