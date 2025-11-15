@@ -68,7 +68,8 @@ namespace DuLich.Models.Data
                 eb.HasKey(a => a.MaAnh);
                 eb.Property(a => a.MaAnh).HasColumnName("MAANH");
                 eb.Property(a => a.MaTour).HasColumnName("MATOUR");
-                eb.Property(a => a.DuongDanAnh).HasColumnName("DUONGDANANH");
+                eb.Property(a => a.DuLieuAnh).HasColumnName("DULIEUANH");
+                eb.Property(a => a.LoaiAnh).HasColumnName("LOAIANH");
                 eb.Property(a => a.MoTa).HasColumnName("MOTA");
                 eb.Property(a => a.NgayTaiLen).HasColumnName("NGAYTAILEN");
 

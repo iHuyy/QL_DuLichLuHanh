@@ -69,22 +69,27 @@ namespace DuLich.Controllers.admin
             t.TrangThai = model.TrangThai;
             t.SoLuong = model.SoLuong;
 
-            // save new images if any
+            // save new images if any - lưu dữ liệu BLOB
             if (images != null && images.Count > 0)
             {
-                var imgFolder = Path.Combine(_env.WebRootPath, "images", "tour");
-                Directory.CreateDirectory(imgFolder);
                 foreach (var f in images)
                 {
                     if (f.Length <= 0) continue;
-                    var fileName = $"tour_{t.MaTour}_{Guid.NewGuid()}{Path.GetExtension(f.FileName)}";
-                    var full = Path.Combine(imgFolder, fileName);
-                    using (var fs = System.IO.File.Create(full))
+                    
+                    using (var ms = new MemoryStream())
                     {
-                        await f.CopyToAsync(fs);
+                        await f.CopyToAsync(ms);
+                        var imageData = ms.ToArray();
+                        
+                        _db.AnhTours.Add(new AnhTour 
+                        { 
+                            MaTour = t.MaTour, 
+                            DuLieuAnh = imageData,
+                            LoaiAnh = f.ContentType,
+                            MoTa = f.FileName, 
+                            NgayTaiLen = DateTime.UtcNow 
+                        });
                     }
-                    var rel = $"/images/tour/{fileName}";
-                    _db.AnhTours.Add(new AnhTour { MaTour = t.MaTour, DuongDanAnh = rel, MoTa = f.FileName, NgayTaiLen = DateTime.UtcNow });
                 }
             }
 
@@ -136,19 +141,6 @@ namespace DuLich.Controllers.admin
             try
             {
                 await _db.SaveChangesAsync();
-
-                // Delete image files after successful DB transaction
-                foreach (var image in images)
-                {
-                    if (!string.IsNullOrEmpty(image.DuongDanAnh))
-                    {
-                        var imagePath = Path.Combine(_env.WebRootPath, image.DuongDanAnh.TrimStart('/'));
-                        if (System.IO.File.Exists(imagePath))
-                        {
-                            System.IO.File.Delete(imagePath);
-                        }
-                    }
-                }
 
                 // Delete QR code file after successful DB transaction
                 if (!string.IsNullOrEmpty(t.QR))

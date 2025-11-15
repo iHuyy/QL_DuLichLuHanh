@@ -16,8 +16,12 @@
         @foreach (var tour in Model.Tours)
         {
             var img = tour.Images.FirstOrDefault();
-            var imgUrl = string.IsNullOrEmpty(img) ? Url.Content("~/customer/assets/images/default-tour.jpg") :
-            Url.Content($"~/customer/{img}");
+            // Controller populates Images with API URLs like "/api/image/{id}".
+            // If present use it directly via Url.Content (works for absolute and app-relative paths),
+            // otherwise fall back to the default image.
+            var imgUrl = string.IsNullOrEmpty(img)
+                ? Url.Content("~/customer/assets/images/default-tour.jpg")
+                : Url.Content(img);
             <div class="col-md-3 mb-4">
                 <div class="card">
                     <img src="@imgUrl" class="card-img-top" alt="@tour.Title" style="height:200px; object-fit:cover;">

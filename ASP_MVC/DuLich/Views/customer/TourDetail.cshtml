@@ -2,7 +2,7 @@
 @{
     ViewData["Title"] = "Chi tiết tour";
     Layout = "~/Views/Shared/_Layout.cshtml";
-    var images = ViewBag.Images as List<string>;
+    var imageIds = ViewBag.ImageIds as List<int>;
     var rating = ViewBag.Rating as decimal? ?? 0;
     var relatedTours = ViewBag.RelatedTours as List<TourDetailViewModel>;
 }
@@ -27,44 +27,44 @@
 <div class="tour-gallery">
     <div class="container-fluid">
         <div class="row gap-10 justify-content-center rel">
-            @if (images != null && images.Any())
+            @if (imageIds != null && imageIds.Any())
             {
-                var displayImages = images.Take(5).ToList();
+                var displayImageIds = imageIds.Take(5).ToList();
 
-                @if (displayImages.Count > 0)
+                @if (displayImageIds.Count > 0)
                 {
                     <div class="col-lg-4 col-md-6">
                         <div class="gallery-item">
-                            <img src="@Url.Content(displayImages[0])" alt="Tour Image">
+                            <img src="/api/image/@displayImageIds[0]" alt="Tour Image">
                         </div>
-                        @if (displayImages.Count > 1)
+                        @if (displayImageIds.Count > 1)
                         {
                             <div class="gallery-item">
-                                <img src="@Url.Content(displayImages[1])" alt="Tour Image">
+                                <img src="/api/image/@displayImageIds[1]" alt="Tour Image">
                             </div>
                         }
                     </div>
                 }
 
-                @if (displayImages.Count > 2)
+                @if (displayImageIds.Count > 2)
                 {
                     <div class="col-lg-4 col-md-6">
                         <div class="gallery-item gallery-between">
-                            <img src="@Url.Content(displayImages[2])" alt="Tour Image">
+                            <img src="/api/image/@displayImageIds[2]" alt="Tour Image">
                         </div>
                     </div>
                 }
 
-                @if (displayImages.Count > 3)
+                @if (displayImageIds.Count > 3)
                 {
                     <div class="col-lg-4 col-md-6">
                         <div class="gallery-item">
-                            <img src="@Url.Content(displayImages[3])" alt="Tour Image">
+                            <img src="/api/image/@displayImageIds[3]" alt="Tour Image">
                         </div>
-                        @if (displayImages.Count > 4)
+                        @if (displayImageIds.Count > 4)
                         {
                             <div class="gallery-item">
-                                <img src="@Url.Content(displayImages[4])" alt="Tour Image">
+                                <img src="/api/image/@displayImageIds[4]" alt="Tour Image">
                             </div>
                         }
                     </div>

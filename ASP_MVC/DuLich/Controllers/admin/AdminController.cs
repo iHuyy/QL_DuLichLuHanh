@@ -535,18 +535,6 @@ namespace DuLich.Controllers
             {
                 await _context.SaveChangesAsync();
 
-                foreach (var image in images)
-                {
-                    if (!string.IsNullOrEmpty(image.DuongDanAnh))
-                    {
-                        var imagePath = Path.Combine(_env.WebRootPath, image.DuongDanAnh.TrimStart('/'));
-                        if (System.IO.File.Exists(imagePath))
-                        {
-                            System.IO.File.Delete(imagePath);
-                        }
-                    }
-                }
-
                 if (!string.IsNullOrEmpty(t.QR))
                 {
                     var qrPath = Path.Combine(_env.WebRootPath, t.QR.TrimStart('/'));

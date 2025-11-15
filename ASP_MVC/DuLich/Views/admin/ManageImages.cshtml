@@ -9,8 +9,10 @@
     <thead>
         <tr>
             <th>#</th>
-            <th>Đường dẫn</th>
+            <th>Xem trước</th>
+            <th>Loại</th>
             <th>Mô tả</th>
+            <th>Ngày tải</th>
             <th>Hành động</th>
         </tr>
     </thead>
@@ -19,8 +21,15 @@
         {
             <tr>
                 <td>@i.MaAnh</td>
-                <td>@i.DuongDanAnh</td>
+                <td>
+                    @if (i.DuLieuAnh != null && i.DuLieuAnh.Length > 0)
+                    {
+                        <img src="/api/image/@i.MaAnh" alt="@i.MoTa" style="max-width: 100px; max-height: 100px;" class="rounded">
+                    }
+                </td>
+                <td>@i.LoaiAnh</td>
                 <td>@i.MoTa</td>
+                <td>@i.NgayTaiLen?.ToString("dd/MM/yyyy HH:mm")</td>
                 <td>
                     <form method="post" action="/Admin/DeleteImage" style="display:inline">
                         <input type="hidden" name="id" value="@i.MaAnh" />

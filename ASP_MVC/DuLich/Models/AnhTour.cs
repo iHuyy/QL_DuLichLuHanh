@@ -14,8 +14,11 @@ namespace DuLich.Models
         [Column("MATOUR")]
         public int MaTour { get; set; }
 
-        [Column("DUONGDANANH")]
-        public string? DuongDanAnh { get; set; }
+        [Column("DULIEUANH")]
+        public byte[]? DuLieuAnh { get; set; }
+
+        [Column("LOAIANH")]
+        public string? LoaiAnh { get; set; }
 
         [Column("MOTA")]
         public string? MoTa { get; set; }
@@ -23,7 +26,7 @@ namespace DuLich.Models
         [Column("NGAYTAILEN")]
         public System.DateTime? NgayTaiLen { get; set; }
 
-        // Sửa thêm: navigation property và ForeignKey để EF dùng cột MATOUR thay vì tạo shadow FK "TourMaTour"
+        // Navigation property và ForeignKey
         [ForeignKey(nameof(MaTour))]
         public Tour? Tour { get; set; }
     }

@@ -174,10 +174,10 @@ namespace DuLich.Controllers
 
             foreach (var t in tours)
             {
-                var images = await _context.AnhTours
+                var imageIds = await _context.AnhTours
                     .Where(a => a.MaTour == t.MaTour)
                     .OrderBy(a => a.MaAnh)
-                    .Select(a => a.DuongDanAnh)
+                    .Select(a => a.MaAnh)
                     .ToListAsync();
 
                 var rating = await _context.DanhGiaTours
@@ -191,7 +191,7 @@ namespace DuLich.Controllers
                     Destination = t.NoiDen ?? t.NoiKhoiHanh ?? t.ThanhPho ?? string.Empty,
                     Time = t.ThoiGian?.ToString("yyyy-MM-dd") ?? string.Empty,
                     PriceAdult = t.GiaNguoiLon ?? 0,
-                    Images = images.Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToList(),
+                    Images = imageIds.Select(id => $"/api/image/{id}").ToList(),
                     Rating = rating
                 });
             }
@@ -338,10 +338,10 @@ namespace DuLich.Controllers
                 var tour = booking.Tour;
                 if (tour == null) continue;
 
-                var images = await _context.AnhTours
+                var imageIds = await _context.AnhTours
                     .Where(a => a.MaTour == tour.MaTour)
                     .OrderBy(a => a.MaAnh)
-                    .Select(a => a.DuongDanAnh)
+                    .Select(a => a.MaAnh)
                     .ToListAsync();
 
                 var rating = await _context.DanhGiaTours
@@ -375,7 +375,7 @@ namespace DuLich.Controllers
                     NumAdults = booking.SoNguoiLon ?? 0,
                     NumChildren = booking.SoTreEm ?? 0,
                     TotalPrice = booking.TongTien ?? 0,
-                    Images = images.Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToList(),
+                    Images = imageIds.Select(id => $"/api/image/{id}").ToList(),
                     Rating = rating,
                     IsPaid = booking.HoaDon?.TrangThai == "Đã thanh toán"
                 });
@@ -387,10 +387,10 @@ namespace DuLich.Controllers
 
             foreach (var t in popularTours)
             {
-                var images = await _context.AnhTours
+                var imageIds = await _context.AnhTours
                     .Where(a => a.MaTour == t.MaTour)
                     .OrderBy(a => a.MaAnh)
-                    .Select(a => a.DuongDanAnh)
+                    .Select(a => a.MaAnh)
                     .ToListAsync();
 
                 var rating = await _context.DanhGiaTours
@@ -404,7 +404,7 @@ namespace DuLich.Controllers
                     Destination = t.NoiDen ?? t.NoiKhoiHanh ?? t.ThanhPho ?? string.Empty,
                     Time = t.ThoiGian?.ToString("yyyy-MM-dd") ?? string.Empty,
                     PriceAdult = t.GiaNguoiLon ?? 0,
-                    Images = images.Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToList(),
+                    Images = imageIds.Select(id => $"/api/image/{id}").ToList(),
                     Rating = rating
                 });
             }
@@ -435,12 +435,10 @@ namespace DuLich.Controllers
                 SoLuong = tour.SoLuong ?? 0
             };
 
-            ViewBag.Images = await _context.AnhTours
+            ViewBag.ImageIds = await _context.AnhTours
                 .Where(a => a.MaTour == id)
                 .OrderBy(a => a.MaAnh)
-                .Select(a => a.DuongDanAnh)
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Select(s => s!)
+                .Select(a => a.MaAnh)
                 .ToListAsync();
 
             ViewBag.Rating = await _context.DanhGiaTours
