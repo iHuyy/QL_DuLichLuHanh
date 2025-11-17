@@ -68,83 +68,57 @@
         </div>
     </div>
 </div>
-
 @section Scripts {
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
-
     <script>
-        let qrPollingInterval;
-        let qrToken; 
+        $(document).ready(function () {
+            var currentQrToken = "";
+            var pollInterval = null;
 
-        function generateQrCode() {
-            $('#qrCodeImage').hide();
-            $('#qrSpinner').show();
-
-            // 1. Gọi API generate-anonymous-qr
-            $.get("/api/QrLogin/generate-anonymous-qr", function (data) {
-                // 2. Web nhận abc-123 (data.qrToken) và vẽ QR
-                qrToken = data.qrToken;
-                $('#qrCodeImage').attr('src', 'data:image/png;base64,' + data.qrCodeImage);
-                $('#qrSpinner').hide();
-                $('#qrCodeImage').show();
-                // 3. Bắt đầu "hỏi" (poll)
-                startPolling();
-            }).fail(function (jqXHR, textStatus, errorThrown) {
-                console.error("Error generating QR code: ", textStatus, errorThrown);
-                alert("Có lỗi xảy ra khi tạo mã QR. Vui lòng thử lại.");
-                $('#qrSpinner').hide();
-            });
-        }
-
-        function startPolling() {
-            if (qrPollingInterval) {
-                clearInterval(qrPollingInterval);
+            // Hàm tải QR Code
+            function loadQrCode() {
+                $.get('/api/QrLogin/generate-anonymous-qr', function (data) {
+                    if (data.qrCodeImage) {
+                        // Hiển thị ảnh
+                        $('#qrCodeImage').attr('src', 'data:image/png;base64,' + data.qrCodeImage);
+                        currentQrToken = data.qrToken;
+                        
+                        // Bắt đầu hỏi trạng thái
+                        startPolling();
+                    }
+                });
             }
 
-            qrPollingInterval = setInterval(function () {
-                // 3. "Hỏi" API poll-qr-status/abc-123
-                if (!qrToken) return;
-                
-                $.get("/api/QrLogin/poll-qr-status/" + qrToken, function (data) {
-                    
-                    // *** BẮT ĐẦU SỬA LỖI ***
-                    // 9. API trả về { status: 'COMPLETED' }
-                    if (data.status === "COMPLETED") {
-                        clearInterval(qrPollingInterval);
-                        
-                        // 10. Web không cần lưu token
-                        // Chỉ cần chuyển hướng. Cookie đã được set
-                        window.location.href = "/Customer"; 
+            // Hàm hỏi trạng thái định kỳ
+            function startPolling() {
+                if (pollInterval) clearInterval(pollInterval);
 
-                    } else if (data.status === "EXPIRED") {
-                        // *** KẾT THÚC SỬA LỖI ***
+                pollInterval = setInterval(function () {
+                    if (!currentQrToken) return;
 
-                        clearInterval(qrPollingInterval);
-                        alert("Mã QR đã hết hạn. Vui lòng tạo mã mới.");
-                        $('#qrModal').modal('hide');
-                    } else if (data.status === "PENDING") {
-                        // Tiếp tục poll
-                        console.log("QR Status: PENDING");
-                    } else {
-                        // Lỗi
-                         clearInterval(qrPollingInterval);
-                        alert("Đã xảy ra lỗi trong quá trình xác thực QR.");
-                        $('#qrModal').modal('hide');
-                    }
-                }).fail(function (jqXHR, textStatus, errorThrown) {
-                    console.error("Error checking QR login status: ", textStatus, errorThrown);
-                    clearInterval(qrPollingInterval);
-                    alert("Có lỗi xảy ra khi kiểm tra trạng thái đăng nhập QR.");
-                    $('#qrModal').modal('hide');
-                });
-            }, 3000); // Poll mỗi 3 giây
-        }
+                    $.get('/api/QrLogin/poll-qr-status/' + currentQrToken, function (response) {
+                        console.log("QR Status:", response.status);
 
-        $('#qrModal').on('hidden.bs.modal', function () {
-            clearInterval(qrPollingInterval);
-            qrToken = null;
+                        if (response.status === 'COMPLETED') {
+                            // ĐĂNG NHẬP THÀNH CÔNG!
+                            clearInterval(pollInterval);
+                            // Chuyển hướng về trang chủ hoặc reload
+                            window.location.href = '/Customer/'; 
+                        }
+                        else if (response.status === 'EXPIRED') {
+                            clearInterval(pollInterval);
+                            alert("Mã QR đã hết hạn. Đang tải lại...");
+                            loadQrCode(); // Tải mã mới
+                        }
+                        // Nếu PENDING thì cứ tiếp tục chờ
+                    });
+                }, 2000); // Hỏi mỗi 2 giây
+            }
+
+            // Gọi hàm khi trang tải xong
+            loadQrCode();
         });
     </script>
 }

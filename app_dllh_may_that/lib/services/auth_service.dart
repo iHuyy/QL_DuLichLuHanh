@@ -115,14 +115,14 @@ class AuthService {
     
     try {
       csResponse = await _apiClient.postJson(
-        "api/ApiAuthController/login", 
+        "api/ApiAuth/login", 
         body: {
           "username": username,
           "password": password,
         },
       );
       
-      print("ApiAuthController/login status: ${csResponse.statusCode}");
+      print("ApiAuth/login status: ${csResponse.statusCode}");
       
       // *** SỬA LỖI: Kiểm tra kỹ trước khi decode để tránh FormatException ***
       if (csResponse.statusCode == 200 && csResponse.body.isNotEmpty) {

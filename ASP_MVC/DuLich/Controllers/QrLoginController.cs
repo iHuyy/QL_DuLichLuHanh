@@ -17,27 +17,28 @@ namespace DuLich.Controllers
     [ApiController]
     public class QrLoginController : BaseController
     {
-        private readonly JwtService _jwtService; // Vẫn giữ để xác thực mobile
+        private readonly JwtService _jwtService;
 
+        // Lưu ý: Đã bỏ OracleAuthService vì không dùng đến trong flow này (đã xác thực qua mobile)
         public QrLoginController(ApplicationDbContext context, JwtService jwtService) : base(context)
         {
             _jwtService = jwtService;
         }
 
         /// <summary>
-        /// Web (chưa đăng nhập) gọi API này.
+        /// Web (chưa đăng nhập) gọi API này để lấy ảnh QR.
         /// </summary>
         [HttpGet("generate-anonymous-qr")]
         [AllowAnonymous]
         public async Task<IActionResult> GenerateQrCode()
         {
-            var sessionKey = Guid.NewGuid().ToString(); // Đây là token QR (ví dụ: abc-123)
+            var sessionKey = Guid.NewGuid().ToString();
             var qrLogin = new QR_Login
             {
                 SessionKey = sessionKey,
                 IsUsed = 0, // 0 = PENDING
                 CreatedAt = DateTime.Now,
-                UserId = null // USERNAME = NULL
+                UserId = null
             };
             _context.QR_Logins.Add(qrLogin);
             await _context.SaveChangesAsync();
@@ -52,7 +53,7 @@ namespace DuLich.Controllers
         }
 
         /// <summary>
-        /// Web (đang "hỏi") gọi API này mỗi 3 giây.
+        /// Web (đang "hỏi") gọi API này mỗi 2-3 giây để kiểm tra trạng thái.
         /// </summary>
         [HttpGet("poll-qr-status/{qrToken}")]
         [AllowAnonymous]
@@ -60,40 +61,39 @@ namespace DuLich.Controllers
         {
             var qrLogin = await _context.QR_Logins.FirstOrDefaultAsync(q => q.SessionKey == qrToken);
 
-            if (qrLogin == null || qrLogin.CreatedAt < DateTime.Now.AddMinutes(-5)) // 5 minute expiry
+            // 1. Kiểm tra tồn tại và hết hạn
+            if (qrLogin == null || qrLogin.CreatedAt < DateTime.Now.AddMinutes(-5))
             {
                 return Json(new { status = "EXPIRED" });
             }
 
-            // (IsUsed = 1) -> STATUS = 'COMPLETED' và UserId đã được gán
+            // 2. Nếu Mobile App đã quét và Approve (IsUsed = 1)
             if (qrLogin.IsUsed == 1 && qrLogin.UserId.HasValue)
             {
                 var user = await _context.KhachHangs.FindAsync(qrLogin.UserId.Value);
                 if (user != null)
                 {
-                    // *** BẮT ĐẦU SỬA LỖI ***
-                    // THAY VÌ TẠO JWT, chúng ta tạo một UserSession và set cookie,
-                    // giống hệt như luồng đăng nhập username/password
-                    
+                    // *** LOGIC ĐĂNG NHẬP WEB ***
                     try
                     {
+                        // A. Tạo Session ID mới cho Web
                         var sessionId = Guid.NewGuid().ToString("N");
 
-                        // Xóa các session WEB cũ
-                        var prev = _context.UserSessions
+                        // B. Xóa các session WEB cũ của user này để tránh rác (tùy chọn)
+                        var prevSessions = _context.UserSessions
                             .Where(s => s.UserId == user.MaKhachHang && s.DeviceType == "WEB")
                             .ToList();
-                        if (prev.Any())
+                        if (prevSessions.Any())
                         {
-                            _context.UserSessions.RemoveRange(prev);
+                            _context.UserSessions.RemoveRange(prevSessions);
                         }
 
-                        // Tạo UserSession mới
+                        // C. Tạo bản ghi Session mới vào DB
                         var userSession = new UserSession
                         {
                             SessionId = sessionId,
                             UserId = user.MaKhachHang,
-                            UserType = "CUSTOMER",
+                            UserType = "CUSTOMER", // Mặc định là Customer
                             DeviceType = "WEB",
                             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
                             DeviceInfo = Request.Headers["User-Agent"].ToString(),
@@ -103,104 +103,98 @@ namespace DuLich.Controllers
                         };
 
                         _context.UserSessions.Add(userSession);
+
+                        // D. Đánh dấu mã QR này là đã hoàn tất (Consumed) để không dùng lại được
+                        qrLogin.IsUsed = 2; 
                         
-                        // Đánh dấu token QR này là đã được sử dụng (Consumed)
-                        qrLogin.IsUsed = 2; // 2 = Đã tiêu thụ (Consumed)
                         await _context.SaveChangesAsync();
 
-                        // Set cookie USER_SESSION_ID cho trình duyệt
-                        var cookieOptions = new Microsoft.AspNetCore.Http.CookieOptions
+                        // E. QUAN TRỌNG: Gán Cookie vào Response để trình duyệt lưu lại
+                        var cookieOptions = new CookieOptions
                         {
                             HttpOnly = true,
-                            Secure = Request.IsHttps,
-                            // Lax là cần thiết cho redirect
-                            SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax 
+                            Secure = true, // Đặt false nếu chạy localhost http thường, true nếu https
+                            SameSite = SameSiteMode.Lax, // Lax cho phép redirect
+                            Expires = DateTime.Now.AddDays(1)
                         };
+                        
+                        // Tên cookie phải khớp với logic kiểm tra Session trong Middleware (ví dụ: USER_SESSION_ID)
                         Response.Cookies.Append("USER_SESSION_ID", sessionId, cookieOptions);
 
-                        // Trả về status "Authenticated"
-                        return Json(new { status = "COMPLETED" }); 
+                        // Trả về status COMPLETED để JS chuyển trang
+                        return Json(new { status = "COMPLETED", message = "Login successful" });
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine("QR login: failed to create session: " + ex.Message);
-                        return Json(new { status = "ERROR", message = "Session creation failed." });
+                        Console.WriteLine("QR login error: " + ex.Message);
+                        return Json(new { status = "ERROR", message = "Server error creating session." });
                     }
-                    // *** KẾT THÚC SỬA LỖI ***
                 }
                 else
                 {
-                    return Json(new { status = "ERROR", message = "User data not found." });
+                    return Json(new { status = "ERROR", message = "User not found." });
                 }
             }
 
+            // 3. Nếu trạng thái đã hoàn tất (2)
             if (qrLogin.IsUsed == 2)
             {
-                return Json(new { status = "EXPIRED" }); // Đã được tiêu thụ
+                return Json(new { status = "EXPIRED", message = "QR Code already used." });
             }
 
+            // 4. Nếu chưa ai quét
             return Json(new { status = "PENDING" });
         }
 
-
         /// <summary>
-        /// Mobile (đã đăng nhập) gọi API này sau khi quét.
+        /// Mobile (đã đăng nhập) gọi API này sau khi quét để xác nhận.
         /// </summary>
         [HttpPost("approve-qr-login")]
-[Authorize(Policy = "MobileUser")]
-public async Task<IActionResult> ApproveQrLogin([FromBody] QrApproveRequest request)
-{
-    // 1. Debug xem nhận được gì từ Flutter
-    Console.WriteLine($"[DEBUG] User: {User.Identity?.Name}");
-    Console.WriteLine($"[DEBUG] Token received: '{request.QrToken}'");
+        [Authorize(Policy = "MobileUser")] // Yêu cầu JWT Token từ Mobile
+        public async Task<IActionResult> ApproveQrLogin([FromBody] QrApproveRequest request)
+        {
+            // Lấy username từ JWT (ClaimsPrincipal)
+            var oracleUsername = User.Identity?.Name;
+            if (string.IsNullOrEmpty(oracleUsername)) return Unauthorized();
 
-    var oracleUsername = User.Identity?.Name;
-    if (string.IsNullOrEmpty(oracleUsername)) return Unauthorized();
+            var user = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME == oracleUsername);
+            if (user == null) return Unauthorized(new { message = "User info not found" });
 
-    var user = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME == oracleUsername);
-    if (user == null) return Unauthorized("User not found.");
+            if (string.IsNullOrEmpty(request.QrToken))
+            {
+                return BadRequest(new { status = "ERROR", message = "Token is required" });
+            }
 
-    if (string.IsNullOrEmpty(request.QrToken))
-    {
-        return BadRequest(new { status = "ERROR", message = "Token is empty/null. Check JSON binding." });
+            var qrLogin = await _context.QR_Logins.FirstOrDefaultAsync(q => q.SessionKey == request.QrToken);
+
+            if (qrLogin == null)
+            {
+                return NotFound(new { status = "ERROR", message = "Invalid QR Token" });
+            }
+
+            if (qrLogin.IsUsed != 0)
+            {
+                return BadRequest(new { status = "ERROR", message = "QR Code already used or expired" });
+            }
+
+            if (qrLogin.CreatedAt <= DateTime.Now.AddMinutes(-5))
+            {
+                return BadRequest(new { status = "ERROR", message = "QR Code expired" });
+            }
+
+            // Cập nhật trạng thái QR thành "Đã quét/Đã duyệt" (IsUsed = 1)
+            qrLogin.UserId = user.MaKhachHang;
+            qrLogin.IsUsed = 1; 
+            
+            await _context.SaveChangesAsync();
+
+            return Ok(new { status = "APPROVED", message = "Login approved successfully" });
+        }
+
+        public class QrApproveRequest
+        {
+            [JsonPropertyName("qrToken")]
+            public string QrToken { get; set; }
+        }
     }
-
-    // 2. Tìm token trong DB (Chỉ tìm theo SessionKey trước)
-    var qrLogin = await _context.QR_Logins.FirstOrDefaultAsync(q => q.SessionKey == request.QrToken);
-
-    // 3. Kiểm tra từng điều kiện và báo lỗi riêng biệt
-    if (qrLogin == null)
-    {
-        Console.WriteLine($"[DEBUG] Token '{request.QrToken}' not found in DB.");
-        return NotFound(new { status = "ERROR", message = "QR Token incorrect (Not found in DB)." });
-    }
-
-    if (qrLogin.IsUsed != 0)
-    {
-         Console.WriteLine($"[DEBUG] Token '{request.QrToken}' already used. Status: {qrLogin.IsUsed}");
-         return BadRequest(new { status = "ERROR", message = "QR Code already scanned/used." });
-    }
-
-    // Lưu ý: Kiểm tra Timezone. Dùng DateTime.Now nếu server và DB cùng múi giờ.
-    if (qrLogin.CreatedAt <= DateTime.Now.AddMinutes(-5))
-    {
-        Console.WriteLine($"[DEBUG] Token expired. Created: {qrLogin.CreatedAt}, Now: {DateTime.Now}");
-        return BadRequest(new { status = "ERROR", message = "QR Code expired." });
-    }
-
-    // 4. Nếu qua hết các ải trên -> OK
-    qrLogin.UserId = user.MaKhachHang;
-    qrLogin.IsUsed = 1; // COMPLETED
-    await _context.SaveChangesAsync();
-
-    Console.WriteLine("[SUCCESS] Login Approved!");
-    return Ok(new { status = "APPROVED" });
-}
-    
-    public class QrApproveRequest
-    {
-        [JsonPropertyName("qrToken")]
-        public string QrToken { get; set; }
-    }
-}
 }
