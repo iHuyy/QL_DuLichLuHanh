@@ -1,0 +1,273 @@
+@model DuLich.Models.AdminAuditViewModel
+@using System.Text.Json
+@using System.Text
+@using Microsoft.AspNetCore.Html
+@{
+    ViewData["Title"] = "Nhật ký Audit Hệ thống";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+
+    // Helper function to format JSON string for display
+    IHtmlContent FormatJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "{}")
+        {
+            return new HtmlString("<i class='text-muted'>(không có)</i>");
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var sb = new StringBuilder("<ul class='list-unstyled mb-0'>");
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                sb.Append($"<li><strong class='text-primary'>{prop.Name}:</strong> {prop.Value.ToString()}</li>");
+            }
+            sb.Append("</ul>");
+            return new HtmlString(sb.ToString());
+        }
+        catch (JsonException)
+        {
+            return new HtmlString(System.Net.WebUtility.HtmlEncode(json)); // Return as-is if not valid JSON, but encode it
+        }
+    }
+}
+
+<div class="container-fluid">
+    <!-- Page-Title -->
+    <div class="row">
+        <div class="col-sm-12">
+            <div class="page-title-box">
+                <div class="row">
+                    <div class="col">
+                        <h4 class="page-title">Nhật ký Audit Hệ thống</h4>
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a asp-action="Dashboard">Admin</a></li>
+                            <li class="breadcrumb-item active">Nhật ký Audit</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+
+    <div class="card">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" id="audit-tabs" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link @(Model.ActiveTab == "TRIGGER" ? "active" : "")" id="trigger-tab" data-toggle="tab" href="#trigger" role="tab" aria-controls="trigger" aria-selected="@(Model.ActiveTab == "TRIGGER")">Trigger-based</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(Model.ActiveTab == "STANDARD" ? "active" : "")" id="standard-tab" data-toggle="tab" href="#standard" role="tab" aria-controls="standard" aria-selected="@(Model.ActiveTab == "STANDARD")">Standard</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(Model.ActiveTab == "FGA" ? "active" : "")" id="fga-tab" data-toggle="tab" href="#fga" role="tab" aria-controls="fga" aria-selected="@(Model.ActiveTab == "FGA")">Fine-Grained (FGA)</a>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content" id="audit-tabs-content">
+                <!-- Trigger Tab Pane -->
+                <div class="tab-pane fade @(Model.ActiveTab == "TRIGGER" ? "show active" : "")" id="trigger" role="tabpanel" aria-labelledby="trigger-tab">
+                    <h5 class="card-title">Kết quả Audit (Trigger-based)</h5>
+                    <p class="card-text">Cung cấp thông tin chi tiết về giá trị cũ và mới của dữ liệu thay đổi.</p>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Thời gian</th>
+                                    <th>Bảng</th>
+                                    <th>Hành động</th>
+                                    <th>Giá trị cũ</th>
+                                    <th>Giá trị mới</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.TriggerRecords == null || !Model.TriggerRecords.Any())
+                                {
+                                    <tr><td colspan="5" class="text-center">Không tìm thấy dữ liệu audit nào.</td></tr>
+                                }
+                                else
+                                {
+                                    @foreach (var record in Model.TriggerRecords)
+                                    {
+                                        <tr>
+                                            <td>@record.Timestamp?.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                            <td>@record.TableName</td>
+                                            <td><span class="badge badge-info">@record.Action</span></td>
+                                            <td><div style="max-height: 150px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.85em; white-space: pre-wrap; word-break: break-all;">@FormatJson(record.OldValue)</div></td>
+                                            <td><div style="max-height: 150px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.85em; white-space: pre-wrap; word-break: break-all;">@FormatJson(record.NewValue)</div></td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @{
+                        var triggerTotalPages = (int)Math.Ceiling((double)(Model.TriggerTotal) / Model.PageSize);
+                    }
+                    @if (triggerTotalPages > 1)
+                    {
+                        <nav aria-label="Trigger pagination">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item @(Model.TriggerPage == 1 ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="TRIGGER" asp-route-pageTrigger="@(Model.TriggerPage - 1)" aria-label="Previous">&laquo;</a>
+                                </li>
+                                @for (int i = 1; i <= triggerTotalPages; i++)
+                                {
+                                    <li class="page-item @(i == Model.TriggerPage ? "active" : "")">
+                                        <a class="page-link" asp-action="Audit" asp-route-tab="TRIGGER" asp-route-pageTrigger="@i">@i</a>
+                                    </li>
+                                }
+                                <li class="page-item @(Model.TriggerPage >= triggerTotalPages ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="TRIGGER" asp-route-pageTrigger="@(Model.TriggerPage + 1)" aria-label="Next">&raquo;</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    }
+                </div>
+
+                <!-- Standard Tab Pane -->
+                <div class="tab-pane fade @(Model.ActiveTab == "STANDARD" ? "show active" : "")" id="standard" role="tabpanel" aria-labelledby="standard-tab">
+                    <h5 class="card-title">Kết quả Audit (Standard)</h5>
+                    <p class="card-text">Ghi lại các hành động ở mức câu lệnh nhưng không chi tiết về dữ liệu thay đổi.</p>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Thời gian</th>
+                                    <th>Ngu?i th?c hi?n</th>
+                                    <th>Bảng</th>
+                                    <th>Hành động</th>
+                                    <th>SQL thực thi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.StandardRecords == null || !Model.StandardRecords.Any())
+                                {
+                                    <tr><td colspan="5" class="text-center">Không tìm thấy dữ liệu audit nào.</td></tr>
+                                }
+                                else
+                                {
+                                    @foreach (var record in Model.StandardRecords)
+                                    {
+                                        <tr>
+                                            <td>@record.Timestamp?.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                            <td>@record.PerformedBy</td>
+                                            <td>@record.TableName</td>
+                                            <td><span class="badge badge-primary">@record.Action</span></td>
+                                            <td><div style="max-height: 100px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.8em; white-space: pre-wrap; word-break: break-all;">@record.SqlText</div></td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @{
+                        var standardTotalPages = (int)Math.Ceiling((double)(Model.StandardTotal) / Model.PageSize);
+                    }
+                    @if (standardTotalPages > 1)
+                    {
+                        <nav aria-label="Standard pagination">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item @(Model.StandardPage == 1 ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="STANDARD" asp-route-pageStandard="@(Model.StandardPage - 1)" aria-label="Previous">&laquo;</a>
+                                </li>
+                                @for (int i = 1; i <= standardTotalPages; i++)
+                                {
+                                    <li class="page-item @(i == Model.StandardPage ? "active" : "")">
+                                        <a class="page-link" asp-action="Audit" asp-route-tab="STANDARD" asp-route-pageStandard="@i">@i</a>
+                                    </li>
+                                }
+                                <li class="page-item @(Model.StandardPage >= standardTotalPages ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="STANDARD" asp-route-pageStandard="@(Model.StandardPage + 1)" aria-label="Next">&raquo;</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    }
+                </div>
+
+                <!-- FGA Tab Pane -->
+                <div class="tab-pane fade @(Model.ActiveTab == "FGA" ? "show active" : "")" id="fga" role="tabpanel" aria-labelledby="fga-tab">
+                    <h5 class="card-title">Kết quả Audit (Fine-Grained)</h5>
+                    <p class="card-text">Tương tự Standard Audit nhưng có thể được cấu hình với điều kiện phức tạp hơn.</p>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Thời gian</th>
+                                    <th>Policy</th>
+                                    <th>Bảng</th>
+                                    <th>Hành động</th>
+                                    <th>SQL thực thi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.FgaRecords == null || !Model.FgaRecords.Any())
+                                {
+                                    <tr><td colspan="5" class="text-center">Không tìm thấy dữ liệu audit nào.</td></tr>
+                                }
+                                else
+                                {
+                                    @foreach (var record in Model.FgaRecords)
+                                    {
+                                        <tr>
+                                            <td>@record.Timestamp?.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                            <td>@record.PerformedBy</td>
+                                            <td>@record.TableName</td>
+                                            <td><span class="badge badge-success">@record.Action</span></td>
+                                            <td><div style="max-height: 100px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.8em; white-space: pre-wrap; word-break: break-all;">@record.SqlText</div></td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @{
+                        var fgaTotalPages = (int)Math.Ceiling((double)(Model.FgaTotal) / Model.PageSize);
+                    }
+                    @if (fgaTotalPages > 1)
+                    {
+                        <nav aria-label="FGA pagination">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item @(Model.FgaPage == 1 ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="FGA" asp-route-pageFga="@(Model.FgaPage - 1)" aria-label="Previous">&laquo;</a>
+                                </li>
+                                @for (int i = 1; i <= fgaTotalPages; i++)
+                                {
+                                    <li class="page-item @(i == Model.FgaPage ? "active" : "")">
+                                        <a class="page-link" asp-action="Audit" asp-route-tab="FGA" asp-route-pageFga="@i">@i</a>
+                                    </li>
+                                }
+                                <li class="page-item @(Model.FgaPage >= fgaTotalPages ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="FGA" asp-route-pageFga="@(Model.FgaPage + 1)" aria-label="Next">&raquo;</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Logic to switch tabs via URL
+        $(function () {
+            var hash = window.location.hash;
+            if (hash) {
+                $('#audit-tabs a[href="' + hash + '"]').tab('show');
+            }
+
+            $('#audit-tabs a').on('shown.bs.tab', function (e) {
+                window.location.hash = e.target.hash;
+            });
+        });
+    </script>
+}
+

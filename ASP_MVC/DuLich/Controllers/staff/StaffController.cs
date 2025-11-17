@@ -439,6 +439,9 @@ RETURNING MAANH INTO :id";
             return View(bookings);
         }
 
+        [HttpGet]
+        public IActionResult Invoices() => View();
+
         public async Task<IActionResult> TourDetails(int id)
         {
              var tour = await _context.Tours

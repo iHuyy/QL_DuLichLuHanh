@@ -4,151 +4,132 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<!-- Page Banner Start -->
-<section class="page-banner-area pt-50 pb-35 rel z-1 bgs-cover"
-    style="background-image: url(@Url.Content("~/customer/assets/images/banner/banner.jpg"));">
-    <div class="container">
-        <div class="banner-inner text-white">
-            <h2 class="page-title mb-10" data-aos="fade-left" data-aos-duration="1500" data-aos-offset="50">@ViewData["Title"]
-            </h2>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb justify-content-center mb-20" data-aos="fade-right" data-aos-delay="200"
-                    data-aos-duration="1500" data-aos-offset="50">
-                    <li class="breadcrumb-item"><a href="/">Trang chủ</a></li>
-                    <li class="breadcrumb-item active">@ViewData["Title"]</li>
-                </ol>
-            </nav>
+@section Hero {
+    <div class="container-fluid bg-primary py-5 mb-5 hero-header">
+        <div class="container text-center py-5">
+            <h1 class="display-4 text-white mb-3">Đặt tour - @Model.TourTitle</h1>
+            <p class="text-white-50">Hoàn tất thông tin cho chuyến đi sắp tới của bạn.</p>
         </div>
     </div>
-</section>
-<!-- Page Banner End -->
+}
 
-<section class="container" style="margin-top:50px; margin-bottom: 100px">
-    <form asp-controller="Customer" asp-action="Booking" asp-route-id="@Model.TourId" method="post" class="booking-container">
-        @Html.AntiForgeryToken()
-        <input type="hidden" asp-for="TourId" />
-
-        <!-- Contact Information -->
-        <div class="booking-info">
-            <h2 class="booking-header">Thông Tin Liên Lạc</h2>
-            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
-            <div class="booking__infor">
-                <div class="form-group">
-                    <label asp-for="FullName">Họ và tên*</label>
-                    <input asp-for="FullName" class="form-control" placeholder="Nhập Họ và tên">
-                    <span asp-validation-for="FullName" class="text-danger"></span>
-                </div>
-
-                <div class="form-group">
-                    <label asp-for="Email">Email*</label>
-                    <input asp-for="Email" class="form-control" placeholder="sample@gmail.com">
-                    <span asp-validation-for="Email" class="text-danger"></span>
-                </div>
-
-                <div class="form-group">
-                    <label asp-for="PhoneNumber">Số điện thoại*</label>
-                    <input asp-for="PhoneNumber" class="form-control" placeholder="Nhập số điện thoại liên hệ">
-                    <span asp-validation-for="PhoneNumber" class="text-danger"></span>
-                </div>
-
-                <div class="form-group">
-                    <label asp-for="Address">Địa chỉ</label>
-                    <input asp-for="Address" class="form-control" placeholder="Nhập địa chỉ liên hệ">
-                    <span asp-validation-for="Address" class="text-danger"></span>
-                </div>
-            </div>
-
-            <!-- Passenger Details -->
-            <h2 class="booking-header">Hành Khách</h2>
-            <div class="booking__quantity">
-                <div class="form-group quantity-selector">
-                    <label>Người lớn</label>
-                    <div class="input__quanlity">
-                        <button type="button" class="quantity-btn" onclick="updateQuantity('numAdults', -1)">-</button>
-                        <input asp-for="NumAdults" id="NumAdults" class="quantity-input" min="1" readonly>
-                        <button type="button" class="quantity-btn" onclick="updateQuantity('numAdults', 1)">+</button>
-                    </div>
-                    <span asp-validation-for="NumAdults" class="text-danger"></span>
-                </div>
-
-                <div class="form-group quantity-selector">
-                    <label>Trẻ em</label>
-                    <div class="input__quanlity">
-                        <button type="button" class="quantity-btn"
-                            onclick="updateQuantity('numChildren', -1)">-</button>
-                        <input asp-for="NumChildren" id="NumChildren" class="quantity-input" min="0" readonly>
-                        <button type="button" class="quantity-btn" onclick="updateQuantity('numChildren', 1)">+</button>
-                    </div>
-                    <span asp-validation-for="NumChildren" class="text-danger"></span>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label asp-for="SpecialRequest">Yêu cầu đặc biệt</label>
-                <textarea asp-for="SpecialRequest" class="form-control" rows="3"
-                    placeholder="Nếu bạn có yêu cầu đặc biệt, hãy cho chúng tôi biết."></textarea>
-            </div>
-
-            <!-- Privacy Agreement Section -->
-            <div class="privacy-section">
-                <p>Bằng cách nhấp chuột vào nút "Xác Nhận" dưới đây, Khách hàng đồng ý rằng các điều kiện điều khoản này
-                    sẽ được áp dụng.</p>
-                <div class="privacy-checkbox">
-                    <input asp-for="AgreeToTerms" type="checkbox">
-                    <label asp-for="AgreeToTerms">Tôi đã đọc và đồng ý với <a href="#" target="_blank">Điều khoản thanh
-                            toán</a></label>
-                </div>
-                <span asp-validation-for="AgreeToTerms" class="text-danger"></span>
-            </div>
-        </div>
-
-        <!-- Order Summary -->
-        <div class="booking-summary">
-            <div class="summary-section">
-                <div>
-                    <p>Mã tour : @Model.TourId</p>
-                    <h5 class="widget-title">@Model.TourTitle</h5>
-                    <p>Ngày khởi hành : @Model.StartDate?.ToString("dd-MM-yyyy")</p>
-                    <p class="quantityAvailable">Số chỗ còn nhận : @Model.AvailableSlots</p>
-                </div>
-
-                <div class="order-summary">
-                    <!-- Hidden numeric values for reliable JS parsing -->
-                    <input type="hidden" id="PriceAdultValue" value="@Model.PriceAdult" />
-                    <input type="hidden" id="PriceChildValue" value="@Model.PriceChild" />
-                    <div class="summary-item">
-                        <span>Người lớn:</span>
-                        <div>
-                            <span id="summaryAdults">@Model.NumAdults</span>
-                            <span>X</span>
-                            <span id="pricePerAdult">@Model.PriceAdult.ToString("N0") VNĐ</span>
+<div class="row g-5 align-items-start">
+    <div class="col-lg-7">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <h4 class="mb-4">Thông tin liên hệ</h4>
+                <form asp-controller="Customer" asp-action="Booking" asp-route-id="@Model.TourId" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="TourId" />
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="FullName" class="form-label">Họ và tên</label>
+                            <input asp-for="FullName" class="form-control" placeholder="Nguyễn Văn A" />
+                            <span asp-validation-for="FullName" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="PhoneNumber" class="form-label">Số điện thoại</label>
+                            <input asp-for="PhoneNumber" class="form-control" placeholder="0968 xxx xxx" />
+                            <span asp-validation-for="PhoneNumber" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Email" class="form-label">Email</label>
+                            <input asp-for="Email" class="form-control" placeholder="ban@example.com" />
+                            <span asp-validation-for="Email" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Address" class="form-label">Địa chỉ</label>
+                            <input asp-for="Address" class="form-control" placeholder="Số nhà, đường, quận/huyện" />
+                            <span asp-validation-for="Address" class="text-danger small"></span>
                         </div>
                     </div>
-                    <div class="summary-item">
-                        <span>Trẻ em:</span>
-                        <div>
-                            <span id="summaryChildren">@Model.NumChildren</span>
-                            <span>X</span>
-                            <span id="pricePerChild">@Model.PriceChild.ToString("N0") VNĐ</span>
+
+                    <hr class="my-4" />
+                    <h4 class="mb-3">Hành khách</h4>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Người lớn</label>
+                            <div class="input-group">
+                                <button type="button" class="btn btn-outline-secondary" onclick="updateQuantity('numAdults', -1)">-</button>
+                                <input asp-for="NumAdults" id="NumAdults" class="form-control text-center" readonly />
+                                <button type="button" class="btn btn-outline-secondary" onclick="updateQuantity('numAdults', 1)">+</button>
+                            </div>
+                            <span asp-validation-for="NumAdults" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Trẻ em</label>
+                            <div class="input-group">
+                                <button type="button" class="btn btn-outline-secondary" onclick="updateQuantity('numChildren', -1)">-</button>
+                                <input asp-for="NumChildren" id="NumChildren" class="form-control text-center" readonly />
+                                <button type="button" class="btn btn-outline-secondary" onclick="updateQuantity('numChildren', 1)">+</button>
+                            </div>
+                            <span asp-validation-for="NumChildren" class="text-danger small"></span>
                         </div>
                     </div>
-                    <div class="summary-item total-price">
-                        <span>Tổng cộng:</span>
-                        <span id="totalPrice">@((Model.NumAdults * Model.PriceAdult + Model.NumChildren * Model.PriceChild).ToString("N0")) VNĐ</span>
-                    </div>
-                </div>
 
-                <button type="submit" class="theme-btn style-two w-100">Xác Nhận Đặt Tour <i class="fas fa-angle-right"></i></button>
+                    <div class="mt-4">
+                        <label asp-for="SpecialRequest" class="form-label">Yêu cầu đặc biệt</label>
+                        <textarea asp-for="SpecialRequest" class="form-control" rows="3" placeholder="Thông tin thêm dành cho tư vấn viên..."></textarea>
+                    </div>
+
+                    <div class="form-check mt-4">
+                        <input asp-for="AgreeToTerms" class="form-check-input" type="checkbox" id="agreeTerms">
+                        <label class="form-check-label" for="agreeTerms">
+                            Tôi đã đọc và đồng ý với <a href="/Home/Privacy" target="_blank">điều khoản thanh toán</a>.
+                        </label>
+                        <span asp-validation-for="AgreeToTerms" class="text-danger small d-block"></span>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary rounded-pill px-5 mt-4">Xác nhận đặt tour</button>
+                </form>
             </div>
         </div>
-    </form>
-</section>
+    </div>
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h4 class="mb-4">Thông tin tour</h4>
+                <p class="text-uppercase text-muted mb-1">Mã tour</p>
+                <h5 class="fw-bold">@Model.TourId</h5>
+                <p class="text-uppercase text-muted mt-3 mb-1">Ngày khởi hành</p>
+                <h5 class="fw-bold">@Model.StartDate?.ToString("dd/MM/yyyy")</h5>
+                <p class="text-uppercase text-muted mt-3 mb-1">Số chỗ còn lại</p>
+                <h5 class="fw-bold">@Model.AvailableSlots</h5>
+
+                <hr class="my-4" />
+                <h4 class="mb-3">Tạm tính</h4>
+                <input type="hidden" id="PriceAdultValue" value="@Model.PriceAdult" />
+                <input type="hidden" id="PriceChildValue" value="@Model.PriceChild" />
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Người lớn</span>
+                    <span id="summaryAdults">@Model.NumAdults</span>
+                </div>
+                <div class="d-flex justify-content-between text-muted mb-2">
+                    <small>Đơn giá</small>
+                    <small id="pricePerAdult">@Model.PriceAdult.ToString("N0") VNĐ</small>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Trẻ em</span>
+                    <span id="summaryChildren">@Model.NumChildren</span>
+                </div>
+                <div class="d-flex justify-content-between text-muted mb-2">
+                    <small>Đơn giá</small>
+                    <small id="pricePerChild">@Model.PriceChild.ToString("N0") VNĐ</small>
+                </div>
+                <div class="d-flex justify-content-between border-top pt-3 mt-3">
+                    <span class="fw-bold">Tổng cộng</span>
+                    <span id="totalPrice" class="fs-5 fw-bold text-primary">@((Model.NumAdults * Model.PriceAdult + Model.NumChildren * Model.PriceChild).ToString("N0")) VNĐ</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
     <script>
-    // Read numeric values from hidden inputs to avoid formatting/locale issues
-    const priceAdult = Number(document.getElementById('PriceAdultValue').value) || 0;
-    const priceChild = Number(document.getElementById('PriceChildValue').value) || 0;
+        const priceAdult = Number(document.getElementById('PriceAdultValue').value) || 0;
+        const priceChild = Number(document.getElementById('PriceChildValue').value) || 0;
 
         function updateQuantity(field, change) {
             const input = document.getElementById(field === 'numAdults' ? 'NumAdults' : 'NumChildren');
@@ -179,12 +160,8 @@
             document.getElementById('totalPrice').innerText = total.toLocaleString('vi-VN') + ' VNĐ';
         }
 
-        // Initial call to set summary
         document.addEventListener('DOMContentLoaded', function () {
             updateSummary();
-            
-            document.getElementById('NumAdults').addEventListener('input', updateSummary);
-            document.getElementById('NumChildren').addEventListener('input', updateSummary);
         });
     </script>
 }

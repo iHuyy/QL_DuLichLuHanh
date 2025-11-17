@@ -1,4 +1,6 @@
+using System;
 using System.Data.Common;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -18,17 +20,52 @@ namespace DuLich.Models.Data
 
         public override async Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData, CancellationToken cancellationToken = default)
         {
-            var identifier = _httpContextAccessor?.HttpContext?.User?.FindFirst("ChiNhanh")?.Value;
+            // Get the username and role/branch from the HttpContext
+            var user = _httpContextAccessor?.HttpContext?.User;
+            var identifier = user?.Identity?.Name;
+            var role = user?.FindFirst(ClaimTypes.Role)?.Value;
+            var branchClaim = user?.FindFirst("MaChiNhanh")?.Value;
 
-            if (!string.IsNullOrEmpty(identifier) && connection is OracleConnection oraConn)
+            if (connection is OracleConnection oraConn)
             {
-                using var cmd = oraConn.CreateCommand();
-                cmd.CommandText = "BEGIN DBMS_SESSION.SET_IDENTIFIER(:id); END;";
-                var p = cmd.CreateParameter();
-                p.ParameterName = "id";
-                p.Value = identifier;
-                cmd.Parameters.Add(p);
-                await cmd.ExecuteNonQueryAsync(cancellationToken);
+                try
+                {
+                    using var cmd = oraConn.CreateCommand();
+                    cmd.BindByName = true;
+                    cmd.CommandText = @"
+BEGIN
+  TADMIN.pkg_tour_management.set_user_context(:role_name, :branch_id);
+  DBMS_SESSION.SET_IDENTIFIER(:identifier);
+END;";
+
+                    // role context
+                    var pRole = cmd.CreateParameter();
+                    pRole.ParameterName = "role_name";
+                    pRole.Value = (object?)role ?? DBNull.Value;
+                    cmd.Parameters.Add(pRole);
+
+                    // branch context (nullable integer)
+                    var pBranch = cmd.CreateParameter();
+                    pBranch.ParameterName = "branch_id";
+                    if (int.TryParse(branchClaim, out var branchId))
+                        pBranch.Value = branchId;
+                    else
+                        pBranch.Value = DBNull.Value;
+                    pBranch.DbType = System.Data.DbType.Int32;
+                    cmd.Parameters.Add(pBranch);
+
+                    // identifier for auditing
+                    var pId = cmd.CreateParameter();
+                    pId.ParameterName = "identifier";
+                    pId.Value = (object?)identifier ?? DBNull.Value;
+                    cmd.Parameters.Add(pId);
+
+                    await cmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+                catch
+                {
+                    // Do not block requests if context setting fails
+                }
             }
 
             await base.ConnectionOpenedAsync(connection, eventData, cancellationToken);

@@ -10,6 +10,12 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using DuLich.Models.Data;
 using Microsoft.AspNetCore.Hosting;
 using System.IO;
+using System.Data;
+using System.Data.Common;
+using System.Linq;
+using Oracle.ManagedDataAccess.Client;
+using System;
+using System.Threading.Tasks;
 
 namespace DuLich.Controllers
 {
@@ -18,11 +24,14 @@ namespace DuLich.Controllers
     {
         private readonly OracleAuthService _authService;
         private readonly IWebHostEnvironment _env;
+        private readonly BackupSshService _backupSshService;
+        private const int AuditPageSize = 20;
 
-        public AdminController(OracleAuthService authService, ApplicationDbContext context, IWebHostEnvironment env) : base(context)
+        public AdminController(OracleAuthService authService, ApplicationDbContext context, IWebHostEnvironment env, BackupSshService backupSshService) : base(context)
         {
             _authService = authService;
             _env = env;
+            _backupSshService = backupSshService;
         }
 
         [AllowAnonymous]
@@ -94,6 +103,320 @@ namespace DuLich.Controllers
             return View();
         }
 
+        [HttpGet]
+        [Route("Admin/Bookings")]
+        public IActionResult Bookings()
+        {
+            return View();
+        }
+
+        [HttpGet]
+        [Route("Admin/Invoices")]
+        public IActionResult Invoices()
+        {
+            return View();
+        }
+
+        [HttpGet]
+        [Route("Admin/BookingDetails/{id}")]
+        public IActionResult BookingDetails(int id)
+        {
+            // Placeholder to avoid broken links; detail view can be expanded later
+            TempData["Info"] = $"Chi tiết đặt tour #{id} chưa được triển khai. Vui lòng thao tác trực tiếp tại danh sách.";
+            return RedirectToAction("Bookings");
+        }
+
+        [HttpGet]
+        [Route("Admin/BackupRestore")]
+        public IActionResult BackupRestore()
+        {
+            var history = _context.BackupHistories
+                .OrderByDescending(h => h.RequestedAt)
+                .Take(100)
+                .ToList();
+
+            var model = new BackupRestoreViewModel
+            {
+                History = history.Select(h => new BackupHistoryItem
+                {
+                    Id = h.Id,
+                    Type = h.ActionType,
+                    StartedAt = h.RequestedAt,
+                    FinishedAt = h.CompletedAt,
+                    Status = h.Status,
+                    Location = h.Target ?? string.Empty,
+                    Note = h.Notes ?? string.Empty
+                }).ToList()
+            };
+
+            return View("BackupRestore", model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Route("Admin/Backup/Run")]
+        public async Task<IActionResult> RunBackup(string type)
+        {
+            var action = type?.ToUpper() == "INCREMENTAL" ? "Sao lưu thay đổi (Incremental)" : "Sao lưu toàn bộ (Full)";
+            var record = await CreateBackupHistoryAsync(action, "Đang chạy", null, "Khởi tạo từ UI admin");
+
+            try
+            {
+                var exec = _backupSshService.RunBackup(type?.ToUpper() == "INCREMENTAL" ? "INCREMENTAL" : "FULL");
+                record.Target = string.IsNullOrWhiteSpace(exec.BackupPath) ? record.Target : exec.BackupPath;
+                record.Status = exec.ExitStatus == 0 ? "Hoàn tất" : "Thất bại";
+                record.CompletedAt = DateTime.Now;
+                record.Notes = TruncateNote(string.IsNullOrWhiteSpace(exec.Output) ? "Backup hoàn tất" : exec.Output);
+            }
+            catch (Exception ex)
+            {
+                record.Status = "Thất bại";
+                record.CompletedAt = DateTime.Now;
+                record.Notes = TruncateNote(ex.ToString());
+            }
+
+            _context.BackupHistories.Update(record);
+            await _context.SaveChangesAsync();
+
+            return RedirectToAction("BackupRestore");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Route("Admin/Backup/Restore")]
+        public async Task<IActionResult> RestoreBackup(int backupId)
+        {
+            var selected = await _context.BackupHistories.FirstOrDefaultAsync(b => b.Id == backupId);
+            if (selected == null)
+            {
+                TempData["Error"] = "Không tìm thấy bản sao lưu đã chọn.";
+                return RedirectToAction("BackupRestore");
+            }
+
+            var record = await CreateBackupHistoryAsync("Phục hồi", "Đang chạy", selected.Target, $"Phục hồi từ ID={selected.Id}");
+
+            try
+            {
+                var exec = _backupSshService.RunRestore(selected.Target ?? string.Empty);
+                record.Status = exec.ExitStatus == 0 ? "Hoàn tất" : "Thất bại";
+                record.CompletedAt = DateTime.Now;
+                record.Notes = TruncateNote(string.IsNullOrWhiteSpace(exec.Output) ? $"Phục hồi từ backup ID={selected.Id}" : exec.Output);
+            }
+            catch (Exception ex)
+            {
+                record.Status = "Thất bại";
+                record.CompletedAt = DateTime.Now;
+                record.Notes = TruncateNote(ex.ToString());
+            }
+
+            _context.BackupHistories.Update(record);
+            await _context.SaveChangesAsync();
+
+            return RedirectToAction("BackupRestore");
+        }
+
+        private async Task<BackupHistory> CreateBackupHistoryAsync(string actionType, string status, string? target, string? notes)
+        {
+            var nextId = (_context.BackupHistories.Max(b => (int?)b.Id) ?? 0) + 1;
+            var record = new BackupHistory
+            {
+                Id = nextId,
+                ActionType = actionType,
+                RequestedAt = DateTime.Now,
+                Status = status,
+                Target = target,
+                Notes = TruncateNote(notes),
+                RequestedBy = User?.Identity?.Name
+            };
+
+            _context.BackupHistories.Add(record);
+            await _context.SaveChangesAsync();
+            return record;
+        }
+
+        private static string TruncateNote(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+            const int maxLen = 490; // under DB column limit 500
+            return text.Length <= maxLen ? text : text.Substring(0, maxLen);
+        }
+
+        [HttpGet]
+        [Route("Admin/Audit")]
+        public async Task<IActionResult> Audit(string tab = "TRIGGER", int pageTrigger = 1, int pageStandard = 1, int pageFga = 1)
+        {
+            pageTrigger = pageTrigger < 1 ? 1 : pageTrigger;
+            pageStandard = pageStandard < 1 ? 1 : pageStandard;
+            pageFga = pageFga < 1 ? 1 : pageFga;
+
+            var model = new AdminAuditViewModel
+            {
+                ActiveTab = tab.ToUpper(),
+                PageSize = AuditPageSize,
+                TriggerPage = pageTrigger,
+                StandardPage = pageStandard,
+                FgaPage = pageFga
+            };
+
+            try
+            {
+                await using var conn = _context.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open)
+                {
+                    await conn.OpenAsync();
+                }
+
+                var trigger = await GetTriggerAuditRecords(conn, pageTrigger, AuditPageSize);
+                model.TriggerRecords = trigger.Records;
+                model.TriggerTotal = trigger.Total;
+
+                var standard = await GetStandardAuditRecords(conn, pageStandard, AuditPageSize);
+                model.StandardRecords = standard.Records;
+                model.StandardTotal = standard.Total;
+
+                var fga = await GetFgaAuditRecords(conn, pageFga, AuditPageSize);
+                model.FgaRecords = fga.Records;
+                model.FgaTotal = fga.Total;
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Không thể truy xuất dữ liệu audit. Lỗi: {ex.Message}";
+            }
+
+            return View(model);
+        }
+
+        private static int CalcOffset(int page, int pageSize) => (page - 1) * pageSize;
+
+        private async Task<(List<AuditRecord> Records, int Total)> GetTriggerAuditRecords(DbConnection conn, int page, int pageSize)
+        {
+            var records = new List<AuditRecord>();
+            var offset = CalcOffset(page, pageSize);
+            var countSql = "SELECT COUNT(*) FROM TADMIN.AUDIT_LOG_DETAIL";
+            var startRow = offset + 1;
+            var endRow = offset + pageSize;
+            var sql = $@"
+SELECT TableName, Action, ActionTimestamp, RecordId, OldValues, NewValues FROM (
+    SELECT t.*, ROW_NUMBER() OVER (ORDER BY ActionTimestamp DESC) rn
+    FROM TADMIN.AUDIT_LOG_DETAIL t
+)
+WHERE rn BETWEEN {startRow} AND {endRow}";
+            
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                records.Add(new AuditRecord
+                {
+                    TableName = reader["TABLENAME"]?.ToString() ?? string.Empty,
+                    Action = reader["ACTION"]?.ToString() ?? string.Empty,
+                    OldValue = reader["OLDVALUES"]?.ToString() ?? string.Empty,
+                    NewValue = reader["NEWVALUES"]?.ToString() ?? string.Empty,
+                    Timestamp = reader["ACTIONTIMESTAMP"] as DateTime?
+                });
+            }
+            await using var countCmd = conn.CreateCommand();
+            countCmd.CommandText = countSql;
+            var total = Convert.ToInt32(await countCmd.ExecuteScalarAsync());
+            return (records, total);
+        }
+
+        private async Task<(List<AuditRecord> Records, int Total)> GetStandardAuditRecords(DbConnection conn, int page, int pageSize)
+        {
+            var records = new List<AuditRecord>();
+            var offset = CalcOffset(page, pageSize);
+            var countSql = @"
+SELECT COUNT(*) FROM UNIFIED_AUDIT_TRAIL
+WHERE OBJECT_SCHEMA = 'TADMIN' AND FGA_POLICY_NAME IS NULL";
+            var startRow = offset + 1;
+            var endRow = offset + pageSize;
+            var sql = $@"
+SELECT OBJECT_NAME, ACTION_NAME, SQL_TEXT, DBUSERNAME, EVENT_TIMESTAMP FROM (
+    SELECT u.*, ROW_NUMBER() OVER (ORDER BY EVENT_TIMESTAMP DESC) rn
+    FROM UNIFIED_AUDIT_TRAIL u
+    WHERE OBJECT_SCHEMA = 'TADMIN' AND FGA_POLICY_NAME IS NULL
+)
+WHERE rn BETWEEN {startRow} AND {endRow}";
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                records.Add(new AuditRecord
+                {
+                    TableName = reader["OBJECT_NAME"]?.ToString() ?? string.Empty,
+                    Action = reader["ACTION_NAME"]?.ToString() ?? string.Empty,
+                    SqlText = reader["SQL_TEXT"]?.ToString() ?? string.Empty,
+                    PerformedBy = reader["DBUSERNAME"]?.ToString() ?? string.Empty,
+                    Timestamp = reader["EVENT_TIMESTAMP"] as DateTime?
+                });
+            }
+            await using var countCmd = conn.CreateCommand();
+            countCmd.CommandText = countSql;
+            var total = Convert.ToInt32(await countCmd.ExecuteScalarAsync());
+            return (records, total);
+        }
+
+        private async Task<(List<AuditRecord> Records, int Total)> GetFgaAuditRecords(DbConnection conn, int page, int pageSize)
+        {
+            var records = new List<AuditRecord>();
+            var offset = CalcOffset(page, pageSize);
+            var countSql = @"
+SELECT
+    (SELECT COUNT(*) FROM UNIFIED_AUDIT_TRAIL WHERE OBJECT_SCHEMA = 'TADMIN' AND FGA_POLICY_NAME IS NOT NULL)
+  + (SELECT COUNT(*) FROM DBA_FGA_AUDIT_TRAIL WHERE OBJECT_SCHEMA = 'TADMIN') AS TOTAL_COUNT
+FROM dual";
+            var startRow = offset + 1;
+            var endRow = offset + pageSize;
+            var sql = $@"
+SELECT OBJECT_NAME, ACTION_NAME, SQL_TEXT, POLICY_NAME, TS FROM (
+    SELECT innerq.*, ROW_NUMBER() OVER (ORDER BY TS DESC) rn FROM (
+        SELECT
+            CAST(OBJECT_NAME AS NVARCHAR2(128)) AS OBJECT_NAME,
+            CAST(ACTION_NAME AS NVARCHAR2(100)) AS ACTION_NAME,
+            CAST(DBMS_LOB.SUBSTR(SQL_TEXT, 1800, 1) AS NVARCHAR2(1800)) AS SQL_TEXT,
+            CAST(FGA_POLICY_NAME AS NVARCHAR2(200)) AS POLICY_NAME,
+            CAST(EVENT_TIMESTAMP AS TIMESTAMP) AS TS
+        FROM UNIFIED_AUDIT_TRAIL
+        WHERE OBJECT_SCHEMA = 'TADMIN' AND FGA_POLICY_NAME IS NOT NULL
+        UNION ALL
+        SELECT
+            CAST(OBJECT_NAME AS NVARCHAR2(128)) AS OBJECT_NAME,
+            CAST(STATEMENT_TYPE AS NVARCHAR2(100)) AS ACTION_NAME,
+            CAST(DBMS_LOB.SUBSTR(SQL_TEXT, 1800, 1) AS NVARCHAR2(1800)) AS SQL_TEXT,
+            CAST(POLICY_NAME AS NVARCHAR2(200)) AS POLICY_NAME,
+            CAST(TIMESTAMP AS TIMESTAMP) AS TS
+        FROM DBA_FGA_AUDIT_TRAIL
+        WHERE OBJECT_SCHEMA = 'TADMIN'
+    ) innerq
+)
+WHERE rn BETWEEN {startRow} AND {endRow}";
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                records.Add(new AuditRecord
+                {
+                    TableName = reader["OBJECT_NAME"]?.ToString() ?? string.Empty,
+                    Action = reader["ACTION_NAME"]?.ToString() ?? string.Empty,
+                    SqlText = reader["SQL_TEXT"]?.ToString() ?? string.Empty,
+                    PerformedBy = reader["POLICY_NAME"]?.ToString() ?? string.Empty,
+                    Timestamp = reader["TS"] as DateTime?
+                });
+            }
+            await using var countCmd = conn.CreateCommand();
+            countCmd.CommandText = countSql;
+            var total = Convert.ToInt32(await countCmd.ExecuteScalarAsync());
+            return (records, total);
+        }
+
         [HttpPost]
         [Route("Admin/Logout")]
         public async Task<IActionResult> Logout()
@@ -131,7 +454,7 @@ namespace DuLich.Controllers
                             if (sess != null)
                             {
                                 _context.UserSessions.Remove(sess);
-                                await _context.SaveChangesAsync();
+await _context.SaveChangesAsync();
                             }
                         }
                     }

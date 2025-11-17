@@ -23,7 +23,8 @@ namespace DuLich.Middlewares
                 var path = context.Request.Path.Value ?? string.Empty;
 
                 // Skip validation for static assets and auth endpoints
-                if (path.StartsWith("/Customer/Login", StringComparison.OrdinalIgnoreCase)
+                if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
+                    || path.StartsWith("/Customer/Login", StringComparison.OrdinalIgnoreCase)
                     || path.StartsWith("/Customer/Register", StringComparison.OrdinalIgnoreCase)
                     || path.StartsWith("/css", StringComparison.OrdinalIgnoreCase)
                     || path.StartsWith("/js", StringComparison.OrdinalIgnoreCase)

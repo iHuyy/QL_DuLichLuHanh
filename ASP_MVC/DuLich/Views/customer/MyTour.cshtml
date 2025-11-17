@@ -1,136 +1,92 @@
+@using System.Linq
 @model DuLich.Models.MyTourViewModel
 @{
-    ViewData["Title"] = "My Tours";
+    ViewData["Title"] = "Tour của tôi";
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<!-- Tour List Area start -->
-<section class="tour-list-page py-100 rel z-1">
-    <div class="container">
-        <div class="row">
-            <div class="col-lg-3 col-md-6 col-sm-10 rmb-75">
-                <div class="shop-sidebar mb-30">
-                    @if (Model.PopularTours != null && Model.PopularTours.Any())
-                    {
-                        <div class="widget widget-tour" data-aos="fade-up" data-aos-duration="1500"
-                            data-aos-offset="50">
-                            <h6 class="widget-title">Phổ biến Tours</h6>
-                            @foreach (var tour in Model.PopularTours)
-                            {
-                                <div class="destination-item tour-grid style-three bgc-lighter">
-                                    <div class="image">
-                                        @if (tour.Images != null && tour.Images.Any())
-                                        {
-                                            <img src="@Url.Content("~/admin/assets/images/gallery-tours/" + tour.Images[0])" alt="Tour">
-                                        }
-                                    </div>
-                                    <div class="content">
-                                        <div class="destination-header">
-                                            <span class="location"><i class="fal fa-map-marker-alt"></i>
-                                                @tour.Destination</span>
-                                            <div class="ratting">
-                                                <i class="fas fa-star"></i>
-                                                <span>@tour.Rating</span>
-                                            </div>
-                                        </div>
-                                        <h6><a href="@Url.Action("TourDetail", "Customer", new { id = tour.MaTour })">@tour.Title</a>
-                                        </h6>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
+@section Hero {
+    <div class="container-fluid bg-primary py-5 mb-5 hero-header">
+        <div class="container text-center py-5">
+            <h1 class="display-5 text-white mb-3">Tour đã đặt</h1>
+            <p class="text-white-50">Theo dõi trạng thái đặt chỗ, đánh giá và tiếp tục hành trình cùng DuLich.</p>
+        </div>
+    </div>
+}
 
-            </div>
-            <div class="col-lg-9">
-                @if (Model.MyTours != null && Model.MyTours.Any())
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h5 class="mb-4">Tours phổ biến</h5>
+                @if (Model.PopularTours != null && Model.PopularTours.Any())
                 {
-                    @foreach (var tour in Model.MyTours)
+                    foreach (var tour in Model.PopularTours.Take(4))
                     {
-                        <div class="destination-item style-three bgc-lighter" data-aos="fade-up" data-aos-duration="1500"
-                            data-aos-offset="50">
-                            <div class="image">
-                                @if (tour.BookingStatus == "b")
-                                {
-                                    <span class="badge">Đợi xác nhận</span>
-                                }
-                                else if (tour.BookingStatus == "y")
-                                {
-                                    <span class="badge bgc-pink">Sắp khởi hành</span>
-                                }
-                                else if (tour.BookingStatus == "f")
-                                {
-                                    <span class="badge bgc-primary">Hoàn thành</span>
-                                }
-                                else if (tour.BookingStatus == "c")
-                                {
-                                    <span class="badge" style="background-color: red">Đã hủy</span>
-                                }
-
-                                @if (tour.Images != null && tour.Images.Any())
-                                {
-                                    <img src="@Url.Content("~/admin/assets/images/gallery-tours/" + tour.Images[0])" alt="Tour List">
-                                }
-                            </div>
-                            <div class="content">
-                                <div class="destination-header">
-                                    <span class="location"><i
-                                            class="fal fa-map-marker-alt"></i>@tour.Destination</span>
-                                    <div class="ratting">
-                                        @for (int i = 0; i < 5; i++)
-                                        {
-                                            @if (tour.Rating > 0 && i < tour.Rating)
-                                            {
-                                                <i class="fas fa-star"></i>
-                                            }
-                                            else
-                                            {
-                                                <i class="far fa-star"></i>
-                                            }
-                                        }
-
-                                    </div>
-                                </div>
-                                <h5><a
-                                        href="@Url.Action("TourBooked", "Customer", new { bookingId = tour.BookingId, checkoutId = tour.CheckoutId })">@tour.Title</a>
-                                </h5>
-                                <div class="truncate-3-lines">
-                                    @Html.Raw(tour.Description)
-                                </div>
-
-                                <ul class="blog-meta">
-                                    <li><i class="far fa-clock"></i>@tour.Time</li>
-                                    <li><i class="far fa-user"></i> @(tour.NumAdults + tour.NumChildren) người</li>
-                                </ul>
-                                <div class="destination-footer">
-                                    <span class="price"><span>@tour.TotalPrice.ToString("N0")</span>/vnđ</span>
-                                    @if (tour.BookingStatus == "f")
-                                    {
-                                        <a href="@Url.Action("TourDetail", "Customer", new { id = tour.TourId })"
-                                            class="theme-btn style-two style-three">
-                                            @if (tour.Rating > 0)
-                                            {
-                                                <span data-hover="Đã đánh giá">Đã đánh giá</span>
-                                            }
-                                            else
-                                            {
-                                                <span data-hover="Đánh giá">Đánh giá</span>
-                                            }
-                                            <i class="fal fa-arrow-right"></i>
-                                        </a>
-                                    }
-                                </div>
+                        var image = tour.Images.FirstOrDefault() ?? "/customer/travel-agency/img/destination-1.jpg";
+                        <div class="d-flex mb-3">
+                            <img src="@image" alt="@tour.Title" class="rounded me-3" style="width: 80px; height: 60px; object-fit: cover;">
+                            <div>
+                                <h6 class="mb-1">@tour.Title</h6>
+                                <small class="text-muted"><i class="fa fa-map-marker-alt me-1 text-primary"></i>@tour.Destination</small>
                             </div>
                         </div>
                     }
                 }
                 else
                 {
-                    <p>Bạn chưa đặt tour nào.</p>
+                    <p class="text-muted">Chưa có gợi ý nào.</p>
                 }
             </div>
         </div>
     </div>
-</section>
-<!-- Tour List Area end -->
+    <div class="col-lg-8">
+        @if (Model.MyTours != null && Model.MyTours.Any())
+        {
+            foreach (var tour in Model.MyTours)
+            {
+                var image = tour.Images.FirstOrDefault() ?? "/customer/travel-agency/img/carousel-1.jpg";
+                var status = tour.BookingStatus?.ToLower() switch
+                {
+                    "b" => ("Chờ xác nhận", "warning"),
+                    "y" => ("Sắp khởi hành", "info"),
+                    "f" => ("Hoàn thành", "success"),
+                    "c" => ("Đã hủy", "danger"),
+                    _ => ("Không xác định", "secondary")
+                };
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="row g-0 align-items-center">
+                        <div class="col-md-4">
+                            <img src="@image" class="img-fluid rounded-start" alt="@tour.Title">
+                        </div>
+                        <div class="col-md-8">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="badge bg-@status.Item2 px-3 py-2">@status.Item1</span>
+                                    <span class="text-muted small"><i class="fa fa-calendar-alt me-1"></i>@tour.Time</span>
+                                </div>
+                                <h5 class="card-title">@tour.Title</h5>
+                                <p class="text-muted mb-3"><i class="fa fa-map-marker-alt text-primary me-1"></i>@tour.Destination</p>
+                                <p class="mb-3">@Html.Raw(tour.Description)</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <span class="fw-bold text-primary">@tour.TotalPrice.ToString("N0") VNĐ</span>
+                                        <small class="text-muted d-block">@(tour.NumAdults + tour.NumChildren) hành khách</small>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@tour.TourId" class="btn btn-outline-primary rounded-pill">Xem tour</a>
+                                        <a asp-controller="Customer" asp-action="TourBooked" asp-route-bookingId="@tour.BookingId" asp-route-checkoutId="@tour.CheckoutId" class="btn btn-primary rounded-pill">Chi tiết đơn</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="alert alert-info">Bạn chưa có tour nào. Bắt đầu khám phá ngay!</div>
+        }
+    </div>
+</div>

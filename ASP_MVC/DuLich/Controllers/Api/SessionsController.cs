@@ -62,7 +62,8 @@ namespace DuLich.Controllers.Api
 
             var result = sessions
                 .Where(s => s.SessionId != currentSessionId)
-                .Select(s => new {
+                .Select(s => new
+                {
                     session_id = s.SessionId,
                     device_type = s.DeviceType,
                     device_info = s.DeviceInfo,

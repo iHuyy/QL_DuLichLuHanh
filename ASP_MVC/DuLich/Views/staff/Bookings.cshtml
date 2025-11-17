@@ -1,12 +1,12 @@
-@{
-    ViewData["Title"] = "Quản lý đặt tour";
+﻿@{
+    ViewData["Title"] = "Quản lý booking";
     Layout = "~/Views/Shared/_StaffLayout.cshtml";
 }
 
 <div class="row page-titles mx-0">
     <div class="col-sm-6 p-md-0">
         <div class="welcome-text">
-            <h4>Quản lý đặt tour</h4>
+            <h4>Quản lý booking</h4>
         </div>
     </div>
 </div>
@@ -16,22 +16,21 @@
         <div class="card">
             <div class="card-body">
                 <div class="table-responsive">
-                    <table id="bookingsList" class="display" style="min-width: 845px">
+                    <table id="bookingsList" class="display table" style="min-width: 1100px">
                         <thead>
                             <tr>
-                                <th>Mã đơn</th>
-                                <th>Tour</th>
+                                <th>Tên tour</th>
                                 <th>Khách hàng</th>
+                                <th>Ngày đặt</th>
                                 <th>Số người lớn</th>
                                 <th>Số trẻ em</th>
-                                <th>Tổng tiền</th>
-                                <th>Ngày đặt</th>
+                                <th>Ngày bắt đầu</th>
                                 <th>Trạng thái</th>
-                                <th>Thao tác</th>
+                                <th>Tổng tiền</th>
+                                <th>Hành động</th>
                             </tr>
                         </thead>
-                        <tbody>
-                        </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
             </div>
@@ -39,178 +38,112 @@
     </div>
 </div>
 
-<!-- Modal xác nhận đơn -->
-<div class="modal fade" id="confirmBookingModal">
-    <div class="modal-dialog">
+<!-- Modal hiển thị hóa đơn -->
+<div class="modal fade" id="invoiceModal" tabindex="-1" role="dialog" aria-labelledby="invoiceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document" style="max-width: 90%;">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Xác nhận đơn đặt tour</h5>
-                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                <h5 class="modal-title" id="invoiceModalLabel">Hóa đơn</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
             </div>
-            <div class="modal-body">
-                <p>Bạn có chắc chắn muốn xác nhận đơn đặt tour này?</p>
-                <form id="confirmForm">
-                    <input type="hidden" id="bookingId" name="bookingId" />
-                    <div class="form-group">
-                        <label>Ghi chú</label>
-                        <textarea class="form-control" id="confirmNote" rows="3"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-danger light" data-dismiss="modal">Hủy</button>
-                <button type="button" class="btn btn-primary" onclick="confirmBooking()">Xác nhận</button>
+            <div class="modal-body" style="height: 80vh;">
+                <iframe id="invoiceFrame" src="" style="border: none; width: 100%; height: 100%;"></iframe>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal hủy đơn -->
-<div class="modal fade" id="cancelBookingModal">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Hủy đơn đặt tour</h5>
-                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-            </div>
-            <div class="modal-body">
-                <form id="cancelForm">
-                    <input type="hidden" id="cancelBookingId" name="bookingId" />
-                    <div class="form-group">
-                        <label>Lý do hủy <span class="text-danger">*</span></label>
-                        <textarea class="form-control" id="cancelReason" rows="3" required></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-info light" data-dismiss="modal">Đóng</button>
-                <button type="button" class="btn btn-danger" onclick="cancelBooking()">Hủy đơn</button>
-            </div>
-        </div>
-    </div>
-</div>
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+}
 
 @section Scripts {
+    <script src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script>
-        $(document).ready(function() {
+        $(document).ready(function () {
             loadBookings();
         });
+
+        function badgeStatus(status) {
+            if (!status) return '<span class="badge badge-secondary">Chưa xác nhận</span>';
+            const lower = status.toLowerCase();
+            if (lower.includes('huy')) return '<span class="badge badge-danger">Đã hủy</span>';
+            if (lower.includes('xac nhan')) return '<span class="badge badge-success">Đã xác nhận</span>';
+            return `<span class="badge badge-info">${status}</span>`;
+        }
 
         function loadBookings() {
             $('#bookingsList').DataTable({
                 ajax: '/staff/api/bookings',
-                order: [[6, 'desc']],
+                order: [[5, 'desc']],
                 columns: [
-                    { data: 'maDatTour' },
                     { data: 'tenTour' },
                     { data: 'tenKhachHang' },
+                    { data: 'ngayDat', render: d => d ? moment(d).format('DD/MM/YYYY') : '' },
                     { data: 'soNguoiLon' },
                     { data: 'soTreEm' },
-                    { 
+                    { data: 'ngayBatDau', render: d => d ? moment(d).format('DD/MM/YYYY') : '' },
+                    { data: 'trangThai', render: badgeStatus },
+                    {
                         data: 'tongTien',
-                        render: function(data) {
-                            return new Intl.NumberFormat('vi-VN', {
-                                style: 'currency',
-                                currency: 'VND'
-                            }).format(data);
-                        }
-                    },
-                    { 
-                        data: 'ngayDat',
-                        render: function(data) {
-                            return moment(data).format('DD/MM/YYYY HH:mm');
-                        }
-                    },
-                    { 
-                        data: 'trangThai',
-                        render: function(data) {
-                            return getStatusBadge(data);
+                        render: function (data) {
+                            return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(data);
                         }
                     },
                     {
                         data: null,
-                        render: function(data) {
-                            let buttons = `
-                                <div class="d-flex">
-                                    <a href="/staff/bookings/details/${data.maDatTour}" class="btn btn-primary shadow btn-xs sharp mr-1"><i class="fa fa-eye"></i></a>
-                            `;
-                            
-                            if (data.trangThai === 'Chờ xử lý') {
-                                buttons += `
-                                    <button onclick="showConfirmModal(${data.maDatTour})" class="btn btn-success shadow btn-xs sharp mr-1"><i class="fa fa-check"></i></button>
-                                    <button onclick="showCancelModal(${data.maDatTour})" class="btn btn-danger shadow btn-xs sharp"><i class="fa fa-times"></i></button>
-                                `;
+                        orderable: false,
+                        render: function (data) {
+                            const actions = [];
+                            actions.push(`<a href="/Staff/TourDetails/${data.maTour}" class="btn btn-primary btn-sm mr-1">Xem tour</a>`);
+                            const hasInvoice = !!data.maHoaDon;
+                            if (hasInvoice) {
+                                actions.push(`<button class="btn btn-success btn-sm mr-1" onclick="showInvoice(${data.maHoaDon})">Xem hóa đơn</button>`);
                             }
-                            
-                            buttons += '</div>';
-                            return buttons;
+                            const status = (data.trangThai || '').toLowerCase();
+                            const isCancelled = status.includes('huy');
+                            const isConfirmed = status.includes('xac nhan');
+                            if (!isConfirmed && !isCancelled) {
+                                actions.push(`<button class="btn btn-info btn-sm mr-1" onclick="confirmBooking(${data.maDatTour})">Xác nhận</button>`);
+                            }
+                            if (!isCancelled) {
+                                actions.push(`<button class="btn btn-danger btn-sm" onclick="cancelBooking(${data.maDatTour})">Hủy</button>`);
+                            }
+                            return actions.join('');
                         }
                     }
                 ]
             });
         }
 
-        function showConfirmModal(bookingId) {
-            $('#bookingId').val(bookingId);
-            $('#confirmBookingModal').modal('show');
+        function confirmBooking(id) {
+            $.post('/staff/api/bookings/confirm', { bookingId: id })
+                .done(() => {
+                    $('#bookingsList').DataTable().ajax.reload(null, false);
+                    toastr.success('Đã xác nhận booking và cập nhật hóa đơn');
+                })
+                .fail(() => toastr.error('Không xác nhận được booking'));
         }
 
-        function showCancelModal(bookingId) {
-            $('#cancelBookingId').val(bookingId);
-            $('#cancelBookingModal').modal('show');
+        function cancelBooking(id) {
+            if (!confirm('Bạn có chắc chắn muốn hủy booking này?')) return;
+            $.post('/staff/api/bookings/cancel', { bookingId: id, reason: 'Staff cancel' })
+                .done(() => {
+                    $('#bookingsList').DataTable().ajax.reload(null, false);
+                    toastr.success('Đã hủy booking');
+                })
+                .fail(() => toastr.error('Không hủy được booking'));
         }
 
-        function confirmBooking() {
-            const bookingId = $('#bookingId').val();
-            const note = $('#confirmNote').val();
-
-            $.ajax({
-                url: '/staff/api/bookings/confirm',
-                method: 'POST',
-                data: { bookingId, note },
-                success: function(response) {
-                    $('#confirmBookingModal').modal('hide');
-                    $('#bookingsList').DataTable().ajax.reload();
-                    toastr.success('Đã xác nhận đơn đặt tour thành công');
-                },
-                error: function(xhr) {
-                    toastr.error('Có lỗi xảy ra khi xác nhận đơn. Vui lòng thử lại sau.');
-                }
-            });
-        }
-
-        function cancelBooking() {
-            const bookingId = $('#cancelBookingId').val();
-            const reason = $('#cancelReason').val();
-
-            if (!reason) {
-                toastr.error('Vui lòng nhập lý do hủy đơn');
-                return;
-            }
-
-            $.ajax({
-                url: '/staff/api/bookings/cancel',
-                method: 'POST',
-                data: { bookingId, reason },
-                success: function(response) {
-                    $('#cancelBookingModal').modal('hide');
-                    $('#bookingsList').DataTable().ajax.reload();
-                    toastr.success('Đã hủy đơn đặt tour thành công');
-                },
-                error: function(xhr) {
-                    toastr.error('Có lỗi xảy ra khi hủy đơn. Vui lòng thử lại sau.');
-                }
-            });
-        }
-
-        function getStatusBadge(status) {
-            const badges = {
-                'Chờ xử lý': 'badge-warning',
-                'Đã xác nhận': 'badge-success',
-                'Đã hủy': 'badge-danger',
-                'Hoàn thành': 'badge-info'
-            };
-            return `<span class="badge ${badges[status] || 'badge-secondary'}">${status}</span>`;
+        function showInvoice(hoaDonId) {
+            if (!hoaDonId) return;
+            $('#invoiceFrame').attr('src', `/Customer/PrintInvoice?hoaDonId=${hoaDonId}`);
+            $('#invoiceModal').modal('show');
         }
     </script>
 }

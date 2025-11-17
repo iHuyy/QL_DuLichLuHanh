@@ -1,0 +1,144 @@
+@model DuLich.Models.BackupRestoreViewModel
+@{
+    ViewData["Title"] = "Sao lưu và phục hồi";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="page-title-box d-flex align-items-center justify-content-between">
+            <div>
+                <h4 class="page-title mb-1">Sao lưu và phục hồi</h4>
+                <ol class="breadcrumb m-0">
+                    <li class="breadcrumb-item"><a asp-action="Dashboard">Admin</a></li>
+                    <li class="breadcrumb-item active">Sao lưu &amp; phục hồi</li>
+                </ol>
+            </div>
+            <span class="badge badge-primary">RMAN</span>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Cấu hình RMAN đang áp dụng</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-2">Bạn đã cấu hình trên máy DB (Linux). Hiển thị để admin nắm được chính sách.</p>
+                <pre class="bg-light p-3 border rounded small mb-0">@Model.RetentionPolicy
+@Model.ControlfileAutobackup
+@Model.ChannelFormat
+@Model.ArchivelogDeletionPolicy</pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="card-title mb-0">Thao tác sao lưu</h5>
+                    <small class="text-muted">Các nút dưới đây chỉ là thao tác quản lý hiển thị. Cần gắn API/SSH để chạy RMAN thực tế.</small>
+                </div>
+            </div>
+            <div class="card-body">
+                <form asp-action="RunBackup" asp-controller="Admin" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <button type="submit" name="type" value="FULL" class="btn btn-primary btn-block">
+                                <i class="fa fa-database mr-2"></i> Sao lưu toàn bộ
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <button type="submit" name="type" value="INCREMENTAL" class="btn btn-outline-primary btn-block">
+                                <i class="fa fa-sync-alt mr-2"></i> Sao lưu thay đổi
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                <div class="border-top pt-3">
+                    <h6>Phục hồi</h6>
+                    <form asp-action="RestoreBackup" asp-controller="Admin" method="post">
+                        @Html.AntiForgeryToken()
+                        <div class="form-row align-items-end">
+                            <div class="form-group col-md-8">
+                                <label for="restoreBackup">Chọn bản sao lưu để phục hồi</label>
+                                <select id="restoreBackup" name="backupId" class="form-control" required>
+                                    <option value="">-- Chọn backup --</option>
+                                    @foreach (var item in Model.History.Where(h => h.Status == "Hoàn tất"))
+                                    {
+                                        <option value="@item.Id">@($"{item.Type} - {item.StartedAt:dd/MM/yyyy HH:mm}")</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <button type="submit" class="btn btn-danger btn-block">
+                                    <i class="fa fa-undo mr-2"></i> Phục hồi
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    <p class="text-muted small mb-0">Ghi chú: Thực tế cần chạy RMAN `RESTORE DATABASE`/`RECOVER DATABASE` trên máy Linux; ở đây chỉ hiển thị lựa chọn.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Lịch sử sao lưu</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-bordered">
+                        <thead class="thead-dark">
+                            <tr>
+                                <th>#</th>
+                                <th>Loại</th>
+                                <th>Bắt đầu</th>
+                                <th>Kết thúc</th>
+                                <th>Trạng thái</th>
+                                <th>Đường dẫn</th>
+                                <th>Ghi chú</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.History == null || !Model.History.Any())
+                            {
+                                <tr><td colspan="7" class="text-center">Chưa có bản sao lưu nào.</td></tr>
+                            }
+                            else
+                            {
+                                foreach (var item in Model.History.OrderByDescending(h => h.StartedAt))
+                                {
+                                    <tr>
+                                        <td>@item.Id</td>
+                                        <td>@item.Type</td>
+                                        <td>@item.StartedAt:dd/MM/yyyy HH:mm</td>
+                                        <td>@(item.FinishedAt.HasValue ? item.FinishedAt.Value.ToString("dd/MM/yyyy HH:mm") : "—")</td>
+                                        <td>
+                                            @{
+                                                var badgeClass = item.Status switch
+                                                {
+                                                    "Hoàn tất" => "badge-success",
+                                                    "Đang chạy" => "badge-info",
+                                                    "Thất bại" => "badge-danger",
+                                                    _ => "badge-secondary"
+                                                };
+                                            }
+                                            <span class="badge @badgeClass">@item.Status</span>
+                                        </td>
+                                        <td class="text-monospace small">@item.Location</td>
+                                        <td>@item.Note</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,48 +1,176 @@
+@using System.Linq
 @model DuLich.Models.CustomerHomeViewModel
 @{
     ViewData["Title"] = "Trang chủ";
     Layout = "~/Views/Shared/_Layout.cshtml";
+    var destination = Context?.Request?.Query["destination"].ToString();
+    var startDate = Context?.Request?.Query["start_date"].ToString();
+    var endDate = Context?.Request?.Query["end_date"].ToString();
+    var keyword = Context?.Request?.Query["keyword"].ToString();
 }
 
-<div class="container-fluid mt-4">
-    <div class="row">
-        <div class="col-12 text-center mb-4">
-            <h2>Khám phá các tour</h2>
-            <p>Những hành trình được yêu thích nhất</p>
-        </div>
-    </div>
-
-    <div class="row">
-        @foreach (var tour in Model.Tours)
-        {
-            var img = tour.Images.FirstOrDefault();
-            // Controller populates Images with API URLs like "/api/image/{id}".
-            // If present use it directly via Url.Content (works for absolute and app-relative paths),
-            // otherwise fall back to the default image.
-            var imgUrl = string.IsNullOrEmpty(img)
-                ? Url.Content("~/customer/assets/images/default-tour.jpg")
-                : Url.Content(img);
-            <div class="col-md-3 mb-4">
-                <div class="card">
-                    <img src="@imgUrl" class="card-img-top" alt="@tour.Title" style="height:200px; object-fit:cover;">
-                    <div class="card-body">
-                        <h5 class="card-title">@tour.Title</h5>
-                        <p class="card-text">@tour.Destination</p>
-                        <p class="card-text"><small class="text-muted">@tour.Time</small></p>
-                        <p class="card-text">Giá từ:
-                            @string.Format(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), "{0:N0}",
-                            tour.PriceAdult) VND</p>
-                    <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@tour.MaTour" class="btn btn-primary">Xem chi tiết</a>
+@section Hero {
+    <div class="container-fluid bg-primary py-5 mb-5 hero-header">
+        <div class="container py-5">
+            <div class="row justify-content-center">
+                <div class="col-lg-9 text-center">
+                    <h1 class="display-4 text-white mb-3 animated slideInDown">Tận hưởng kỳ nghỉ tuyệt vời cùng DuLich</h1>
+                    <p class="fs-5 text-white mb-4 animated slideInDown">Khám phá hàng trăm tour trong và ngoài nước, linh hoạt theo sở thích của bạn.</p>
+                    <form asp-controller="Customer" asp-action="Index" method="get" class="row g-2 bg-white rounded-pill px-3 py-2 mx-auto animated slideInDown">
+                        <div class="col-md-3">
+                            <input type="text" name="keyword" class="form-control border-0" placeholder="Từ khóa" value="@keyword" />
+                        </div>
+                        <div class="col-md-3">
+                            <input type="text" name="destination" class="form-control border-0" placeholder="Điểm đến" value="@destination" />
+                        </div>
+                        <div class="col-md-2">
+                            <input type="date" name="start_date" class="form-control border-0" value="@startDate" />
+                        </div>
+                        <div class="col-md-2">
+                            <input type="date" name="end_date" class="form-control border-0" value="@endDate" />
+                        </div>
+                        <div class="col-md-2 d-grid">
+                            <button type="submit" class="btn btn-primary rounded-pill">Tìm kiếm</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
-                }
+    </div>
+}
+
+<section class="mb-5">
+    <div class="text-center mx-auto mb-5 wow fadeInUp" data-wow-delay="0.1s" style="max-width: 600px;">
+        <h6 class="text-primary text-uppercase">Ưu đãi mới</h6>
+        <h2 class="mb-3">Tour nổi bật dành riêng cho bạn</h2>
+        <p>Chọn ngay tour phù hợp trong danh sách các điểm đến được yêu thích nhất tuần qua.</p>
+    </div>
+    <div class="row g-4">
+        @{
+            var toursToRender = Model.PopularTours.Any() ? Model.PopularTours : Model.Tours.Take(6).ToList();
+            var delay = 0.1;
+        }
+        @foreach (var tour in toursToRender)
+        {
+            var image = tour.Images.FirstOrDefault() ?? "/customer/travel-agency/img/destination-1.jpg";
+            <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="@($"{delay:0.0}")s">
+                <div class="package-item h-100 d-flex flex-column">
+                    <div class="overflow-hidden">
+                        <img class="img-fluid" src="@image" alt="@tour.Title">
+                    </div>
+                    <div class="d-flex border-bottom">
+                        <small class="flex-fill text-center border-end py-2"><i class="fa fa-map-marker-alt text-primary me-2"></i>@tour.Destination</small>
+                        <small class="flex-fill text-center border-end py-2"><i class="fa fa-calendar-alt text-primary me-2"></i>@tour.Time</small>
+                        <small class="flex-fill text-center py-2"><i class="fa fa-star text-primary me-2"></i>@tour.Rating.ToString("0.0")</small>
+                    </div>
+                    <div class="p-4 d-flex flex-column flex-grow-1">
+                        <h5 class="mb-3 text-center">@tour.Title</h5>
+                        <ul class="list-unstyled small text-muted mb-4">
+                            <li class="mb-1"><i class="fa fa-map-marker-alt text-primary me-2"></i>Điểm đến: @tour.Destination</li>
+                            <li class="mb-1"><i class="fa fa-calendar-alt text-primary me-2"></i>Khởi hành: @tour.Time</li>
+                            <li class="mb-1"><i class="fa fa-user-friends text-primary me-2"></i>Giá người lớn: @tour.PriceAdult.ToString("N0") VNĐ</li>
+                        </ul>
+                        <div class="d-flex flex-wrap gap-2 mt-auto">
+                            <button type="button"
+                                    class="btn btn-outline-secondary rounded-pill flex-fill"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#qrModal"
+                                    data-title="@tour.Title">
+                                <i class="fa fa-qrcode me-1"></i> QR
+                            </button>
+                            <a asp-controller="Customer" asp-action="Booking" asp-route-id="@tour.MaTour" class="btn btn-primary rounded-pill flex-fill">
+                                <i class="fa fa-ticket-alt me-1"></i> Đặt tour
+                            </a>
+                            <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@tour.MaTour" class="btn btn-outline-primary rounded-pill flex-fill">
+                                <i class="fa fa-info-circle me-1"></i> Chi tiết
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            delay += 0.1;
+        }
+        @if (!toursToRender.Any())
+        {
+            <div class="col-12">
+                <div class="alert alert-info text-center">Chưa có tour nào phù hợp với bộ lọc hiện tại.</div>
+            </div>
+        }
+    </div>
+</section>
+
+<section class="bg-light rounded py-5 px-4 wow fadeInUp" data-wow-delay="0.1s">
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-compass-fill text-primary fs-1 me-3"></i>
+                <div>
+                    <h5>Dẫn đường tận tâm</h5>
+                    <p class="mb-0">Đội ngũ tư vấn viên và hướng dẫn kinh nghiệm sẵn sàng hỗ trợ 24/7.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-credit-card-2-front-fill text-primary fs-1 me-3"></i>
+                <div>
+                    <h5>Thanh toán linh hoạt</h5>
+                    <p class="mb-0">Hỗ trợ nhiều phương thức thanh toán, hóa đơn điện tử và ký số bảo mật.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-star-fill text-primary fs-1 me-3"></i>
+                <div>
+                    <h5>Hơn 10.000 đánh giá 5*</h5>
+                    <p class="mb-0">Khách hàng tin tưởng DuLich cho mọi hành trình trong và ngoài nước.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="modal fade" id="qrModal" tabindex="-1" aria-labelledby="qrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="qrModalLabel">QR Tour</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="qrModalImage" src="" alt="QR Tour" class="img-fluid mb-3 d-none" style="max-height: 320px;">
+                <div id="qrModalPlaceholder" class="alert alert-info mb-0">Tour này chưa có mã QR.</div>
+            </div>
+        </div>
     </div>
 </div>
 
 @section Scripts {
     <script>
-        // small interactive initialization for customer home if needed
-        console.log('Customer Home loaded');
+        document.addEventListener('DOMContentLoaded', function () {
+            const qrModal = document.getElementById('qrModal');
+            if (!qrModal) return;
+
+            qrModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                const qrUrl = button?.getAttribute('data-qr');
+                const title = button?.getAttribute('data-title') || 'QR Tour';
+                const image = qrModal.querySelector('#qrModalImage');
+                const placeholder = qrModal.querySelector('#qrModalPlaceholder');
+                const label = qrModal.querySelector('#qrModalLabel');
+
+                label.textContent = `QR - ${title}`;
+
+                if (qrUrl) {
+                    image.src = qrUrl;
+                    image.classList.remove('d-none');
+                    placeholder.classList.add('d-none');
+                } else {
+                    image.classList.add('d-none');
+                    placeholder.classList.remove('d-none');
+                }
+            });
+        });
     </script>
 }

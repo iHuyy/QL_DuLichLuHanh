@@ -11,6 +11,16 @@
     <PackageReference Include="iTextSharp" Version="5.5.13.3" />
     <PackageReference Include="Oracle.EntityFrameworkCore" Version="9.23.26000" />
     <PackageReference Include="QRCoder" Version="1.7.0" />
+    <PackageReference Include="SSH.NET" Version="2023.0.0" />
+    
+    <!-- Thêm các thư viện cần thiết cho JWT -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.6" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <RazorCompile Remove="Template/Views copy/**/*.cshtml" />
+    <Content Remove="Template/Views copy/**/*.cshtml" />
   </ItemGroup>
 
 </Project>

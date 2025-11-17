@@ -1,0 +1,85 @@
+﻿@{
+    ViewData["Title"] = "Quản lý hóa đơn số";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Quản lý hóa đơn số</h4>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="invoiceList" class="display table" style="min-width: 845px">
+                        <thead>
+                            <tr>
+                                <th>Mã hóa đơn</th>
+                                <th>Mã đặt tour</th>
+                                <th>Tour</th>
+                                <th>Khách hàng</th>
+                                <th>Số tiền</th>
+                                <th>Ngày xuất</th>
+                                <th>Trạng thái</th>
+                                <th>Chữ ký số hợp lệ</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
+}
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#invoiceList').DataTable({
+                ajax: '/staff/api/invoices',
+                order: [[5, 'desc']],
+                columns: [
+                    { data: 'maHoaDon' },
+                    { data: 'maDatTour' },
+                    { data: 'tenTour' },
+                    { data: 'tenKhachHang' },
+                    {
+                        data: 'soTien',
+                        render: function (data) {
+                            return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(data);
+                        }
+                    },
+                    {
+                        data: 'ngayXuat',
+                        render: function (data) {
+                            return data ? moment(data).format('DD/MM/YYYY HH:mm') : '';
+                        }
+                    },
+                    {
+                        data: 'trangThai',
+                        render: function (data) {
+                            return `<span class="badge ${data === 'Da huy' ? 'badge-danger' : (data === 'Hoan tat' ? 'badge-success' : 'badge-info')}">${data}</span>`;
+                        }
+                    },
+                    {
+                        data: 'chuKySoHopLe',
+                        render: function (data) {
+                            return data ? '<span class="badge badge-success">Hợp lệ</span>' : '<span class="badge badge-warning">Không hợp lệ</span>';
+                        }
+                    }
+                ]
+            });
+        });
+    </script>
+}

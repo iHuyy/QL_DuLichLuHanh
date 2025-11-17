@@ -2,211 +2,102 @@
 @{
     ViewData["Title"] = "Chi tiết tour";
     Layout = "~/Views/Shared/_Layout.cshtml";
-    var imageIds = ViewBag.ImageIds as List<int>;
+    var imageIds = ViewBag.ImageIds as List<int> ?? new List<int>();
     var rating = ViewBag.Rating as decimal? ?? 0;
-    var relatedTours = ViewBag.RelatedTours as List<TourDetailViewModel>;
+    var relatedTours = ViewBag.RelatedTours as List<DuLich.Models.TourDetailViewModel> ?? new();
 }
 
-<section class="page-banner-two rel z-1">
-    <div class="container-fluid">
-        <hr class="mt-0">
-        <div class="container">
-            <div class="banner-inner pt-15 pb-25">
-                <h2 class="page-title mb-10" data-aos="fade-left" data-aos-duration="1500" data-aos-offset="50">@Model.DiemDen</h2>
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb justify-content-center mb-20" data-aos="fade-right" data-aos-delay="200" data-aos-duration="1500" data-aos-offset="50">
-                        <li class="breadcrumb-item"><a asp-controller="Customer" asp-action="Index">Trang chủ</a></li>
-                        <li class="breadcrumb-item active">Chi tiết tour</li>
-                    </ol>
-                </nav>
+@section Hero {
+    <div class="container-fluid bg-primary py-5 mb-5 hero-header">
+        <div class="container py-5">
+            <div class="row align-items-center">
+                <div class="col-lg-8 text-center text-lg-start">
+                    <h1 class="display-5 text-white mb-3">@Model.TenTour</h1>
+                    <p class="text-white-50 mb-0"><i class="fa fa-map-marker-alt me-2"></i>@Model.DiemDen</p>
+                </div>
+                <div class="col-lg-4 text-center text-lg-end">
+                    <span class="badge bg-light text-primary px-3 py-2 fs-6"><i class="fa fa-star me-1 text-warning"></i>@rating.ToString("0.0")</span>
+                </div>
             </div>
         </div>
     </div>
-</section>
+}
 
-<div class="tour-gallery">
-    <div class="container-fluid">
-        <div class="row gap-10 justify-content-center rel">
-            @if (imageIds != null && imageIds.Any())
+<div class="row g-5 mb-5">
+    <div class="col-lg-7">
+        <div id="tourGallery" class="carousel slide rounded overflow-hidden shadow-sm mb-4" data-bs-ride="carousel">
+            <div class="carousel-inner">
+                @if (imageIds.Any())
+                {
+                    var index = 0;
+                    foreach (var id in imageIds.Take(5))
+                    {
+                        <div class="carousel-item @(index == 0 ? "active" : string.Empty)">
+                            <img src="/api/image/@id" class="d-block w-100" alt="Ảnh tour @index" style="height: 420px; object-fit: cover;">
+                        </div>
+                        index++;
+                    }
+                }
+                else
+                {
+                    <div class="carousel-item active">
+                        <img src="~/customer/travel-agency/img/carousel-1.jpg" class="d-block w-100" style="height:420px; object-fit:cover;" alt="Default image" />
+                    </div>
+                }
+            </div>
+            @if (imageIds.Count > 1)
             {
-                var displayImageIds = imageIds.Take(5).ToList();
-
-                @if (displayImageIds.Count > 0)
-                {
-                    <div class="col-lg-4 col-md-6">
-                        <div class="gallery-item">
-                            <img src="/api/image/@displayImageIds[0]" alt="Tour Image">
-                        </div>
-                        @if (displayImageIds.Count > 1)
-                        {
-                            <div class="gallery-item">
-                                <img src="/api/image/@displayImageIds[1]" alt="Tour Image">
-                            </div>
-                        }
-                    </div>
-                }
-
-                @if (displayImageIds.Count > 2)
-                {
-                    <div class="col-lg-4 col-md-6">
-                        <div class="gallery-item gallery-between">
-                            <img src="/api/image/@displayImageIds[2]" alt="Tour Image">
-                        </div>
-                    </div>
-                }
-
-                @if (displayImageIds.Count > 3)
-                {
-                    <div class="col-lg-4 col-md-6">
-                        <div class="gallery-item">
-                            <img src="/api/image/@displayImageIds[3]" alt="Tour Image">
-                        </div>
-                        @if (displayImageIds.Count > 4)
-                        {
-                            <div class="gallery-item">
-                                <img src="/api/image/@displayImageIds[4]" alt="Tour Image">
-                            </div>
-                        }
-                    </div>
-                }
+                <button class="carousel-control-prev" type="button" data-bs-target="#tourGallery" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Previous</span>
+                </button>
+                <button class="carousel-control-next" type="button" data-bs-target="#tourGallery" data-bs-slide="next">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Next</span>
+                </button>
             }
         </div>
-    </div>
-</div>
 
-<section class="tour-header-area pt-70 rel z-1">
-    <div class="container">
-        <div class="row justify-content-between">
-            <div class="col-xl-6 col-lg-7">
-                <div class="tour-header-content mb-15" data-aos="fade-left" data-aos-duration="1500" data-aos-offset="50">
-                    <span class="location d-inline-block mb-10">
-                        <i class="fas fa-map-marker-alt"></i> @Model.DiemDen
-                    </span>
-                    <div class="section-title pb-5">
-                        <h2>@Model.TenTour</h2>
-                    </div>
-                    <div class="ratting">
-                        @for (int i = 0; i < 5; i++)
-                        {
-                            if (i < rating)
-                            {
-                                <i class="fas fa-star"></i>
-                            }
-                            else
-                            {
-                                <i class="far fa-star"></i>
-                            }
-                        }
-                    </div>
-                </div>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h4 class="mb-3">Mô tả chi tiết</h4>
+                <p>@Html.Raw(Model.MoTa)</p>
             </div>
-            <div class="col-xl-4 col-lg-5 text-lg-end" data-aos="fade-right" data-aos-duration="1500" data-aos-offset="50">
-                <div class="tour-header-social mb-10">
-                    <a href="#"><i class="far fa-share-alt"></i>Chia sẻ tour</a>
-                    <a href="#"><i class="fas fa-heart"></i>Yêu thích</a>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h4 class="text-primary mb-3">@Model.Gia.ToString("N0") VNĐ</h4>
+                <ul class="list-unstyled mb-4">
+                    <li class="mb-2"><i class="fa fa-calendar-alt text-primary me-2"></i>Khởi hành: @Model.NgayKhoiHanh.ToString("dd/MM/yyyy")</li>
+                    <li class="mb-2"><i class="fa fa-calendar-day text-primary me-2"></i>Kết thúc: @Model.NgayKetThuc.ToString("dd/MM/yyyy")</li>
+                    <li class="mb-2"><i class="fa fa-map-marker-alt text-primary me-2"></i>Nơi khởi hành: @Model.DiemKhoiHanh</li>
+                    <li class="mb-2"><i class="fa fa-users text-primary me-2"></i>Số chỗ còn lại: @Model.SoLuong</li>
+                </ul>
+                <div class="d-grid">
+                    <a asp-controller="Customer" asp-action="Booking" asp-route-id="@Model.MaTour" class="btn btn-primary rounded-pill py-3">Đặt tour ngay</a>
                 </div>
             </div>
         </div>
-        <hr class="mt-50 mb-70">
-    </div>
-</section>
 
-<section class="tour-details-page pb-100">
-    <div class="container">
-        <div class="row">
-            <div class="col-lg-8">
-                <div class="tour-details-content">
-                    <h3>Khám phá Tour</h3>
-                    <p>@Html.Raw(Model.MoTa)</p>
-                    
-                    <div class="row pb-55">
-                        <div class="col-md-6">
-                            <div class="tour-include-exclude mt-30">
-                                <h5>Bao gồm</h5>
-                                <ul class="list-style-one check mt-25">
-                                    <li>Vé máy bay khứ hồi</li>
-                                    <li>Khách sạn 3 sao</li>
-                                    <li>Hướng dẫn viên</li>
-                                    <li>Các bữa ăn theo chương trình</li>
-                                    <li>Phương tiện di chuyển</li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="tour-include-exclude mt-30">
-                                <h5>Không bao gồm</h5>
-                                <ul class="list-style-one mt-25">
-                                    <li>Chi phí cá nhân</li>
-                                    <li>Đồ uống</li>
-                                    <li>Tip cho hướng dẫn viên</li>
-                                    <li>Bảo hiểm du lịch</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="sidebar-booking-form mt-50">
-                    <h3>Đặt tour</h3>
-                    <div class="booking-form mt-30">
-                        <div class="row">
-                            <div class="col-12">
-                                <a asp-controller="Customer" asp-action="Booking" asp-route-id="@Model.MaTour" class="theme-btn style-two w-100">
-                                    Đặt tour ngay <i class="fas fa-angle-right"></i>
-                                </a>
-                            </div>
-                        </div>
-                        <p class="text-center mt-3">Bạn sẽ được chuyển đến trang xác nhận thông tin đặt tour.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-lg-4 col-md-8 col-sm-10">
-                <div class="tour-sidebar">
-                    <div class="widget widget-price text-center">
-                        <h4 class="widget-title">Giá tour</h4>
-                        <div class="price-info mt-30">
-                            <h4>@string.Format(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), "{0:N0}", Model.Gia) VNĐ</h4>
-                        </div>
-                    </div>
-
-                    <div class="widget widget-info mt-30">
-                        <h4 class="widget-title">Thông tin thêm</h4>
-                        <ul class="list-style-two mt-20">
-                            <li><i class="far fa-calendar-alt"></i>Khởi hành: @Model.NgayKhoiHanh.ToString("dd/MM/yyyy")</li>
-                            <li><i class="far fa-calendar-alt"></i>Kết thúc: @Model.NgayKetThuc.ToString("dd/MM/yyyy")</li>
-                            <li><i class="far fa-map-marker-alt"></i>Điểm khởi hành: @Model.DiemKhoiHanh</li>
-                            <li><i class="far fa-map-marker-alt"></i>Điểm đến: @Model.DiemDen</li>
-                        </ul>
-                    </div>
-
-                    @if (relatedTours != null && relatedTours.Any())
+        @if (relatedTours.Any())
+        {
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h5 class="mb-3">Tour liên quan</h5>
+                    @foreach (var item in relatedTours.Take(3))
                     {
-                        <div class="widget widget-tour mt-30">
-                            <h4 class="widget-title">Tours tương tự</h4>
-                            <ul class="tour-widget-list mt-20">
-                                @foreach (var relatedTour in relatedTours)
-                                {
-                                    <li>
-                                        <div class="tour-info">
-                                            <h6><a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@relatedTour.MaTour">@relatedTour.TenTour</a></h6>
-                                            <p class="price">@string.Format(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), "{0:N0}", relatedTour.Gia) VNĐ</p>
-                                        </div>
-                                    </li>
-                                }
-                            </ul>
+                        <div class="d-flex align-items-center mb-3">
+                            <div>
+                                <h6 class="mb-1">@item.TenTour</h6>
+                                <small class="text-muted"><i class="fa fa-map-marker-alt me-1 text-primary"></i>@item.DiemDen</small>
+                            </div>
+                            <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@item.MaTour" class="btn btn-sm btn-outline-primary rounded-pill ms-auto">Xem</a>
                         </div>
                     }
                 </div>
             </div>
-        </div>
+        }
     </div>
-</section>
-
-@section Scripts {
-    <script>
-        $(document).ready(function() {
-            // Add any JavaScript functionality here
-        });
-    </script>
-}
+</div>

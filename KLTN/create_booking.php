@@ -132,7 +132,7 @@ if (openssl_sign($bookingData, $signature, $privateKey, 'RSA-SHA256')) {
 // DatTour schema (see QL_DuLichLuHanh.sql):
 // MaDatTour, MaKhachHang, MaTour, NgayDat, SoNguoiLon, SoTreEm, TongTien, TrangThaiThanhToan, TrangThaiDat, YeuCauDacBiet
 $trangThaiThanhToan = 'Chưa thanh toán'; // Mặc định: chưa thanh toán
-$trangThaiDat = 'Đã xác nhận'; // Mặc định: đã xác nhận
+$trangThaiDat = 'Chưa xác nhận'; // Mặc định: đã xác nhận
 
 $sqlInsert = "
     INSERT INTO DatTour (
@@ -185,9 +185,12 @@ if (!@oci_execute($stmtInsert, OCI_COMMIT_ON_SUCCESS)) {
 
 oci_free_statement($stmtInsert);
 
-// Now try to store the signature into the generated invoice (HoaDon)
+// Now ensure HoaDon exists and store the signature into the invoice (HoaDon)
 $signatureUpdated = false;
 $maHoaDon = null;
+$updateErrorMsg = null; // Khởi tạo biến $updateErrorMsg
+
+// First try to update existing HoaDon (if trigger created it), capturing MaHoaDon
 $sqlUpdateHoaDon = "UPDATE HoaDon SET ChuKySo = :chuKySo WHERE MaDatTour = :maDatTour RETURNING MaHoaDon INTO :maHoaDon";
 $stmtUpd = @oci_parse($conn, $sqlUpdateHoaDon);
 if ($stmtUpd) {
@@ -202,9 +205,66 @@ if ($stmtUpd) {
         $updateErrorMsg = $errUpd['message'] ?? 'unknown';
     }
     oci_free_statement($stmtUpd);
-} else {
-    $updateErrorMsg = 'Could not parse update statement for HoaDon';
 }
+
+// If update didn't return MaHoaDon, try to SELECT existing HoaDon by MaDatTour
+if (empty($maHoaDon)) {
+    $sel = @oci_parse($conn, 'SELECT MaHoaDon FROM HoaDon WHERE MaDatTour = :md');
+    if ($sel) {
+        oci_bind_by_name($sel, ':md', $maDatTour);
+        if (@oci_execute($sel)) {
+            $r = oci_fetch_assoc($sel);
+            if ($r && isset($r['MAHOADON'])) {
+                $maHoaDon = $r['MAHOADON'];
+            }
+        }
+        oci_free_statement($sel);
+    }
+}
+
+// If still no HoaDon, create one so we have MaHoaDon and can store payload/signature
+if (empty($maHoaDon)) {
+    $insertHoaDon = "INSERT INTO HoaDon (MaDatTour, SoTien, TrangThai, ChuKySo, NGAYXUAT) VALUES (:mdt, :sotien, :tt, :chuky, SYSDATE) RETURNING MaHoaDon INTO :maHoaDon";
+    $insStmt = @oci_parse($conn, $insertHoaDon);
+    if ($insStmt) {
+        $tt = 'Chưa thanh toán';
+        oci_bind_by_name($insStmt, ':mdt', $maDatTour);
+        oci_bind_by_name($insStmt, ':sotien', $tongTienSauPhi);
+        oci_bind_by_name($insStmt, ':tt', $tt);
+        oci_bind_by_name($insStmt, ':chuky', $signature);
+        oci_bind_by_name($insStmt, ':maHoaDon', $maHoaDon, 32);
+        if (@oci_execute($insStmt, OCI_COMMIT_ON_SUCCESS)) {
+            $signatureUpdated = true;
+        } else {
+            $errIns = oci_error($insStmt) ?: oci_error($conn);
+            $updateErrorMsg = $errIns['message'] ?? 'insert failed';
+        }
+        oci_free_statement($insStmt);
+    }
+}
+
+// *** PHẦN SỬA ĐỔI BẮT ĐẦU ***
+// Store the actual signed payload for verification
+// (Giả sử bảng HoaDonPayload(MaHoaDon, Payload CLOB) tồn tại)
+if (!empty($maHoaDon) && !empty($bookingData)) {
+    $sql_payload = "UPDATE HoaDon SET Payload = :payload_data WHERE MaHoaDon = :maHoaDon";
+    
+    $stmt_payload = @oci_parse($conn, $sql_payload);
+    
+    if ($stmt_payload) {
+        oci_bind_by_name($stmt_payload, ':maHoaDon', $maHoaDon);
+        oci_bind_by_name($stmt_payload, ':payload_data', $bookingData); // $bookingData là chuỗi JSON đã ký
+        
+        if (!@oci_execute($stmt_payload, OCI_COMMIT_ON_SUCCESS)) {
+            $errPayload = oci_error($stmt_payload) ?: oci_error($conn);
+            // Thêm lỗi vào $updateErrorMsg, không dừng hẳn
+            $updateErrorMsg = ($updateErrorMsg ?? '') . '; Payload store failed: ' . ($errPayload['message'] ?? 'unknown');
+        }
+        oci_free_statement($stmt_payload);
+    }
+}
+// *** PHẦN SỬA ĐỔI KẾT THÚC ***
+
 
 close_conn($conn);
 
@@ -216,7 +276,9 @@ $response = [
     "signature" => $signature,
     "signatureUpdated" => $signatureUpdated
 ];
-if (isset($updateErrorMsg)) $response['signatureUpdateError'] = $updateErrorMsg;
+if (isset($updateErrorMsg) && $updateErrorMsg !== null) {
+  $response['warning'] = $updateErrorMsg;
+}
 
 echo json_encode($response);
 ?>

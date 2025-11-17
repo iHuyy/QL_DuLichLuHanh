@@ -1,92 +1,209 @@
-@model DuLich.Models.CustomerProfileViewModel
+﻿@model DuLich.Models.CustomerProfileViewModel
 @{
     ViewData["Title"] = "Thông tin cá nhân";
-    Layout = "~/Views/Shared/_Layout.cshtml"; // Assuming _Layout.cshtml is your main layout
+    Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<div class="user-profile">
-    <div class="container-xl px-4 mt-4">
-        <div class="row">
-            <div class="col-xl-4">
-                <div class="card mb-4 mb-xl-0">
-                    <div class="card-header">Ảnh đại diện</div>
-                    <div class="card-body text-center">
-                        <img id="avatarPreview" class="img-account-profile rounded-circle mb-2"
-                            src="@Url.Content("~/images/qrcode/" + Model.Avatar)"
-                            style="width:160px; height: 160px;" alt="Ảnh đại diện @Model.Avatar">
+<div class="container-xl px-4 mt-4">
+    <div class="card shadow-sm border-0">
+        <div class="card-header border-bottom-0">
+            <ul class="nav nav-tabs card-header-tabs" id="profileTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="tab-info-link" data-bs-toggle="tab" data-bs-target="#tab-info" type="button" role="tab">
+                        <i class="bi bi-person-lines-fill me-1"></i> Chỉnh sửa thông tin
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-password-link" data-bs-toggle="tab" data-bs-target="#tab-password" type="button" role="tab">
+                        <i class="bi bi-key-fill me-1"></i> Đổi mật khẩu
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-sessions-link" data-bs-toggle="tab" data-bs-target="#tab-sessions" type="button" role="tab">
+                        <i class="bi bi-shield-lock-fill me-1"></i> Phiên đăng nhập
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="tab-info" role="tabpanel">
+                    <h4 class="mb-4 text-primary">Thông tin tài khoản</h4>
+                    <form asp-action="UpdateProfile" asp-controller="Customer" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" asp-for="MaKhachHang" />
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label asp-for="HoTen" class="form-label">Họ và tên</label>
+                                <input asp-for="HoTen" class="form-control" placeholder="Nhập họ tên đầy đủ" />
+                                <span asp-validation-for="HoTen" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="SoDienThoai" class="form-label">Số điện thoại</label>
+                                <input asp-for="SoDienThoai" class="form-control" placeholder="09xx xxx xxx" />
+                                <span asp-validation-for="SoDienThoai" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="Email" class="form-label">Email</label>
+                                <input asp-for="Email" class="form-control" type="email" placeholder="example@domain.com" />
+                                <span asp-validation-for="Email" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="DiaChi" class="form-label">Địa chỉ</label>
+                                <input asp-for="DiaChi" class="form-control" placeholder="Số nhà, đường, quận/huyện" />
+                                <span asp-validation-for="DiaChi" class="text-danger small"></span>
+                            </div>
+                        </div>
+                        <div class="text-end mt-4">
+                            <button type="submit" class="btn btn-primary rounded-pill px-4" id="update_profile">Lưu thay đổi</button>
+                        </div>
+                    </form>
+                </div>
 
-                        <div class="small font-italic text-muted mb-4">JPG hoặc PNG không lớn hơn 5 MB</div>
-                        <input type="file" name="avatar" id="avatar" style="display: none" accept="image/*">
-                        @* <input type="hidden" name="_token" value="{{ csrf_token() }}" class="__token"> *@
-                        @* <input type="hidden" name="" value="{{ route('change-avatar') }}" class="label_avatar"> *@
-                        <label for="avatar" class="btn btn-primary">Tải ảnh lên</label>
+                <div class="tab-pane fade" id="tab-password" role="tabpanel">
+                    <div class="d-flex flex-column align-items-start gap-3">
+                        <div>
+                            <h4 class="text-primary mb-2">Đổi mật khẩu</h4>
+                            <p class="text-muted mb-0">Cập nhật mật khẩu định kỳ để đảm bảo an toàn tài khoản.</p>
+                        </div>
+                        <button class="btn btn-outline-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
+                            <i class="bi bi-key me-1"></i> Đổi mật khẩu
+                        </button>
                     </div>
                 </div>
 
-                <div class="card mb-4 mb-xl-0">
-                    <button class="btn btn-primary" id="update_password_profile">Đổi mật khẩu </button>
-                </div>
-            </div>
-            <div class="col-xl-8">
-                <div class="card mb-4">
-                    <div class="card-header">Thông tin tài khoản</div>
-                    <div class="card-body">
-                        <form asp-action="UpdateProfile" asp-controller="Customer" method="POST" name="updateUser"
-                            class="updateUser">
-                            @Html.AntiForgeryToken()
-                            <div class="row gx-3 mb-3">
-                                <div class="col-md-12">
-                                    <label class="small mb-1" for="inputFullName">Họ và tên</label>
-                                    <input class="form-control" id="inputFullName" type="text"
-                                        placeholder="Họ và tên" value="@Model.HoTen" required>
-                                </div>
-                            </div>
-                            <div class="row gx-3 mb-3">
-                                <div class="col-md-12">
-                                    <label class="small mb-1" for="inputLocation">Địa chỉ</label>
-                                    <input class="form-control" id="inputLocation" type="text" placeholder="Địa chỉ"
-                                        value="@Model.DiaChi" required>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="small mb-1" for="inputEmailAddress">Email</label>
-                                <input class="form-control" id="inputEmailAddress" type="email" placeholder="Email"
-                                    value="@Model.Email" required>
-                            </div>
-                            <div class="row gx-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="small mb-1" for="inputPhone">Phone number</label>
-                                    <input class="form-control" id="inputPhone" type="text"
-                                        placeholder="Số điện thoại" value="@Model.SoDienThoai" required>
-                                </div>
-                            </div>
-
-                            <button class="btn btn-primary" type="submit" id="update_profile">Lưu thông tin</button>
-                        </form>
-                    </div>
-                </div>
-                <div class="card mb-4 ">
-                    <div class="card-body" id="card_change_password">
-                        <div class="invalid-feedback" style="margin-top:-15px" id="validate_password"></div>
-                        <form asp-action="ChangePassword" asp-controller="Customer" method="post" class="change_password_profile">
-                            @Html.AntiForgeryToken()
-                            <div class="row gx-3">
-                                <div class="col-md-4">
-                                    <input class="form-control" id="inputOldPass" type="password"
-                                        placeholder="Nhập mật khẩu cũ" value="" required>
-                                </div>
-                                <div class="col-md-4">
-                                    <input class="form-control" id="inputNewPass" type="password"
-                                        placeholder="Nhập mật khẩu mới" value="" required>
-                                </div>
-                                <div class="col-md-4">
-                                    <button class="btn btn-primary" type="submit">Thay đổi</button>
-                                </div>
-                            </div>
-                        </form>
+                <div class="tab-pane fade" id="tab-sessions" role="tabpanel">
+                    <h4 class="text-primary mb-3">Phiên đăng nhập đang hoạt động</h4>
+                    <p class="text-muted">Đăng xuất các thiết bị không nhận ra để bảo vệ tài khoản.</p>
+                    <div id="sessionAlerts"></div>
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle" id="sessions-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Thiết bị</th>
+                                    <th>Thông tin</th>
+                                    <th>Đăng nhập lúc</th>
+                                    <th class="text-center"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">Đang tải danh sách phiên...</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="changePasswordModalLabel">Đổi mật khẩu</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form asp-action="ChangePassword" asp-controller="Customer" method="post" class="change_password_profile">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label for="inputCurrentPassword" class="form-label">Mật khẩu hiện tại</label>
+                        <input type="password" name="CurrentPassword" class="form-control" id="inputCurrentPassword" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="inputNewPassword" class="form-label">Mật khẩu mới</label>
+                        <input type="password" name="NewPassword" class="form-control" id="inputNewPassword" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="inputConfirmPassword" class="form-label">Xác nhận mật khẩu mới</label>
+                        <input type="password" name="ConfirmPassword" class="form-control" id="inputConfirmPassword" required>
+                    </div>
+                    <div class="text-end">
+                        <button type="button" class="btn btn-outline-secondary me-2" data-bs-dismiss="modal">Hủy</button>
+                        <button type="submit" class="btn btn-primary">Đổi mật khẩu</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+    <script>
+        async function loadSessions() {
+            const tableBody = document.querySelector('#sessions-table tbody');
+            try {
+                const res = await fetch('/api/sessions/active', { credentials: 'include' });
+                if (!res.ok) {
+                    showSessionAlert('Không thể lấy danh sách phiên. Vui lòng thử lại.', 'danger');
+                    return;
+                }
+                const data = await res.json();
+                tableBody.innerHTML = '';
+                if (!data.sessions || data.sessions.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Hiện không có phiên đăng nhập nào khác.</td></tr>';
+                    return;
+                }
+                data.sessions.forEach(sess => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${sess.device_type || 'WEB'}</td>
+                        <td>${sess.device_info || ''}</td>
+                        <td>${new Date(sess.login_time).toLocaleString()}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-danger" data-session="${sess.session_id}">Đăng xuất</button>
+                        </td>`;
+                    tr.querySelector('button').addEventListener('click', () => remoteLogout(sess.session_id));
+                    tableBody.appendChild(tr);
+                });
+            } catch (err) {
+                showSessionAlert('Lỗi khi tải phiên đăng nhập: ' + (err?.message || ''), 'danger');
+            }
+        }
+
+        async function remoteLogout(sessionId) {
+            if (!confirm('Bạn có chắc muốn đăng xuất phiên này?')) return;
+            try {
+                const res = await fetch('/api/sessions/logout-remote', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id_to_logout: sessionId })
+                });
+                if (!res.ok) {
+                    const message = await res.text();
+                    showSessionAlert('Không thể đăng xuất: ' + message, 'danger');
+                    return;
+                }
+                showSessionAlert('Đã đăng xuất phiên thành công.', 'success');
+                loadSessions();
+            } catch (err) {
+                showSessionAlert('Lỗi khi đăng xuất: ' + (err?.message || ''), 'danger');
+            }
+        }
+
+        function showSessionAlert(message, type) {
+            const container = document.getElementById('sessionAlerts');
+            container.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>`;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const sessionsTab = document.getElementById('tab-sessions-link');
+            sessionsTab.addEventListener('shown.bs.tab', () => {
+                if (!sessionsTab.dataset.loaded) {
+                    loadSessions();
+                    sessionsTab.dataset.loaded = 'true';
+                }
+            });
+        });
+    </script>
+}

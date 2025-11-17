@@ -22,7 +22,9 @@ namespace DuLich.Models.Data
         public DbSet<NhatKyHeThong> NhatKyHeThongs { get; set; } = null!;
         public DbSet<ChiNhanh> ChiNhanhs { get; set; } = null!;
         public DbSet<QR_Login> QR_Logins { get; set; } = null!;
-    public DbSet<UserSession> UserSessions { get; set; } = null!;
+        public DbSet<UserSession> UserSessions { get; set; } = null!;
+        public DbSet<NhanVienAuditLog> NhanVienAuditLogs { get; set; } = null!;
+        public DbSet<BackupHistory> BackupHistories { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -59,6 +61,20 @@ namespace DuLich.Models.Data
             modelBuilder.Entity<DatTour>(entity =>
             {
                 entity.Property(e => e.TongTien).HasPrecision(12, 2);
+            });
+
+            modelBuilder.Entity<BackupHistory>(entity =>
+            {
+                entity.ToTable("BACKUP_HISTORY", schema: "TADMIN");
+                entity.HasKey(b => b.Id);
+                entity.Property(b => b.Id).HasColumnName("ID").ValueGeneratedNever();
+                entity.Property(b => b.ActionType).HasColumnName("ACTION_TYPE");
+                entity.Property(b => b.RequestedAt).HasColumnName("REQUESTED_AT");
+                entity.Property(b => b.CompletedAt).HasColumnName("COMPLETED_AT");
+                entity.Property(b => b.Status).HasColumnName("STATUS");
+                entity.Property(b => b.Target).HasColumnName("TARGET");
+                entity.Property(b => b.Notes).HasColumnName("NOTES");
+                entity.Property(b => b.RequestedBy).HasColumnName("REQUESTED_BY");
             });
 
             // Sửa thêm: map quan hệ ANHTOUR <-> TOUR, dùng MATOUR làm FK (tránh shadow FK TourMaTour)

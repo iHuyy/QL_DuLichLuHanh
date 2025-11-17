@@ -2,88 +2,103 @@
 @{
     ViewData["Title"] = "Xác nhận thanh toán";
     Layout = "~/Views/Shared/_Layout.cshtml";
+    var isPaid = string.Equals(Model.TrangThai, "Đã thanh toán", StringComparison.OrdinalIgnoreCase);
 }
 
-<div class="container mt-5 mb-5">
-    <div class="row">
-        <div class="col-md-8 mx-auto">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
+<div class="container-xxl py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h4 class="mb-0">Hóa đơn đặt tour</h4>
+                    <span class="badge @(Model.IsSignatureValid ? "bg-success" : "bg-danger") px-3 py-2">
+                        @(Model.IsSignatureValid ? "Đã ký số hợp lệ" : "Chữ ký không hợp lệ")
+                    </span>
                 </div>
-                <div class="card-body">
-                    @if (!Model.IsSignatureValid)
+                <div class="card-body p-4">
+                    @if (Model.IsSignatureValid)
                     {
-                        <div class="alert alert-danger" role="alert">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            Cảnh báo: Chữ ký số không hợp lệ. Hóa đơn này có thể đã bị chỉnh sửa!
+                        <div class="alert alert-success d-flex align-items-center" role="alert">
+                            <i class="fa fa-shield-alt me-2"></i>
+                            Chữ ký số đã được xác thực. Thông tin hóa đơn bảo đảm toàn vẹn.
                         </div>
                     }
                     else
                     {
-                        <div class="alert alert-success" role="alert">
-                            <i class="fas fa-check-circle"></i>
-                            Hóa đơn hợp lệ - Chữ ký số đã được xác thực
+                        <div class="alert alert-danger d-flex align-items-center" role="alert">
+                            <i class="fa fa-exclamation-triangle me-2"></i>
+                            Không thể xác minh chữ ký số. Vui lòng liên hệ tổng đài nếu nghi ngờ hóa đơn bị chỉnh sửa.
                         </div>
                     }
 
                     <div class="row mb-4">
-                        <div class="col-sm-6">
-                            <h6 class="mb-3">Thông tin hóa đơn:</h6>
-                            <div><strong>Mã hóa đơn:</strong> @Model.MaHoaDon</div>
-                            <div><strong>Ngày xuất:</strong> @Model.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss")</div>
-                            <div><strong>Trạng thái:</strong> @Model.TrangThai</div>
+                        <div class="col-md-6">
+                            <h6 class="text-uppercase text-muted">Thông tin hóa đơn</h6>
+                            <p class="mb-1"><strong>Mã hóa đơn:</strong> @Model.MaHoaDon</p>
+                            <p class="mb-1"><strong>Ngày xuất:</strong> @Model.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss")</p>
+                            <p class="mb-0"><strong>Trạng thái:</strong> @Model.TrangThai</p>
                         </div>
-                        <div class="col-sm-6">
-                            <h6 class="mb-3">Thông tin khách hàng:</h6>
-                            <div><strong>Họ tên:</strong> @Model.TenKhachHang</div>
-                            <div><strong>Email:</strong> @Model.Email</div>
-                            <div><strong>Số điện thoại:</strong> @Model.SoDienThoai</div>
-                            <div><strong>Địa chỉ:</strong> @Model.DiaChi</div>
+                        <div class="col-md-6">
+                            <h6 class="text-uppercase text-muted">Khách hàng</h6>
+                            <p class="mb-1"><strong>Họ tên:</strong> @Model.TenKhachHang</p>
+                            <p class="mb-1"><strong>Email:</strong> @Model.Email</p>
+                            <p class="mb-1"><strong>Số điện thoại:</strong> @Model.SoDienThoai</p>
+                            <p class="mb-0"><strong>Địa chỉ:</strong> @Model.DiaChi</p>
                         </div>
                     </div>
+
+                    <hr />
 
                     <div class="row mb-4">
-                        <div class="col-12">
-                            <h6 class="mb-3">Chi tiết tour:</h6>
-                            <div><strong>Tên tour:</strong> @Model.TenTour</div>
-                            <div><strong>Ngày khởi hành:</strong> @Model.NgayKhoiHanh?.ToString("dd/MM/yyyy")</div>
-                            <div><strong>Số người lớn:</strong> @Model.SoNguoiLon</div>
-                            <div><strong>Số trẻ em:</strong> @Model.SoTreEm</div>
+                        <div class="col-md-6">
+                            <h6 class="text-uppercase text-muted">Tour</h6>
+                            <p class="mb-1"><strong>Tên tour:</strong> @Model.TenTour</p>
+                            <p class="mb-0"><strong>Ngày khởi hành:</strong> @Model.NgayKhoiHanh?.ToString("dd/MM/yyyy")</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-uppercase text-muted">Số lượng</h6>
+                            <p class="mb-1"><strong>Người lớn:</strong> @Model.SoNguoiLon</p>
+                            <p class="mb-0"><strong>Trẻ em:</strong> @Model.SoTreEm</p>
                         </div>
                     </div>
 
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="text-end">
-                                <h5>Tổng tiền: @Model.SoTien?.ToString("#,##0") VNĐ</h5>
-                            </div>
+                    <div class="d-flex justify-content-end">
+                        <div class="text-end">
+                            <p class="text-muted mb-1">Tổng tạm tính</p>
+                            <h3 class="text-primary">@Model.SoTien?.ToString("#,##0") VNĐ</h3>
                         </div>
                     </div>
 
-                    @if (Model.TrangThai != "Đã thanh toán")
-                    {
-                        <div class="text-center mt-4">
-                            <form asp-action="ConfirmPayment" asp-controller="Customer" method="post" style="display:inline-block;">
+                    <div class="d-flex flex-wrap gap-3 mt-4 justify-content-center">
+                        @if (!isPaid)
+                        {
+                            <form asp-action="ConfirmPayment" asp-controller="Customer" method="post">
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="bookingId" value="@ViewBag.BookingId" />
-                                <button type="submit" class="btn btn-success">Thanh toán</button>
+                                <button type="submit" class="btn btn-primary rounded-pill px-4">
+                                    <i class="fa fa-credit-card me-1"></i> Thanh toán
+                                </button>
                             </form>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-success rounded-pill px-4" disabled>
+                                <i class="fa fa-check-circle me-1"></i> Đã thanh toán
+                            </button>
+                        }
 
-                            <a class="btn btn-primary ms-2" target="_blank" href="@Url.Action("PrintInvoice", "Customer", new { hoaDonId = Model.MaHoaDon })">In hóa đơn</a>
-                            <a class="btn btn-outline-primary ms-2" href="@Url.Action("DownloadInvoicePdf", "Customer", new { hoaDonId = Model.MaHoaDon })">Tải PDF</a>
-                        </div>
-                    }
+                        <a class="btn btn-outline-primary rounded-pill px-4"
+                           target="_blank"
+                           href="@Url.Action("PrintInvoice", "Customer", new { hoaDonId = Model.MaHoaDon })">
+                            <i class="fa fa-print me-1"></i> In hóa đơn
+                        </a>
+                        <a class="btn btn-outline-secondary rounded-pill px-4"
+                           href="@Url.Action("DownloadInvoicePdf", "Customer", new { hoaDonId = Model.MaHoaDon })">
+                            <i class="fa fa-file-pdf me-1"></i> Tải PDF
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
-
-<style>
-    @@media print {
-        .alert { display: none; }
-        .btn { display: none; }
-        body { font-size: 12pt; }
-    }
-</style>

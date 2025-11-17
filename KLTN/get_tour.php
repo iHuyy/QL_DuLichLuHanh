@@ -24,7 +24,7 @@ if (!$conn) {
     exit;
 }
 
-$sql = "SELECT MaTour, TieuDe, MoTa, NoiKhoiHanh, NoiDen, ThanhPho, ThoiGian, GiaNguoiLon, GiaTreEm, SoLuong, ChiNhanh FROM Tour WHERE MaTour = :id";
+$sql = "SELECT MaTour, TieuDe, MoTa, NoiKhoiHanh, NoiDen, ThanhPho, ThoiGian, GiaNguoiLon, GiaTreEm, SoLuong, ChiNhanh, DuLieuAnh, LoaiAnh FROM Tour WHERE MaTour = :id";
 $stid = @oci_parse($conn, $sql);
 if (!$stid) {
     $e = oci_error($conn);
@@ -55,6 +55,29 @@ if (!$row) {
 
 // Normalize keys to uppercase for client
 $row = array_change_key_case($row, CASE_UPPER);
+
+// Convert BLOB to base64 data URL
+if (isset($row['DULIEUANH']) && $row['DULIEUANH'] !== null && $row['DULIEUANH'] !== '') {
+    try {
+        $blob = $row['DULIEUANH'];
+        $data = null;
+        if (is_object($blob) && method_exists($blob, 'load')) {
+            $data = $blob->load();
+        } else if (is_resource($blob)) {
+            $data = stream_get_contents($blob);
+        } else {
+            $data = $blob;
+        }
+        if ($data !== null && $data !== '') {
+            $b64 = base64_encode($data);
+            $mime = isset($row['LOAIANH']) && $row['LOAIANH'] !== '' ? trim($row['LOAIANH']) : 'image/jpeg';
+            $row['DULIEUANH'] = 'data:' . $mime . ';base64,' . $b64;
+        }
+    } catch (Exception $e) {
+        // on error, leave as-is
+    }
+}
+
 echo json_encode(["success" => true, "tour" => $row]);
 
 oci_free_statement($stid);
