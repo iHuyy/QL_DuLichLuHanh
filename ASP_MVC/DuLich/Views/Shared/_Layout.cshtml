@@ -51,8 +51,7 @@
                         class="nav-item nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : string.Empty)">Trang
                         chủ</a>
                     <a asp-controller="Customer" asp-action="About"
-                        class="nav-item nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "About" ? "active" : string.Empty)">Gioi
-                        thieu</a>
+                        class="nav-item nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "About" ? "active" : string.Empty)">Giới thiệu</a>
                     @if (User?.Identity?.IsAuthenticated == true)
                     {
                         <a asp-controller="Customer" asp-action="MyTour"

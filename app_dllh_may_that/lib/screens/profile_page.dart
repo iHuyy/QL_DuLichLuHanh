@@ -1,272 +1,204 @@
-import 'package:app_dllh/screens/remote_logout_page.dart';
+import 'package:app_dllh/screens/change_password_page.dart';
+import 'package:app_dllh/screens/edit_profile_page.dart';
 import 'package:flutter/material.dart';
-import 'login_page.dart';
-import 'my_booking_page.dart';
 import 'package:app_dllh/services/auth_service.dart';
+import 'remote_logout_page.dart';
+import 'login_page.dart';
+import 'invoice_verification_page.dart'; // Import trang mới sắp tạo
 
-const Color primaryBlue = Color(0xFF007AFF);
-const Color darkTextColor = Color(0xFF1E1E1E);
-const Color lightGreyBackground = Color(0xFFF2F2F7);
+// --- BỘ MÀU WEB STYLE ---
+const Color primaryGreen = Color(0xFF86B817);
+const Color primaryDark = Color(0xFF13357B);
+const Color scaffoldBg = Color(0xFFF8F9FA);
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   final String userID;
   final String userName;
 
-  const ProfileScreen({
-    Key? key,
-    required this.userID,
-    this.userName = 'User',
-  }) : super(key: key);
+  const ProfileScreen({Key? key, required this.userID, required this.userName})
+      : super(key: key);
+
+  @override
+  _ProfileScreenState createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final AuthService _authService = AuthService();
+
+  void _logout() async {
+    await _authService.logout();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+        (Route<dynamic> route) => false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header với thông tin người dùng
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    // Avatar
-                    CircleAvatar(
+      backgroundColor: scaffoldBg,
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // 1. Header Profile (Giống Banner Web)
+            Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: primaryDark,
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+              ),
+              padding: const EdgeInsets.fromLTRB(24, 60, 24, 40),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: primaryGreen, width: 3),
+                    ),
+                    child: const CircleAvatar(
                       radius: 40,
-                      backgroundColor: primaryBlue,
-                      child: const Icon(
-                        Icons.person,
-                        size: 50,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    // Thông tin người dùng
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            userName,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: darkTextColor,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'jit.bonik@mail.com',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(thickness: 1),
-              const SizedBox(height: 16),
-
-              // ACCOUNT SECTION
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  'Account',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.person_outline,
-                title: 'Your Profile',
-                onTap: () {},
-              ),
-              _buildMenuItem(
-                icon: Icons.payment,
-                title: 'Payment History',
-                onTap: () {},
-              ),
-              _buildMenuItem(
-                icon: Icons.bookmark_outline,
-                title: 'My Booking',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => MyBookingPage(userID: userID),
-                    ),
-                  );
-                },
-              ),
-              _buildMenuItem(
-                icon: Icons.local_offer_outlined,
-                title: 'Your Offers',
-                onTap: () {},
-              ),
-              _buildMenuItem(
-                icon: Icons.public,
-                title: 'All Country',
-                onTap: () {},
-              ),
-              const Divider(thickness: 1, height: 24),
-
-              // SETTING SECTION
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  'Setting',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.language,
-                title: 'Language',
-                onTap: () {},
-              ),
-              _buildMenuItem(
-                icon: Icons.dark_mode_outlined,
-                title: 'Dark Mood',
-                onTap: () {},
-              ),
-              _buildMenuItem(
-                icon: Icons.logout,
-                title: 'Remote Logout',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => RemoteLogoutPage(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(thickness: 1, height: 24),
-
-              // HELP & LEGAL SECTION
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  'Help & Legal',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              _buildMenuItem(
-                icon: Icons.support_agent_outlined,
-                title: 'Emegency Support',
-                onTap: () {},
-              ),
-              _buildMenuItem(
-                icon: Icons.help_outline,
-                title: 'Help',
-                onTap: () {},
-              ),
-              _buildMenuItem(
-                icon: Icons.description_outlined,
-                title: 'Terms & Conditions',
-                onTap: () {},
-              ),
-
-              // Logout button
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showLogoutDialog(context),
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Logout'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade400,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      backgroundColor: Colors.white,
+                      child: Icon(Icons.person, size: 50, color: primaryDark),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  Text(
+                    widget.userName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'ID: ${widget.userID}',
+                    style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-            ],
-          ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // 2. Menu Options
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: [
+                  _buildMenuCard(
+                    title: 'Xác thực Hóa đơn PDF',
+                    subtitle: 'Kiểm tra chữ ký số và tính toàn vẹn',
+                    icon: Icons.verified_user_outlined,
+                    iconColor: primaryGreen,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const InvoiceVerificationPage()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _buildMenuCard(
+                    title: 'Chỉnh sửa thông tin',
+                    subtitle: 'Cập nhật email, số điện thoại',
+                    icon: Icons.edit_outlined,
+                    iconColor: Colors.orange,
+                    onTap: () async {
+                      // Chuyển trang và đợi kết quả
+                      final result = await Navigator.push(
+                        context, 
+                        MaterialPageRoute(builder: (_) => const EditProfilePage())
+                      );
+                      // Nếu update thành công (result = true), có thể cần reload lại profile cha nếu muốn cập nhật tên ngay lập tức
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _buildMenuCard(
+                    title: 'Quản lý Thiết bị',
+                    subtitle: 'Đăng xuất tài khoản khỏi Web/Desktop',
+                    icon: Icons.devices_other_rounded,
+                    iconColor: Colors.purple,
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const RemoteLogoutPage()));
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _buildMenuCard(
+                    title: 'Đổi mật khẩu',
+                    subtitle: 'Bảo mật tài khoản của bạn',
+                    icon: Icons.lock_outline,
+                    iconColor: Colors.blue,
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordPage()));
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _buildMenuCard(
+                    title: 'Đăng xuất',
+                    subtitle: 'Thoát khỏi tài khoản',
+                    icon: Icons.logout,
+                    iconColor: Colors.red,
+                    onTap: _logout,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 40),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildMenuItem({
-    required IconData icon,
+  Widget _buildMenuCard({
     required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
     required VoidCallback onTap,
   }) {
-    return ListTile(
-      leading: Icon(icon, color: primaryBlue),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 16,
-          color: darkTextColor,
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      onTap: onTap,
-    );
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Logout'),
-          content: const Text('Are you sure you want to logout?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-                // Call server-side logout which sets IS_ACTIVE='N', then
-                // remove local session and navigate to login. This matches
-                // the logout behavior used elsewhere in the app.
-                final auth = AuthService();
-                try {
-                  await auth.logout();
-                } catch (e) {
-                  // ignore — still navigate to login to clear local state
-                }
-
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                  (route) => false,
-                );
-              },
-              child: const Text('Logout', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: iconColor),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: primaryDark,
+            fontSize: 16,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+        onTap: onTap,
+      ),
     );
   }
 }

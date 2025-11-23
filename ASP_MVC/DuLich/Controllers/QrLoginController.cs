@@ -105,20 +105,24 @@ namespace DuLich.Controllers
                         _context.UserSessions.Add(userSession);
 
                         // D. Đánh dấu mã QR này là đã hoàn tất (Consumed) để không dùng lại được
-                        qrLogin.IsUsed = 2; 
-                        
+                        qrLogin.IsUsed = 2;
+
                         await _context.SaveChangesAsync();
 
                         // E. QUAN TRỌNG: Gán Cookie vào Response để trình duyệt lưu lại
                         var cookieOptions = new CookieOptions
                         {
                             HttpOnly = true,
-                            Secure = true, // Đặt false nếu chạy localhost http thường, true nếu https
+                            // SỬA LỖI: Sử dụng Request.IsHttps để tự động xác định.
+                            // Nếu chạy HTTP (IP/Localhost), nó sẽ là false -> Trình duyệt cho phép lưu.
+                            // Nếu chạy HTTPS, nó sẽ là true -> Bảo mật hơn.
+                            Secure = Request.IsHttps,
                             SameSite = SameSiteMode.Lax, // Lax cho phép redirect
-                            Expires = DateTime.Now.AddDays(1)
+                            Expires = DateTime.Now.AddDays(1),
+                            Path = "/" // Quan trọng: Đảm bảo cookie có hiệu lực trên toàn bộ trang web
                         };
-                        
-                        // Tên cookie phải khớp với logic kiểm tra Session trong Middleware (ví dụ: USER_SESSION_ID)
+
+                        // Tên cookie phải khớp với logic kiểm tra Session trong Middleware
                         Response.Cookies.Append("USER_SESSION_ID", sessionId, cookieOptions);
 
                         // Trả về status COMPLETED để JS chuyển trang
@@ -184,8 +188,8 @@ namespace DuLich.Controllers
 
             // Cập nhật trạng thái QR thành "Đã quét/Đã duyệt" (IsUsed = 1)
             qrLogin.UserId = user.MaKhachHang;
-            qrLogin.IsUsed = 1; 
-            
+            qrLogin.IsUsed = 1;
+
             await _context.SaveChangesAsync();
 
             return Ok(new { status = "APPROVED", message = "Login approved successfully" });

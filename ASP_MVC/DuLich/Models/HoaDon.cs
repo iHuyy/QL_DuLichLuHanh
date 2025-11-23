@@ -26,6 +26,9 @@ namespace DuLich.Models
 
         [Column("CHUKYSO")]
         public string? ChuKySo { get; set; }
+        
+        [Column("PAYLOAD")] 
+        public string? Payload { get; set; }
 
         [ForeignKey("MaDatTour")]
         public DatTour? DatTour { get; set; }

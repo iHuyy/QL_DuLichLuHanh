@@ -1,11 +1,9 @@
-// File: HomePage.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
-// import 'package:http/http.dart' as http; // XÓA DÒNG NÀY
-import 'package:app_dllh/services/api_client.dart'; // THÊM DÒNG NÀY
+import 'package:app_dllh/services/api_client.dart';
 import 'package:app_dllh/services/auth_service.dart';
-import 'package:app_dllh/models/tour.dart'; // <-- sử dụng model mới
-import 'tour_detail_page.dart'; // <-- thêm import để điều hướng sang trang chi tiết
+import 'package:app_dllh/models/tour.dart';
+import 'tour_detail_page.dart';
 import 'profile_page.dart';
 import 'my_booking_page.dart';
 import 'invoices_page.dart';
@@ -14,26 +12,25 @@ import 'tour_scanner_page.dart';
 import 'package:app_dllh/utils/image_helper.dart';
 import 'qr_login_scanner_page.dart';
 import 'package:app_dllh/config/app_config.dart';
+import 'package:intl/intl.dart';
 
-// Màu xanh chính (Primary Blue) và Màu đen đậm (Dark Black)
-const Color primaryBlue = Color(0xFF007AFF);
-const Color darkTextColor = Color(0xFF1E1E1E);
-const Color lightGreyBackground = Color(0xFFF2F2F7);
+// --- BỘ MÀU (GIỮ TÔNG MÀU WEB) ---
+const Color primaryGreen = Color(0xFF86B817); // Xanh lá mạ
+const Color primaryDark = Color(0xFF13357B);  // Xanh đen đậm
+const Color scaffoldBg = Color(0xFFF8F9FA);   // Nền xám trắng sáng sủa
+const Color cardColor = Colors.white;
 
-// Định nghĩa GlobalKey cho State của MyBookingPage và InvoicesPage
-// Cần khai báo này ở đây để sử dụng trong _HomePageState
 final GlobalKey<MyBookingPageState> _myBookingKey = GlobalKey<MyBookingPageState>();
 final GlobalKey<InvoicesPageState> _invoicesKey = GlobalKey<InvoicesPageState>();
 
 class HomePage extends StatefulWidget {
   final String userID;
-  final String role; 
-  // Dữ liệu người dùng tạm thời. Trong ứng dụng thực tế, nên dùng Model User
-  final Map<String, dynamic>? userData; 
+  final String role;
+  final Map<String, dynamic>? userData;
 
   const HomePage({
-    Key? key, 
-    required this.userID, 
+    Key? key,
+    required this.userID,
     this.role = 'DEFAULT',
     this.userData,
   }) : super(key: key);
@@ -44,13 +41,15 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final AuthService _authService = AuthService();
-  final ApiClient _apiClient = ApiClient(); // THÊM DÒNG NÀY
+  final ApiClient _apiClient = ApiClient();
+  final currencyFormat = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
 
   bool _loggingOut = false;
   int _selectedIndex = 0;
   String _selectedBranch = '';
   int? _selectedBranchId;
   String _searchQuery = '';
+  String _userFullName = '';
 
   late Future<List<Tour>> _toursFuture;
   late Future<List<Map<String, dynamic>>> _branchesFuture;
@@ -60,448 +59,399 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _toursFuture = _fetchTours();
     _branchesFuture = _fetchBranches();
+    _fetchUserProfile();
   }
-  
-  // Đã xóa didChangeDependencies
+
+  Future<void> _fetchUserProfile() async {
+    try {
+      if (widget.userData != null && widget.userData!['fullname'] != null) {
+        setState(() { _userFullName = widget.userData!['fullname']; });
+        return;
+      }
+      final response = await _apiClient.getJson('get_user.php');
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body);
+        if (body['success'] == true && body['data'] != null) {
+          setState(() { _userFullName = body['data']['fullName'] ?? ''; });
+        }
+      }
+    } catch (e) { print(e); }
+  }
 
   Future<List<Tour>> _fetchTours() async {
-    // SỬA LỖI: Dùng _apiClient.getJson thay vì http.get
     final response = await _apiClient.getJson('get_tours.php');
-
-    // Nếu server trả HTML warning/error, báo rõ để debug
-    if (response.statusCode != 200) {
-      throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
-    }
+    if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
     final body = response.body.trim();
-    if (body.startsWith('<')) {
-      // server trả HTML (warning/notice) trước JSON
-      throw Exception('Server returned HTML instead of JSON: ${body.substring(0, body.length.clamp(0, 200))}');
-    }
-
+    if (body.startsWith('<')) throw Exception('Server Error');
     try {
       final decoded = json.decode(body);
       if (decoded is List) {
-        return decoded.map<Tour>((e) {
-          if (e is Map<String, dynamic>) return Tour.fromJson(e);
-          return Tour.fromJson(Map<String, dynamic>.from(e));
-        }).toList();
-      } else {
-        throw Exception('Invalid JSON structure for tours');
+        return decoded.map<Tour>((e) => 
+          e is Map<String, dynamic> ? Tour.fromJson(e) : Tour.fromJson(Map<String, dynamic>.from(e))
+        ).toList();
       }
-    } catch (e) {
-      throw Exception('Failed to parse tours JSON: $e\nBody: ${body.length > 500 ? body.substring(0,500) : body}');
-    }
+      return [];
+    } catch (e) { return []; }
   }
 
   Future<List<Map<String, dynamic>>> _fetchBranches() async {
-    final uri = '${AppConfig.baseUrl}/get_branches.php'; // (Chỉ để log)
-    print('Fetching branches from: $uri');
     try {
-      // SỬA LỖI: Dùng _apiClient.getJson thay vì http.get
       final response = await _apiClient.getJson('get_branches.php');
-
-      if (response.statusCode != 200) {
-        print('Branches API error: ${response.statusCode}');
-        return [];
-      }
+      if (response.statusCode != 200) return [];
       final body = response.body.trim();
-      print('Branches response: $body');
-      
-      if (body.isEmpty) return [];
-      if (body.startsWith('<')) {
-        print('Server returned HTML instead of JSON');
-        return [];
-      }
-
+      if (body.isEmpty || body.startsWith('<')) return [];
       final decoded = json.decode(body);
-      if (decoded is List) {
-        print('Decoded branches: $decoded');
-        return List<Map<String, dynamic>>.from(decoded);
-      } else {
-        print('Invalid branches structure');
-        return [];
-      }
-    } catch (e) {
-      print('Failed to fetch branches: $e');
-      return [];
-    }
+      return decoded is List ? List<Map<String, dynamic>>.from(decoded) : [];
+    } catch (e) { return []; }
   }
-
-  // =========================================================
-  // LOGIC XỬ LÝ (Giữ nguyên)
-  // =========================================================
 
   Future<void> _logout() async {
-    setState(() {
-      _loggingOut = true;
-    });
-    
-    // Gọi API đăng xuất
-    final result = await _authService.logout();
-    
-    setState(() {
-      _loggingOut = false;
-    });
-
-    if (result['success'] == true) {
-      // Đăng xuất thành công, chuyển về màn hình đăng nhập
+    setState(() => _loggingOut = true);
+    await _authService.logout();
+    if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const LoginPage()), 
+        MaterialPageRoute(builder: (context) => const LoginPage()),
         (Route<dynamic> route) => false,
       );
-    } else {
-      // Hiển thị lỗi nếu có
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message'] ?? 'Đăng xuất thất bại.'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
-  
-  // 🔑 Logic xử lý Quét QR để Đăng nhập Web (MỚI)
+
   Future<void> _navigateToWebLoginQR() async {
-    final webLoginToken = await Navigator.of(context).push(
-      MaterialPageRoute(
-        // Sử dụng màn hình quét cho chức năng Đăng nhập Web
-        builder: (context) => const QRLoginScannerPage(), 
-      ),
+    final token = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const QRLoginScannerPage()),
     );
-
-    // Nếu có token (mã QR) được trả về từ máy quét
-    if (webLoginToken != null && webLoginToken is String) {
-      // ⚠️ TODO: GỌI API để xác thực phiên đăng nhập web
-      
+    if (token != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Đã quét mã QR Đăng nhập Web: $webLoginToken. Đang xác thực...'),
-              backgroundColor: primaryBlue,
-              duration: const Duration(seconds: 4),
-          ),
+        const SnackBar(content: Text('Đang xử lý đăng nhập Web...'), backgroundColor: primaryGreen),
       );
-      
-      // Sau khi gọi API thành công, bạn có thể thực hiện các hành động tiếp theo
     }
   }
-  
-  // Xử lý khi nhấn vào Bottom Navigation Bar
+
   void _onItemTapped(int index) {
-    if (index == 2) { // Vị trí thứ 3 là QR Code (index 2)
-      // Điều hướng đến màn hình quét QR TOUR
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => const TourScannerPage()),
-      );
-      // Giữ cho Home (index 0) vẫn sáng trên thanh navigation sau khi quay lại
-      // Không cần gọi setState nếu không muốn thay đổi trạng thái index của thanh nav
+    if (index == 2) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TourScannerPage()));
     } else {
-      // ⚠️ Logic Refresh khi chuyển tab
-      if (index == 1) { // Favorite/My Booking Tab
-        _myBookingKey.currentState?.refreshData();
-      } else if (index == 3) { // Inbox/Invoices Tab
-        _invoicesKey.currentState?.refreshData();
-      }
-
-      // Xử lý chuyển tab thông thường (Home, Favorite, Inbox, Profile)
-      setState(() {
-        _selectedIndex = index;
-      });
+      if (index == 1) _myBookingKey.currentState?.refreshData();
+      if (index == 3) _invoicesKey.currentState?.refreshData();
+      setState(() => _selectedIndex = index);
     }
   }
 
+  // --- WIDGETS GIAO DIỆN ---
 
-  // =========================================================
-  // WIDGETS CỦA GIAO DIỆN HOME_SCREEN (Giữ nguyên)
-  // =========================================================
-
+  // Header đơn giản, không còn Banner
   Widget _buildHeader(BuildContext context) {
-    final fullnameFromData = widget.userData != null
-        ? (widget.userData!['fullname'] ?? widget.userData!['username'] ?? '')
-        : '';
-    final displayedName = (fullnameFromData != null && fullnameFromData.toString().trim().isNotEmpty)
-        ? fullnameFromData.toString()
-        : widget.userID;
+    final displayName = _userFullName.isNotEmpty ? _userFullName : widget.userID;
+    final avatarChar = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+      child: Row(
         children: [
-          // Row chứa thông tin người dùng và các nút hành động
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Welcome back,',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.black54,
-                    ),
-                  ),
-                  Text(
-                    // Hiển thị tên người dùng và Role
-                    '$displayedName (${widget.role})',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: darkTextColor,
-                    ),
-                  ),
-                ],
-              ),
-              
-              // 🔑 Row chứa Nút QR Đăng nhập Web và Nút Đăng xuất (ĐÃ SỬA)
-              Row( 
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 1. Nút Quét QR Đăng nhập Web (MỚI)
-                  Container(
-                    margin: const EdgeInsets.only(right: 8), // Khoảng cách với nút Đăng xuất
-                    decoration: BoxDecoration(
-                      color: lightGreyBackground,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.qr_code_scanner_outlined, color: primaryBlue), // Icon QR Đăng nhập
-                      onPressed: _navigateToWebLoginQR, // Gọi hàm xử lý quét QR Web
-                    ),
-                  ),
-
-                  // 2. Nút Đăng xuất (Đã có)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: lightGreyBackground,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: IconButton(
-                      icon: _loggingOut
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: primaryBlue))
-                          : const Icon(Icons.logout, color: primaryBlue),
-                      onPressed: _loggingOut ? null : _logout,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          // Avatar
+          CircleAvatar(
+            radius: 26,
+            backgroundColor: primaryGreen.withOpacity(0.1),
+            child: Text(
+              avatarChar,
+              style: const TextStyle(color: primaryGreen, fontWeight: FontWeight.bold, fontSize: 22),
+            ),
           ),
+          const SizedBox(width: 14),
+          
+          // Greeting
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Xin chào,',
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+                Text(
+                  displayName,
+                  style: const TextStyle(
+                    color: primaryDark,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+
+          // Buttons (QR & Logout) - Màu tối trên nền trắng
+          Row(
+            children: [
+              _buildCircleBtn(Icons.qr_code_scanner, _navigateToWebLoginQR),
+              const SizedBox(width: 10),
+              _buildCircleBtn(Icons.logout, _logout, isLoading: _loggingOut),
+            ],
+          )
         ],
       ),
     );
   }
 
-  // Tiêu đề phần
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: darkTextColor,
-        ),
-      ),
-    );
-  }
-
-  // Search bar widget
-  Widget _buildSearchBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      child: TextField(
-        onChanged: (value) {
-          setState(() {
-            _searchQuery = value.toLowerCase();
-          });
-        },
-        decoration: InputDecoration(
-          hintText: 'Search tours by name or destination...',
-          prefixIcon: const Icon(Icons.search, color: Colors.grey),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.grey),
-                  onPressed: () {
-                    setState(() {
-                      _searchQuery = '';
-                    });
-                  },
-                )
-              : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.grey, width: 1),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.grey, width: 1),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: primaryBlue, width: 2),
-          ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        ),
-      ),
-    );
-  }
-
-  // Chip phân loại theo chi nhánh
-  Widget _buildBranchChips(List<Map<String, dynamic>> branches) {
-    // Helper function to safely get branch name
-    String getBranchName(Map<String, dynamic> branch) {
-      // Try different key variations
-      for (var key in branch.keys) {
-        if (key.toString().toUpperCase().contains('TENCHINHАNH') || 
-            key.toString().toUpperCase().contains('TENCHINHANH')) {
-          return branch[key]?.toString() ?? 'Unknown';
-        }
-      }
-      // Fallback to common names
-      return branch['TenChiNhanh'] ?? branch['tenChiNhanh'] ?? 'Unknown';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: FilterChip(
-                label: const Text('All', style: TextStyle(fontWeight: FontWeight.bold)),
-                selected: _selectedBranch.isEmpty && _selectedBranchId == null,
-                backgroundColor: lightGreyBackground,
-                selectedColor: primaryBlue,
-                labelStyle: TextStyle(
-                  color: _selectedBranch.isEmpty ? Colors.white : darkTextColor,
-                  fontWeight: FontWeight.bold,
-                ),
-                onSelected: (selected) {
-                  setState(() {
-                    _selectedBranch = '';
-                    _selectedBranchId = null;
-                  });
-                },
-              ),
-            ),
-            ...branches.map((branch) {
-              final branchName = getBranchName(branch);
-              // try to read MaChiNhanh as int if present
-              int? branchId;
-              try {
-                final rawId = branch['MaChiNhanh'] ?? branch['MACHINHANH'] ?? branch['MaChiNhanh'];
-                if (rawId != null) branchId = int.tryParse(rawId.toString());
-              } catch (_) {}
-
-              final isSelected = (_selectedBranchId != null && branchId == _selectedBranchId) ||
-                  (_selectedBranchId == null && _selectedBranch == branchName);
-
-              return Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: FilterChip(
-                  label: Text(
-                    branchName,
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : darkTextColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  selected: isSelected,
-                  backgroundColor: lightGreyBackground,
-                  selectedColor: primaryBlue,
-                  onSelected: (selected) {
-                    setState(() {
-                      if (selected) {
-                        _selectedBranch = branchName;
-                        _selectedBranchId = branchId;
-                      } else {
-                        _selectedBranch = '';
-                        _selectedBranchId = null;
-                      }
-                    });
-                  },
-                ),
-              );
-            }).toList(),
+  Widget _buildCircleBtn(IconData icon, VoidCallback onTap, {bool isLoading = false}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(50),
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))
           ],
         ),
+        child: isLoading 
+          ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2, color: primaryDark))
+          : Icon(icon, color: primaryDark, size: 20),
       ),
     );
   }
 
-  // Display all tours as vertical list
-  Widget _buildTourList(BuildContext context, List<Tour> tours) {
+  Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      child: Column(
-        children: tours.map((tour) => Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: GestureDetector(
-            onTap: () async { // Thêm async để chờ kết quả từ TourDetailPage
-              final shouldRefresh = await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => TourDetailPage(tour: tour, userID: widget.userID)),
-              );
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: TextField(
+          onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+          decoration: InputDecoration(
+            hintText: 'Bạn muốn đi đâu?',
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+            prefixIcon: const Icon(Icons.search, color: primaryGreen),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey, size: 18),
+                    onPressed: () => setState(() => _searchQuery = ''),
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+        ),
+      ),
+    );
+  }
 
-              // Nếu TourDetailPage trả về true (sau khi BookingPage pop thành công)
-              if (shouldRefresh == true) {
-                // Refresh My Booking Page
-                _myBookingKey.currentState?.refreshData();
-                // Chuyển sang tab My Booking
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: Text(
+        title.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w800,
+          color: primaryDark,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBranchChips(List<Map<String, dynamic>> branches) {
+    return SizedBox(
+      height: 36,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        children: [
+          _buildSquareChip('TẤT CẢ', _selectedBranch.isEmpty, () {
+            setState(() { _selectedBranch = ''; _selectedBranchId = null; });
+          }),
+          ...branches.map((branch) {
+            final name = branch['TenChiNhanh'] ?? branch['tenChiNhanh'] ?? 'CN';
+            int? id;
+            try { id = int.parse(branch['MaChiNhanh'].toString()); } catch (_) {}
+            final isSelected = (_selectedBranchId != null && id == _selectedBranchId) ||
+                               (_selectedBranchId == null && _selectedBranch == name);
+            return Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: _buildSquareChip(name.toString().toUpperCase(), isSelected, () {
                 setState(() {
-                  _selectedIndex = 1; 
+                  if (isSelected) { _selectedBranch = ''; _selectedBranchId = null; }
+                  else { _selectedBranch = name; _selectedBranchId = id; }
                 });
-              }
-            },
-            child: Row(
+              }),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSquareChip(String label, bool isSelected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? primaryGreen : Colors.white,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: isSelected ? primaryGreen : Colors.grey.shade300),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : primaryDark,
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTourList(BuildContext context, List<Tour> tours) {
+    if (tours.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: Column(
+            children: [
+              Icon(Icons.travel_explore_outlined, size: 50, color: Colors.grey),
+              SizedBox(height: 10),
+              Text('Không tìm thấy tour phù hợp', style: TextStyle(color: Colors.grey)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      itemCount: tours.length,
+      separatorBuilder: (ctx, index) => const SizedBox(height: 20),
+      itemBuilder: (context, index) {
+        final tour = tours[index];
+        double price = 0;
+        try {
+           String cleanPrice = tour.giaNguoiLon?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0';
+           price = double.parse(cleanPrice);
+        } catch (_) {}
+
+        return GestureDetector(
+          onTap: () async {
+            final shouldRefresh = await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => TourDetailPage(tour: tour, userID: widget.userID)),
+            );
+            if (shouldRefresh == true) {
+              _myBookingKey.currentState?.refreshData();
+              setState(() => _selectedIndex = 1);
+            }
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4), // Góc vuông nhẹ giống web
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: ImageHelper.imageFromData(
-                    tour.imageData ?? '',
-                    mime: tour.imageMime,
-                    width: 90,
-                    height: 90,
-                    fit: BoxFit.cover,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                // Ảnh & Tag giá
+                Stack(
+                  children: [
+                    ImageHelper.imageFromData(
+                      tour.imageData,
+                      mime: tour.imageMime,
+                      width: double.infinity,
+                      height: 180,
+                      fit: BoxFit.cover,
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        color: primaryGreen, // Màu xanh lá đặc trưng
+                        child: Text(
+                          price > 0 ? currencyFormat.format(price) : 'Liên hệ',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: primaryDark.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.location_on, color: primaryGreen, size: 12),
+                            const SizedBox(width: 4),
+                            Text(
+                              tour.noiDen ?? 'Vietnam',
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
+                
+                // Nội dung text
+                Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         tour.tieuDe,
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: darkTextColor,
+                          fontSize: 16, 
+                          fontWeight: FontWeight.w800, 
+                          color: primaryDark,
+                          height: 1.3,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        tour.noiDen ?? 'N/A',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black54,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       Row(
                         children: [
-                          const Icon(Icons.star, color: Colors.amber, size: 14),
-                          const SizedBox(width: 4),
-                          const Text('4.2'),
-                          const Spacer(),
+                          const Icon(Icons.calendar_month_outlined, size: 16, color: primaryGreen),
+                          const SizedBox(width: 6),
                           Text(
-                            tour.giaNguoiLon ?? 'N/A',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryBlue),
+                            '${tour.thoiGian ?? "3"} ngày',
+                            style: TextStyle(fontSize: 13, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                           ),
+                          const Spacer(),
+                          Row(
+                            children: const [
+                              Icon(Icons.star, size: 14, color: primaryGreen),
+                              Icon(Icons.star, size: 14, color: primaryGreen),
+                              Icon(Icons.star, size: 14, color: primaryGreen),
+                              Icon(Icons.star, size: 14, color: primaryGreen),
+                              Icon(Icons.star, size: 14, color: primaryGreen),
+                            ],
+                          )
                         ],
                       ),
                     ],
@@ -510,171 +460,121 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
-        )).toList(),
-      ),
-    );
-  }
-  
-  // Thanh điều hướng dưới cùng (Bottom Navigation Bar)
-  Widget _buildBottomNavigationBar() {
-    return BottomNavigationBar(
-      currentIndex: _selectedIndex, // Sử dụng state index
-      onTap: _onItemTapped, // Gọi hàm xử lý khi nhấn
-      backgroundColor: Colors.white,
-      selectedItemColor: primaryBlue,
-      unselectedItemColor: Colors.grey,
-      type: BottomNavigationBarType.fixed, // Đảm bảo các item không bị dịch chuyển
-      showUnselectedLabels: true,
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Home',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.favorite_border),
-          label: 'Favorite',
-        ),
-        // Thêm mục QR Code vào vị trí trung tâm
-        BottomNavigationBarItem(
-          icon: Icon(Icons.qr_code_scanner),
-          label: 'QR Code',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.inbox),
-          label: 'Inbox',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline),
-          label: 'Profile',
-        ),
-      ],
-    );
-  }
-
-  // Xây dựng tab nội dung Home
-  Widget _buildHomeTab(BuildContext context) {
-    return FutureBuilder<List<Tour>>(
-      future: _toursFuture,
-      builder: (context, toursSnapshot) {
-        if (toursSnapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (toursSnapshot.hasError) {
-          return Center(child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text('Error loading tours: ${toursSnapshot.error}', style: const TextStyle(color: Colors.red)),
-          ));
-        }
-        final allTours = toursSnapshot.data ?? <Tour>[];
-        // Debug: list tour branch values
-        try {
-          final branchesInTours = allTours.map((t) => t.chiNhanh ?? '').toList();
-          print('Tours loaded - chiNhanh values: $branchesInTours');
-        } catch (_) {}
-        
-        return FutureBuilder<List<Map<String, dynamic>>>(
-          future: _branchesFuture,
-          builder: (context, branchesSnapshot) {
-            List<Map<String, dynamic>> branches = [];
-            if (branchesSnapshot.connectionState == ConnectionState.done && branchesSnapshot.hasData) {
-              branches = branchesSnapshot.data ?? [];
-            }
-            
-            // Filter tours by selected branch AND search query
-            final filteredTours = allTours.where((tour) {
-              // Apply branch filter
-              if (_selectedBranchId != null || _selectedBranch.isNotEmpty) {
-                final tourBranchRaw = tour.chiNhanh ?? '';
-                final tourBranchId = int.tryParse(tourBranchRaw);
-                if (_selectedBranchId != null && tourBranchId != null) {
-                  if (tourBranchId != _selectedBranchId) return false;
-                } else if (_selectedBranch.isNotEmpty) {
-                  final tourBranchName = tourBranchRaw.toString().trim().toLowerCase();
-                  final selectedName = _selectedBranch.toString().trim().toLowerCase();
-                  if (tourBranchName != selectedName) return false;
-                }
-              }
-              // Apply search filter (search in title, description, destination)
-              if (_searchQuery.isNotEmpty) {
-                final title = tour.tieuDe.toLowerCase();
-                final desc = (tour.moTa ?? '').toLowerCase();
-                final dest = (tour.noiDen ?? '').toLowerCase();
-                return title.contains(_searchQuery) || desc.contains(_searchQuery) || dest.contains(_searchQuery);
-              }
-              return true;
-            }).toList();
-
-            return SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context),
-                  const SizedBox(height: 16),
-                  _buildSearchBar(),
-                  const SizedBox(height: 16),
-                  _buildSectionTitle('Lọc Theo Chi Nhánh'),
-                  _buildBranchChips(branches),
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('All Tours'),
-                  if (filteredTours.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Center(
-                        child: Text(
-                          'No tours found',
-                          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                        ),
-                      ),
-                    )
-                  else
-                    _buildTourList(context, filteredTours),
-                  const SizedBox(height: 40),
-                ],
-              ),
-            );
-          },
         );
       },
     );
   }
 
-  // Placeholder cho tab Favorite (My Booking Page)
-  Widget _buildFavoriteTab() {
-    // Truyền key vào MyBookingPage
-    return MyBookingPage(key: _myBookingKey, userID: widget.userID);
-  }
+  Widget _buildHomeTab(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(context),
+          const SizedBox(height: 16),
+          _buildSearchBar(),
+          const SizedBox(height: 24),
+          
+          // CHỈ GỌI 1 LẦN FutureBuilder CHO CHIP
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: _branchesFuture,
+            builder: (context, snapshot) {
+               // Nếu đang load hoặc lỗi, vẫn hiện chip "Tất cả" mặc định
+               var branches = snapshot.hasData ? snapshot.data! : <Map<String, dynamic>>[];
+               
+               if (branches.isNotEmpty) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionTitle('Điểm đến phổ biến'),
+                      _buildBranchChips(branches),
+                      const SizedBox(height: 24),
+                    ],
+                  );
+               }
+               return const SizedBox.shrink();
+            },
+          ),
 
-  // Placeholder cho tab Inbox (Invoices Page)
-  Widget _buildInboxTab() {
-    // Truyền key vào InvoicesPage
-    return InvoicesPage(key: _invoicesKey, userID: widget.userID);
+          _buildSectionTitle('Tour Nổi Bật'),
+          
+          FutureBuilder<List<Tour>>(
+            future: _toursFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: primaryGreen)));
+              }
+              if (snapshot.hasError) {
+                return Center(child: Text('Lỗi kết nối', style: const TextStyle(color: Colors.red)));
+              }
+              
+              var tours = snapshot.data ?? [];
+              
+              // Filter
+              if (_selectedBranchId != null || _selectedBranch.isNotEmpty) {
+                tours = tours.where((t) {
+                  final branchRaw = t.chiNhanh?.toString() ?? '';
+                  if (_selectedBranchId != null) return branchRaw == _selectedBranchId.toString();
+                  return branchRaw.toLowerCase().contains(_selectedBranch.toLowerCase());
+                }).toList();
+              }
+
+              if (_searchQuery.isNotEmpty) {
+                tours = tours.where((t) => 
+                  t.tieuDe.toLowerCase().contains(_searchQuery) || 
+                  (t.noiDen ?? '').toLowerCase().contains(_searchQuery)
+                ).toList();
+              }
+
+              return _buildTourList(context, tours);
+            },
+          ),
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: scaffoldBg,
       body: SafeArea(
         child: IndexedStack(
           index: _selectedIndex,
           children: [
-            // Tab 0: Home
             _buildHomeTab(context),
-            // Tab 1: Favorite
-            _buildFavoriteTab(),
-            // Tab 2: QR Code (không hiển thị tại đây vì nó push Navigator)
+            MyBookingPage(key: _myBookingKey, userID: widget.userID),
             Container(),
-            // Tab 3: Inbox
-            _buildInboxTab(),
-            // Tab 4: Profile
-            ProfileScreen(
-              userID: widget.userID,
-              userName: widget.userData?['username'] ?? widget.userID,
-            ),
+            InvoicesPage(key: _invoicesKey, userID: widget.userID),
+            ProfileScreen(userID: widget.userID, userName: _userFullName.isNotEmpty ? _userFullName : widget.userID),
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNavigationBar(),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          onTap: _onItemTapped,
+          backgroundColor: Colors.white,
+          selectedItemColor: primaryGreen,
+          unselectedItemColor: Colors.grey.shade400,
+          type: BottomNavigationBarType.fixed,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+          unselectedLabelStyle: const TextStyle(fontSize: 11),
+          elevation: 0,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'TRANG CHỦ'),
+            BottomNavigationBarItem(icon: Icon(Icons.confirmation_number), label: 'ĐẶT VÉ'),
+            BottomNavigationBarItem(icon: Icon(Icons.qr_code_2, size: 32), label: 'QUÉT'),
+            BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'HÓA ĐƠN'),
+            BottomNavigationBarItem(icon: Icon(Icons.account_circle), label: 'CÁ NHÂN'),
+          ],
+        ),
+      ),
     );
   }
 }

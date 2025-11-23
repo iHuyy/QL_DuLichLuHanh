@@ -1,23 +1,22 @@
 import 'package:flutter/material.dart';
-// import 'package:http/http.dart' as http; // XÓA DÒNG NÀY
-import 'package:app_dllh/services/api_client.dart'; // THÊM DÒNG NÀY
+import 'package:app_dllh/services/api_client.dart';
 import 'dart:convert';
 import 'booking_detail_page.dart';
 import 'package:app_dllh/utils/image_helper.dart';
 import 'package:app_dllh/models/booking_item.dart';
 import 'package:app_dllh/config/app_config.dart';
+import 'package:intl/intl.dart';
 
-const Color primaryBlue = Color(0xFF007AFF);
-const Color darkTextColor = Color(0xFF1E1E1E);
-const Color lightGreyBackground = Color(0xFFF2F2F7);
+// --- BỘ MÀU WEB STYLE ---
+const Color primaryGreen = Color(0xFF86B817);
+const Color primaryDark = Color(0xFF13357B);
+const Color scaffoldBg = Color(0xFFF8F9FA);
+const Color darkTextColor = Color(0xFF2C3E50);
 
 class MyBookingPage extends StatefulWidget {
   final String userID;
 
-  const MyBookingPage({
-    Key? key,
-    required this.userID,
-  }) : super(key: key);
+  const MyBookingPage({Key? key, required this.userID}) : super(key: key);
 
   @override
   MyBookingPageState createState() => MyBookingPageState();
@@ -25,15 +24,15 @@ class MyBookingPage extends StatefulWidget {
 
 class MyBookingPageState extends State<MyBookingPage> {
   late Future<List<BookingItem>> _bookingsFuture;
-  final ApiClient _apiClient = ApiClient(); // THÊM DÒNG NÀY
+  final ApiClient _apiClient = ApiClient();
+  final currencyFormat = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
 
   @override
   void initState() {
     super.initState();
     _bookingsFuture = _fetchUserBookings();
   }
-  
-  // Thêm phương thức công khai để refresh data
+
   void refreshData() {
     if (mounted) {
       setState(() {
@@ -44,101 +43,65 @@ class MyBookingPageState extends State<MyBookingPage> {
 
   Future<List<BookingItem>> _fetchUserBookings() async {
     try {
-      // SỬA LỖI: Chỉ truyền endpoint, không truyền full URL
       final endpoint = 'get_user_bookings.php?makhachhang=${widget.userID}';
-      print('Fetching bookings from: ${AppConfig.baseUrl}/$endpoint');
-      
-      // SỬA LỖI: Dùng _apiClient.getJson thay vì http.get
       final response = await _apiClient.getJson(endpoint);
 
-      if (response.statusCode != 200) {
-        throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
-      }
+      if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
 
       final body = response.body.trim();
-      print('Response: $body');
-
-      if (body.isEmpty) {
-        throw Exception('Empty response from server');
-      }
-
-      if (body.startsWith('<')) {
-        throw Exception('Server returned HTML instead of JSON');
-      }
+      if (body.isEmpty || body.startsWith('<')) throw Exception('Lỗi dữ liệu từ máy chủ');
 
       final decoded = json.decode(body);
+      if (decoded['success'] != true) throw Exception(decoded['error'] ?? 'Lỗi không xác định');
 
-      // (SỬA LỖI: PHP trả về {success: true, bookings: [...]})
-      if (decoded['success'] != true) {
-        throw Exception(decoded['error'] ?? 'Unknown error');
-      }
-
-      final bookingsList = decoded['bookings'] as List;
+      final bookingsList = decoded['data'] as List;
       return bookingsList.map<BookingItem>((e) => BookingItem.fromJson(e)).toList();
     } catch (e) {
-      print('Error fetching bookings: $e');
-      throw Exception('Failed to load bookings: $e');
+      throw Exception('Không thể tải danh sách: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: scaffoldBg,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: darkTextColor),
-          onPressed: () => Navigator.pop(context),
-        ),
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: primaryDark),
         title: const Text(
-          'My Booking',
+          'VÉ CỦA TÔI',
           style: TextStyle(
-            color: darkTextColor,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+            color: primaryDark,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1,
           ),
         ),
-        centerTitle: true,
       ),
       body: FutureBuilder<List<BookingItem>>(
         future: _bookingsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator(color: primaryGreen));
           }
 
           if (snapshot.hasError) {
             return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Error loading bookings',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${snapshot.error}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _bookingsFuture = _fetchUserBookings();
-                        });
-                      },
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 50, color: Colors.redAccent),
+                  const SizedBox(height: 16),
+                  Text('Lỗi: ${snapshot.error}', textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: refreshData,
+                    style: ElevatedButton.styleFrom(backgroundColor: primaryDark),
+                    child: const Text('Thử lại', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
               ),
             );
           }
@@ -150,65 +113,43 @@ class MyBookingPageState extends State<MyBookingPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.shopping_bag_outlined, size: 64, color: Colors.grey),
+                  Icon(Icons.confirmation_number_outlined, size: 80, color: Colors.grey[300]),
                   const SizedBox(height: 16),
-                  const Text(
-                    'No bookings yet',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Text(
+                    'Bạn chưa đặt tour nào',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Start booking tours to see them here',
-                    style: TextStyle(color: Colors.grey),
+                  Text(
+                    'Hãy khám phá và đặt chuyến đi ngay!',
+                    style: TextStyle(color: Colors.grey[500]),
                   ),
                 ],
               ),
             );
           }
 
-          // Group bookings by status
-          // Nếu không có statusThaiDat, đặt mặc định là "Pending"
-          final onGoingBookings = bookings.where((b) {
+          // Phân loại
+          final closedBookings = bookings.where((b) {
             final status = b.trangThaiDat.toLowerCase();
-            return status.contains('confirm') || status.isEmpty;
+            return status.contains('hủy') || status.contains('hoàn thành') || status.contains('closed');
           }).toList();
-          final closedBookings = bookings.where((b) => b.trangThaiDat.toLowerCase().contains('closed')).toList();
+
+          final onGoingBookings = bookings.where((b) => !closedBookings.contains(b)).toList();
 
           return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 16),
             children: [
-              // On Going Section
               if (onGoingBookings.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Text(
-                    'On Going',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: darkTextColor,
-                    ),
-                  ),
-                ),
-                ...onGoingBookings.map((booking) => _buildBookingCard(context, booking, 'On Going')),
+                _buildSectionHeader('SẮP DIỄN RA (${onGoingBookings.length})'),
+                ...onGoingBookings.map((b) => _buildBookingCard(context, b, isActive: true)),
               ],
-
-              // Closed Section
+              
               if (closedBookings.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Text(
-                    'Closed',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: darkTextColor,
-                    ),
-                  ),
-                ),
-                ...closedBookings.map((booking) => _buildBookingCard(context, booking, 'Closed')),
+                const SizedBox(height: 24),
+                _buildSectionHeader('LỊCH SỬ (${closedBookings.length})'),
+                ...closedBookings.map((b) => _buildBookingCard(context, b, isActive: false)),
               ],
-
-              const SizedBox(height: 20),
             ],
           );
         },
@@ -216,129 +157,126 @@ class MyBookingPageState extends State<MyBookingPage> {
     );
   }
 
-  Widget _buildBookingCard(BuildContext context, BookingItem booking, String status) {
-    final displayStatus = booking.trangThaiDat.isEmpty ? 'On Going' : status;
-    
+  Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBookingCard(BuildContext context, BookingItem booking, {required bool isActive}) {
+    // Xác định trạng thái hiển thị
+    String statusText = booking.trangThaiDat;
+    Color statusColor = primaryDark;
+    Color statusBg = primaryDark.withOpacity(0.1);
+
+    if (isActive) {
+       if (statusText.contains('Đã xác nhận')) {
+         statusColor = primaryGreen;
+         statusBg = primaryGreen.withOpacity(0.1);
+       } else {
+         statusColor = Colors.orange;
+         statusBg = Colors.orange.withOpacity(0.1);
+       }
+    } else {
+       statusColor = Colors.grey;
+       statusBg = Colors.grey.withOpacity(0.1);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () async { // Bắt kết quả từ chi tiết booking
-          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => BookingDetailPage(bookingId: booking.maDatTour)));
-          // Refresh list sau khi quay lại (nếu có thay đổi trạng thái thanh toán)
+        onTap: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => BookingDetailPage(bookingId: booking.maDatTour)),
+          );
           refreshData();
         },
-        child: Card(
-          elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            child: Column(
-              children: [
-                // Image section
-                Stack(
-                  children: [
-                    booking.hinhAnh.isNotEmpty
-                          ? ImageHelper.imageFromData(
-                              booking.hinhAnh,
-                              width: double.infinity,
-                              height: 140,
-                              fit: BoxFit.cover,
-                            )
-                        : Container(
-                            width: double.infinity,
-                            height: 140,
-                            color: lightGreyBackground,
-                            child: const Icon(Icons.tour, size: 50, color: Colors.grey),
-                          ),
-                    // Status badge - top right
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: displayStatus == 'On Going' ? Colors.blue : Colors.green,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          displayStatus,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Ảnh Thumb (Trái)
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
                 ),
-                // Content section
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
+                child: ImageHelper.imageFromData(
+                  booking.hinhAnh,
+                  width: 100,
+                  height: 120, // Chiều cao cố định cho card đẹp hơn
+                  fit: BoxFit.cover,
+                ),
+              ),
+              
+              // Nội dung (Phải)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Tour title
+                      // Badge trạng thái
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: statusBg,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          statusText.toUpperCase(),
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      
+                      // Tên Tour
                       Text(
                         booking.tieuDe,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: darkTextColor,
+                          height: 1.2,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      // Duration (placeholder since DB doesn't have it)
-                      const Text(
-                        '2 Days 3 Night',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
+                      
                       const SizedBox(height: 8),
-                      // Date and Details row
+                      
+                      // Thông tin phụ
                       Row(
                         children: [
-                          const Icon(Icons.calendar_today, size: 12, color: Colors.grey),
+                          Icon(Icons.calendar_today, size: 12, color: Colors.grey[600]),
                           const SizedBox(width: 4),
                           Text(
                             booking.ngayDat,
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                           ),
-                          const SizedBox(width: 16),
+                          const Spacer(),
                           Text(
-                            '${booking.soNguoiLon} Adults • ${booking.soTreEm} Children',
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      // Price row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.info_outline, size: 14, color: primaryBlue),
-                              const SizedBox(width: 4),
-                              const Text(
-                                'Details',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: primaryBlue,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const Icon(Icons.chevron_right, size: 16, color: primaryBlue),
-                            ],
-                          ),
-                          Text(
-                            '\$${booking.tongTien.toStringAsFixed(0)}',
+                            currencyFormat.format(booking.tongTien),
                             style: const TextStyle(
-                              fontSize: 16,
+                              fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: primaryBlue,
+                              color: primaryGreen,
                             ),
                           ),
                         ],
@@ -346,8 +284,8 @@ class MyBookingPageState extends State<MyBookingPage> {
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:app_dllh/services/auth_service.dart';
 import 'package:app_dllh/models/invoice_item.dart';
 import 'invoice_detail_page.dart';
+import 'package:intl/intl.dart';
 
-const Color primaryBlue = Color(0xFF007AFF);
-const Color darkTextColor = Color(0xFF1E1E1E);
-const Color lightGreyBackground = Color(0xFFF2F2F7);
+// --- BỘ MÀU WEB STYLE ---
+const Color primaryGreen = Color(0xFF86B817);
+const Color primaryDark = Color(0xFF13357B);
+const Color scaffoldBg = Color(0xFFF8F9FA);
+const Color darkTextColor = Color(0xFF2C3E50);
 
 class InvoicesPage extends StatefulWidget {
   final String userID;
@@ -18,6 +21,7 @@ class InvoicesPage extends StatefulWidget {
 class InvoicesPageState extends State<InvoicesPage> {
   final AuthService _auth = AuthService();
   late Future<List<InvoiceItem>> _invoicesFuture;
+  final currencyFormat = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
 
   @override
   void initState() {
@@ -25,17 +29,6 @@ class InvoicesPageState extends State<InvoicesPage> {
     _invoicesFuture = _fetchInvoices();
   }
 
-  // KHÔNG DÙNG didChangeDependencies để reload ngẫu nhiên, thay bằng refreshData
-  // @override
-  // void didChangeDependencies() {
-  //   super.didChangeDependencies();
-  //   // Reload invoices every time page is displayed
-  //   setState(() {
-  //     _invoicesFuture = _fetchInvoices();
-  //   });
-  // }
-  
-  // Thêm phương thức công khai để refresh data
   void refreshData() {
     if (mounted) {
       setState(() {
@@ -49,47 +42,50 @@ class InvoicesPageState extends State<InvoicesPage> {
       final list = await _auth.getInvoices();
       return list.map((m) => InvoiceItem.fromJson(m)).toList();
     } catch (e) {
-      throw Exception('Failed to load invoices: $e');
+      throw Exception('Không thể tải hóa đơn: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: scaffoldBg,
       appBar: AppBar(
-        title: const Text('Invoices'),
+        title: const Text(
+          'DANH SÁCH HÓA ĐƠN',
+          style: TextStyle(
+            color: primaryDark,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1,
+          ),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
-        foregroundColor: darkTextColor,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: primaryDark),
       ),
       body: FutureBuilder<List<InvoiceItem>>(
         future: _invoicesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator(color: primaryGreen));
           }
           if (snapshot.hasError) {
             return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Error loading invoices',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${snapshot.error}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ],
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 50, color: Colors.redAccent),
+                  const SizedBox(height: 16),
+                  Text('Lỗi: ${snapshot.error}', textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: refreshData,
+                    style: ElevatedButton.styleFrom(backgroundColor: primaryDark),
+                    child: const Text('Thử lại', style: TextStyle(color: Colors.white)),
+                  )
+                ],
               ),
             );
           }
@@ -100,120 +96,114 @@ class InvoicesPageState extends State<InvoicesPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey),
+                  Icon(Icons.receipt_long, size: 80, color: Colors.grey[300]),
                   const SizedBox(height: 16),
-                  const Text(
-                    'No invoices yet',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Your invoices will appear here',
-                    style: TextStyle(color: Colors.grey),
+                  Text(
+                    'Chưa có hóa đơn nào',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[600]),
                   ),
                 ],
               ),
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
             itemCount: invoices.length,
+            separatorBuilder: (ctx, i) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final inv = invoices[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () async { // Bắt kết quả từ chi tiết hóa đơn
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => InvoiceDetailPage(invoiceId: inv.id)),
-                    );
-                    // Force a refresh of the list every time the detail page is closed (for payment status)
-                    refreshData(); 
-                  },
-                  child: Card(
-                    elevation: 1,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Icon
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: primaryBlue.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.receipt_long,
-                              color: primaryBlue,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Content
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Invoice #${inv.id}',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: darkTextColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  inv.date,
-                                  style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                ),
-                                const SizedBox(height: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: inv.status.toLowerCase().contains('paid') 
-                                        ? Colors.green.withOpacity(0.1) 
-                                        : Colors.orange.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    inv.status,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: inv.status.toLowerCase().contains('paid') 
-                                          ? Colors.green.shade700 
-                                          : Colors.orange.shade700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Amount
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '\$${inv.amount.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: primaryBlue,
-                                ),
+              final isPaid = inv.status.toLowerCase().contains('đã') || inv.status.toLowerCase().contains('paid');
+
+              return InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => InvoiceDetailPage(invoiceId: inv.id)),
+                  );
+                  refreshData();
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      // Icon Box
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: isPaid ? primaryGreen.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.receipt_outlined,
+                          color: isPaid ? primaryGreen : Colors.orange,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      
+                      // Info
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Hóa đơn #${inv.id}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: darkTextColor,
                               ),
-                              const SizedBox(height: 4),
-                              const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
-                            ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              inv.date,
+                              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Status & Amount
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            currencyFormat.format(inv.amount),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: primaryDark,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isPaid ? primaryGreen : Colors.orange,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              isPaid ? 'ĐÃ THANH TOÁN' : 'CHƯA THANH TOÁN',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                    ),
+                    ],
                   ),
                 ),
               );
@@ -223,5 +213,4 @@ class InvoicesPageState extends State<InvoicesPage> {
       ),
     );
   }
-
 }

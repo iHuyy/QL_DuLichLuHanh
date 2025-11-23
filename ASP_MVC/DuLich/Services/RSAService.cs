@@ -29,16 +29,35 @@ namespace DuLich.Services
             return Convert.ToBase64String(signature);
         }
 
-        public bool Verify(string data, string signatureBase64)
+        public bool Verify(string dataJson, string signatureBase64)
         {
-            if (string.IsNullOrWhiteSpace(signatureBase64))
+            if (string.IsNullOrWhiteSpace(signatureBase64) || string.IsNullOrWhiteSpace(dataJson))
             {
                 return false;
             }
 
-            var dataBytes = Encoding.UTF8.GetBytes(data);
-            var signatureBytes = Convert.FromBase64String(signatureBase64);
-            return _publicKey.VerifyData(dataBytes, signatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            try
+            {
+                // 1. Chuyển Payload (JSON String) sang Bytes (UTF8)
+                // Lưu ý: PHP json_encode mặc định là UTF8
+                var dataBytes = Encoding.UTF8.GetBytes(dataJson);
+
+                // 2. Chuyển Chữ ký (Base64) sang Bytes
+                var signatureBytes = Convert.FromBase64String(signatureBase64);
+
+                // 3. Verify bằng Public Key
+                // PHP openssl_sign mặc định dùng PKCS#1 v1.5 padding
+                return _publicKey.VerifyData(
+                    dataBytes,
+                    signatureBytes,
+                    HashAlgorithmName.SHA256,
+                    RSASignaturePadding.Pkcs1);
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi nếu cần: Console.WriteLine("Lỗi verify RSA: " + ex.Message);
+                return false;
+            }
         }
 
         // *** BẮT ĐẦU THAY ĐỔI ***

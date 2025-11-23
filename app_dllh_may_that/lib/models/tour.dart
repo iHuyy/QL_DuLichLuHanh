@@ -13,6 +13,7 @@ class Tour {
   final String? giaNguoiLon;
   final String? giaTreEm;
   final String? soLuong;
+  final String? soChoConLai; // Số chỗ còn lại
   final String? chiNhanh;
 
   Tour({
@@ -28,6 +29,7 @@ class Tour {
     this.giaNguoiLon,
     this.giaTreEm,
     this.soLuong,
+    this.soChoConLai,
     this.chiNhanh,
   });
 
@@ -100,8 +102,10 @@ class Tour {
       giaNguoiLon: _toStr(_get(json, 'GIANGUOILON')).isEmpty ? null : _toStr(_get(json, 'GIANGUOILON')),
       giaTreEm: _toStr(_get(json, 'GIATREEM')).isEmpty ? null : _toStr(_get(json, 'GIATREEM')),
       soLuong: _toStr(_get(json, 'SOLUONG')).isEmpty ? null : _toStr(_get(json, 'SOLUONG')),
-      // chiNhanh may be stored either as the branch name ('CHINHANH')
-      // or as the branch id ('MACHINHANH' / 'MaChiNhanh'). Support both.
+      
+      // --- THÊM MAPPING CHO SOCHOCONLAI ---
+      soChoConLai: _toStr(_get(json, 'SOCHOCONLAI')).isEmpty ? null : _toStr(_get(json, 'SOCHOCONLAI')),
+
       chiNhanh: (() {
         final rawId = _get(json, 'MACHINHANH') ?? _get(json, 'MaChiNhanh') ?? _get(json, 'MACHINHANH');
         if (rawId != null && _toStr(rawId).isNotEmpty) return _toStr(rawId);

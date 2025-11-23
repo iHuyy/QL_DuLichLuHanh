@@ -9,18 +9,27 @@
         <div class="card-header border-bottom-0">
             <ul class="nav nav-tabs card-header-tabs" id="profileTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="tab-info-link" data-bs-toggle="tab" data-bs-target="#tab-info" type="button" role="tab">
+                    <button class="nav-link active" id="tab-info-link" data-bs-toggle="tab" data-bs-target="#tab-info"
+                        type="button" role="tab">
                         <i class="bi bi-person-lines-fill me-1"></i> Chỉnh sửa thông tin
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="tab-password-link" data-bs-toggle="tab" data-bs-target="#tab-password" type="button" role="tab">
+                    <button class="nav-link" id="tab-password-link" data-bs-toggle="tab" data-bs-target="#tab-password"
+                        type="button" role="tab">
                         <i class="bi bi-key-fill me-1"></i> Đổi mật khẩu
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="tab-sessions-link" data-bs-toggle="tab" data-bs-target="#tab-sessions" type="button" role="tab">
+                    <button class="nav-link" id="tab-sessions-link" data-bs-toggle="tab" data-bs-target="#tab-sessions"
+                        type="button" role="tab">
                         <i class="bi bi-shield-lock-fill me-1"></i> Phiên đăng nhập
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-verify-link" data-bs-toggle="tab" data-bs-target="#tab-verify"
+                        type="button" role="tab">
+                        <i class="bi bi-qr-code-scan me-1"></i> Xác thực hóa đơn
                     </button>
                 </li>
             </ul>
@@ -45,7 +54,8 @@
                             </div>
                             <div class="col-md-6">
                                 <label asp-for="Email" class="form-label">Email</label>
-                                <input asp-for="Email" class="form-control" type="email" placeholder="example@domain.com" />
+                                <input asp-for="Email" class="form-control" type="email"
+                                    placeholder="example@domain.com" />
                                 <span asp-validation-for="Email" class="text-danger small"></span>
                             </div>
                             <div class="col-md-6">
@@ -55,7 +65,8 @@
                             </div>
                         </div>
                         <div class="text-end mt-4">
-                            <button type="submit" class="btn btn-primary rounded-pill px-4" id="update_profile">Lưu thay đổi</button>
+                            <button type="submit" class="btn btn-primary rounded-pill px-4" id="update_profile">Lưu thay
+                                đổi</button>
                         </div>
                     </form>
                 </div>
@@ -66,7 +77,8 @@
                             <h4 class="text-primary mb-2">Đổi mật khẩu</h4>
                             <p class="text-muted mb-0">Cập nhật mật khẩu định kỳ để đảm bảo an toàn tài khoản.</p>
                         </div>
-                        <button class="btn btn-outline-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
+                        <button class="btn btn-outline-primary rounded-pill" data-bs-toggle="modal"
+                            data-bs-target="#changePasswordModal">
                             <i class="bi bi-key me-1"></i> Đổi mật khẩu
                         </button>
                     </div>
@@ -94,12 +106,57 @@
                         </table>
                     </div>
                 </div>
+                <div class="tab-pane fade" id="tab-verify" role="tabpanel">
+                    <h4 class="mb-4 text-primary">Kiểm tra tính toàn vẹn của Hóa đơn</h4>
+
+                    <div class="card bg-light border-0 mb-4">
+                        <div class="card-body text-center p-5">
+                            <i class="bi bi-file-earmark-pdf text-danger" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3">Tải lên file PDF hóa đơn</h5>
+                            <p class="text-muted">Hệ thống sẽ kiểm tra chữ ký số để đảm bảo hóa đơn chưa bị chỉnh sửa.
+                            </p>
+
+                            <form id="verifyForm" enctype="multipart/form-data">
+                                <div class="input-group mb-3 w-75 mx-auto">
+                                    <input type="file" class="form-control" id="invoiceFile" name="invoiceFile"
+                                        accept=".pdf">
+                                    <button class="btn btn-primary" type="button" onclick="verifyInvoice()">
+                                        <i class="bi bi-shield-check"></i> Kiểm tra ngay
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div id="verifyResult" class="d-none">
+                        <div class="alert" id="verifyAlert" role="alert"></div>
+
+                        <div class="card shadow-sm mt-3">
+                            <div class="card-header bg-transparent fw-bold">Thông tin hóa đơn tìm thấy</div>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Mã hóa đơn:</span>
+                                    <strong id="res_id">---</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Ngày xuất:</span>
+                                    <span id="res_date">---</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Trạng thái:</span>
+                                    <span id="res_status">---</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
+<div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
@@ -107,11 +164,13 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form asp-action="ChangePassword" asp-controller="Customer" method="post" class="change_password_profile">
+                <form asp-action="ChangePassword" asp-controller="Customer" method="post"
+                    class="change_password_profile">
                     @Html.AntiForgeryToken()
                     <div class="mb-3">
                         <label for="inputCurrentPassword" class="form-label">Mật khẩu hiện tại</label>
-                        <input type="password" name="CurrentPassword" class="form-control" id="inputCurrentPassword" required>
+                        <input type="password" name="CurrentPassword" class="form-control" id="inputCurrentPassword"
+                            required>
                     </div>
                     <div class="mb-3">
                         <label for="inputNewPassword" class="form-label">Mật khẩu mới</label>
@@ -119,10 +178,12 @@
                     </div>
                     <div class="mb-3">
                         <label for="inputConfirmPassword" class="form-label">Xác nhận mật khẩu mới</label>
-                        <input type="password" name="ConfirmPassword" class="form-control" id="inputConfirmPassword" required>
+                        <input type="password" name="ConfirmPassword" class="form-control" id="inputConfirmPassword"
+                            required>
                     </div>
                     <div class="text-end">
-                        <button type="button" class="btn btn-outline-secondary me-2" data-bs-dismiss="modal">Hủy</button>
+                        <button type="button" class="btn btn-outline-secondary me-2"
+                            data-bs-dismiss="modal">Hủy</button>
                         <button type="submit" class="btn btn-primary">Đổi mật khẩu</button>
                     </div>
                 </form>
@@ -153,17 +214,76 @@
                 data.sessions.forEach(sess => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td>${sess.device_type || 'WEB'}</td>
-                        <td>${sess.device_info || ''}</td>
-                        <td>${new Date(sess.login_time).toLocaleString()}</td>
-                        <td class="text-center">
-                            <button class="btn btn-sm btn-outline-danger" data-session="${sess.session_id}">Đăng xuất</button>
-                        </td>`;
+                                    <td>${sess.device_type || 'WEB'}</td>
+                                    <td>${sess.device_info || ''}</td>
+                                    <td>${new Date(sess.login_time).toLocaleString()}</td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-outline-danger" data-session="${sess.session_id}">Đăng xuất</button>
+                                    </td>`;
                     tr.querySelector('button').addEventListener('click', () => remoteLogout(sess.session_id));
                     tableBody.appendChild(tr);
                 });
             } catch (err) {
                 showSessionAlert('Lỗi khi tải phiên đăng nhập: ' + (err?.message || ''), 'danger');
+            }
+        }
+
+        async function verifyInvoice() {
+            const fileInput = document.getElementById('invoiceFile');
+            const resultDiv = document.getElementById('verifyResult');
+            const alertDiv = document.getElementById('verifyAlert');
+
+            // Reset UI
+            resultDiv.classList.add('d-none');
+            alertDiv.className = 'alert';
+
+            if (fileInput.files.length === 0) {
+                alert('Vui lòng chọn file PDF hóa đơn!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('invoiceFile', fileInput.files[0]);
+
+            try {
+                // Hiển thị loading
+                alertDiv.className = 'alert alert-info';
+                alertDiv.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang giải mã chữ ký số và kiểm tra...';
+                resultDiv.classList.remove('d-none');
+
+                const response = await fetch('/Customer/VerifyInvoice', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Cập nhật thông tin
+                    document.getElementById('res_id').innerText = '#' + data.maHoaDon;
+                    document.getElementById('res_date').innerText = data.ngayXuat;
+                    document.getElementById('res_status').innerText = data.trangThai;
+
+                    if (data.isValid) {
+                        alertDiv.className = 'alert alert-success d-flex align-items-center';
+                        alertDiv.innerHTML = `<i class="bi bi-check-circle-fill fs-4 me-2"></i> 
+                                              <div><strong>HỢP LỆ!</strong> ${data.message}</div>`;
+                    } else {
+                        alertDiv.className = 'alert alert-danger d-flex align-items-center';
+                        alertDiv.innerHTML = `<i class="bi bi-exclamation-triangle-fill fs-4 me-2"></i> 
+                                              <div><strong>KHÔNG HỢP LỆ!</strong> ${data.message}</div>`;
+                    }
+                } else {
+                    alertDiv.className = 'alert alert-warning';
+                    alertDiv.innerText = data.message;
+                }
+                resultDiv.classList.remove('d-none');
+
+            } catch (error) {
+                console.error(error);
+                alertDiv.className = 'alert alert-danger';
+                alertDiv.innerText = 'Đã xảy ra lỗi khi kết nối tới máy chủ.';
+                resultDiv.classList.remove('d-none');
             }
         }
 
@@ -191,9 +311,9 @@
         function showSessionAlert(message, type) {
             const container = document.getElementById('sessionAlerts');
             container.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>`;
+                            ${message}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>`;
         }
 
         document.addEventListener('DOMContentLoaded', () => {

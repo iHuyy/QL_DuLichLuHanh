@@ -1742,11 +1742,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "G:\\Study\\KLTN\\AppQLDVDLLH\\WebHuy\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
+      "projectUniqueName": "G:\\Study\\KLTN\\AppQLDVDLLH\\Web\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
       "projectName": "DuLich",
-      "projectPath": "G:\\Study\\KLTN\\AppQLDVDLLH\\WebHuy\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
+      "projectPath": "G:\\Study\\KLTN\\AppQLDVDLLH\\Web\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
       "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
-      "outputPath": "G:\\Study\\KLTN\\AppQLDVDLLH\\WebHuy\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\obj\\",
+      "outputPath": "G:\\Study\\KLTN\\AppQLDVDLLH\\Web\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config",
