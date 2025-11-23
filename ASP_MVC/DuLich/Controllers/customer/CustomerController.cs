@@ -500,83 +500,98 @@ namespace DuLich.Controllers
             }
 
             var tour = await _context.Tours.FindAsync(model.TourId);
-            if (tour == null)
-            {
-                return NotFound();
-            }
+            if (tour == null) return NotFound();
 
             var username = User.Identity?.Name;
-            if (string.IsNullOrEmpty(username))
-            {
-                return Unauthorized();
-            }
+            if (string.IsNullOrEmpty(username)) return Unauthorized();
 
             var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
-            if (customer == null)
-            {
-                return Unauthorized();
-            }
+            if (customer == null) return Unauthorized();
 
+            // Kiểm tra số lượng chỗ (như cũ)
             var totalQuantity = model.NumAdults + model.NumChildren;
             if (tour.SoLuong.HasValue && totalQuantity > tour.SoLuong.Value)
             {
-                ModelState.AddModelError(string.Empty, "S? lu?ng ngu?i d?t vu?t qu� s? ch? c�n tr?ng");
+                ModelState.AddModelError(string.Empty, "Số lượng người đặt vượt quá số chỗ còn trống");
                 return View(model);
             }
 
-            var booking = new DatTour
+            using (var transaction = _context.Database.BeginTransaction())
             {
-                MaTour = model.TourId,
-                MaKhachHang = customer.MaKhachHang,
-                NgayDat = DateTime.Now,
-                SoNguoiLon = model.NumAdults,
-                SoTreEm = model.NumChildren,
-                TongTien = (model.NumAdults * (tour.GiaNguoiLon ?? 0)) + (model.NumChildren * (tour.GiaTreEm ?? 0)),
-                TrangThaiDat = "Chua thanh to�n",
-                TrangThaiThanhToan = "Chua thanh to�n",
-                YeuCauDacBiet = model.SpecialRequest
-            };
-
-            _context.DatTours.Add(booking);
-            await _context.SaveChangesAsync();
-
-            var existingInvoice = await _context.HoaDons
-                .FirstOrDefaultAsync(h => h.MaDatTour == booking.MaDatTour);
-
-            HoaDon hoaDon;
-            if (existingInvoice != null)
-            {
-                hoaDon = existingInvoice;
-            }
-            else
-            {
-                hoaDon = new HoaDon
+                try
                 {
-                    MaDatTour = booking.MaDatTour,
-                    NgayXuat = DateTime.Now,
-                    SoTien = booking.TongTien,
-                    TrangThai = "Chua thanh to�n"
-                };
-                _context.HoaDons.Add(hoaDon);
-                await _context.SaveChangesAsync();
+                    // 1. TẠO DỮ LIỆU ĐẶT TOUR
+                    var booking = new DatTour
+                    {
+                        MaTour = model.TourId,
+                        MaKhachHang = customer.MaKhachHang,
+                        NgayDat = DateTime.Now,
+                        SoNguoiLon = model.NumAdults,
+                        SoTreEm = model.NumChildren,
+                        TongTien = (model.NumAdults * (tour.GiaNguoiLon ?? 0)) + (model.NumChildren * (tour.GiaTreEm ?? 0)),
+                        TrangThaiDat = "Chưa xác nhận", // Logic PHP để là 'Chưa xác nhận'
+                        TrangThaiThanhToan = "Chưa thanh toán",
+                        YeuCauDacBiet = model.SpecialRequest
+                    };
+
+                    _context.DatTours.Add(booking);
+                    await _context.SaveChangesAsync(); // Lưu để lấy MaDatTour
+
+                    // 2. TẠO HÓA ĐƠN (Lưu trước để lấy MaHoaDon và NgayXuat chuẩn)
+                    // Kiểm tra xem trigger có tự tạo hóa đơn không, nếu chưa thì tạo thủ công
+                    var hoaDon = await _context.HoaDons.FirstOrDefaultAsync(h => h.MaDatTour == booking.MaDatTour);
+
+                    if (hoaDon == null)
+                    {
+                        hoaDon = new HoaDon
+                        {
+                            MaDatTour = booking.MaDatTour,
+                            NgayXuat = DateTime.Now,
+                            SoTien = booking.TongTien,
+                            TrangThai = "Chưa thanh toán"
+                        };
+                        _context.HoaDons.Add(hoaDon);
+                        await _context.SaveChangesAsync(); // Lưu để lấy MaHoaDon
+                    }
+
+                    // 3. TẠO PAYLOAD JSON (ĐỒNG BỘ VỚI PHP/FLUTTER)
+                    // Cấu trúc này khớp hoàn toàn với file create_booking.php bạn đã gửi
+                    var payloadObj = new
+                    {
+                        maHoaDon = hoaDon.MaHoaDon,
+                        maDatTour = booking.MaDatTour,
+                        maKhachHang = booking.MaKhachHang,
+                        soTien = (double)(hoaDon.SoTien ?? 0), // Ép kiểu double cho giống JSON number
+                        ngayXuat = hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss"), // Định dạng ngày giống Oracle TO_CHAR
+                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds() // Timestamp hiện tại
+                    };
+
+                    // Chuyển Object sang chuỗi JSON
+                    string payloadJson = System.Text.Json.JsonSerializer.Serialize(payloadObj);
+
+                    // 4. KÝ SỐ
+                    // Ký chuỗi JSON vừa tạo
+                    string signature = _rsaService.Sign(payloadJson);
+
+                    // 5. CẬP NHẬT LẠI VÀO DATABASE
+                    hoaDon.Payload = payloadJson; // Lưu JSON gốc vào cột Payload
+                    hoaDon.ChuKySo = signature;   // Lưu chữ ký
+
+                    _context.HoaDons.Update(hoaDon);
+                    await _context.SaveChangesAsync();
+
+                    transaction.Commit();
+
+                    // Chuyển sang trang thanh toán
+                    return RedirectToAction("Payment", new { bookingId = booking.MaDatTour });
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    ModelState.AddModelError("", "Lỗi khi đặt tour: " + ex.Message);
+                    return View(model);
+                }
             }
-
-            if (!hoaDon.NgayXuat.HasValue)
-            {
-                hoaDon.NgayXuat = DateTime.Now;
-            }
-
-            var signaturePayload = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
-            if (!string.IsNullOrEmpty(signaturePayload))
-            {
-                hoaDon.ChuKySo = _rsaService.Sign(signaturePayload);
-            }
-
-            _context.HoaDons.Update(hoaDon);
-            await _context.SaveChangesAsync();
-
-            // Sau khi đặt tour, chuyển thẳng sang trang thanh toán cho booking vừa tạo
-            return RedirectToAction("Payment", new { bookingId = booking.MaDatTour });
         }
 
         [HttpGet]
