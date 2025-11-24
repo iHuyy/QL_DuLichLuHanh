@@ -1,20 +1,68 @@
 #!/bin/bash
-export ORACLE_SID=ORCLCDB          # SID CDB của bạn
-export ORACLE_HOME=/u01/app/oracle/product/19.0.0/dbhome_1
-PATH=$ORACLE_HOME/bin:$PATH
+# Simple RMAN backup wrapper used by the ASP.NET app (invoked over SSH).
+# Sets Oracle env, logs output, and prints BACKUP_PATH for the C# service.
 
-mode="--full"
-[ "$1" = "--incremental" ] && mode="--incremental"
+set -uo pipefail
 
-rman target / <<EOF
+BACKUP_ROOT="${BACKUP_DIR:-/u01/backup}"
+ORACLE_HOME="${ORACLE_HOME:-/u01/app/oracle/product/19.0.0/dbhome_1}"
+ORACLE_SID="${ORACLE_SID:-ORCLCDB}"
+PATH="$ORACLE_HOME/bin:$PATH"
+export ORACLE_HOME ORACLE_SID PATH
+
+RUN_ID=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="${BACKUP_ROOT}/${RUN_ID}"
+mkdir -p "$BACKUP_DIR" "$BACKUP_DIR/logs"
+
+LOG_FILE="${BACKUP_DIR}/logs/rman_backup_$(date +%Y%m%d_%H%M%S).log"
+START_TIME=$(date +%s)
+
+if ! command -v rman >/dev/null 2>&1; then
+  echo "ERROR: rman not found in PATH. Current PATH=$PATH"
+  exit 1
+fi
+
+if [ "${1:-}" == "--full" ]; then
+  echo "Requested FULL backup (online)."
+  RMAN_SCRIPT=$(cat <<EOF
 RUN {
-  CROSSCHECK BACKUP;
-  DELETE NOPROMPT EXPIRED BACKUP;
-  BACKUP AS COMPRESSED BACKUPSET DATABASE PLUS ARCHIVELOG;
-  DELETE NOPROMPT ARCHIVELOG ALL BACKED UP 2 TIMES TO DISK;
+  SQL 'alter system archive log current';
+  BACKUP AS COMPRESSED BACKUPSET DATABASE PLUS ARCHIVELOG FORMAT '${BACKUP_DIR}/full_%T_%U.bkp';
 }
 EOF
+)
+elif [ "${1:-}" == "--incremental" ]; then
+  echo "Requested INCREMENTAL backup (online)."
+  RMAN_SCRIPT=$(cat <<EOF
+RUN {
+  BACKUP INCREMENTAL LEVEL 1 DATABASE PLUS ARCHIVELOG FORMAT '${BACKUP_DIR}/inc_%T_%U.bkp';
+}
+EOF
+)
+else
+  echo "Usage: $0 --full|--incremental"
+  exit 1
+fi
 
-# Lấy file mới nhất và in ra BACKUP_PATH để app đọc
-latest=$(ls -1t /u01/backup | head -1)
-echo "BACKUP_PATH=/u01/backup/$latest"
+echo "Running RMAN... log: ${LOG_FILE}"
+rman target / log="${LOG_FILE}" <<EOF
+${RMAN_SCRIPT}
+exit;
+EOF
+RC=$?
+
+if [ $RC -eq 0 ]; then
+  echo "RMAN completed successfully."
+  # Find the newest .bkp created after START_TIME
+  LATEST_BACKUP_FILE=$(find "${BACKUP_DIR}" -type f -name "*.bkp" -newermt "@${START_TIME}" | sort | tail -n 1)
+  if [ -n "${LATEST_BACKUP_FILE}" ]; then
+    echo "Found latest backup: ${LATEST_BACKUP_FILE}"
+    echo "BACKUP_PATH=${LATEST_BACKUP_FILE}"
+  else
+    echo "No new backup file found under ${BACKUP_DIR}."
+  fi
+else
+  echo "RMAN failed (exit=${RC}). Tail of log:"
+  tail -n 50 "${LOG_FILE}" || true
+  exit $RC
+fi

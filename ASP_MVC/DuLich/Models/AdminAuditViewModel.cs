@@ -5,17 +5,17 @@ namespace DuLich.Models
 {
     public class AdminAuditViewModel
     {
-        public List<AuditRecord> TriggerRecords { get; set; } = new();
-        public List<AuditRecord> StandardRecords { get; set; } = new();
-        public List<AuditRecord> FgaRecords { get; set; } = new();
-        public string ActiveTab { get; set; } = "TRIGGER";
+        public List<AuditRecord> TourRecords { get; set; } = new();
+        public List<AuditRecord> StaffRecords { get; set; } = new();
+        public List<AuditRecord> DatabaseRecords { get; set; } = new();
+        public string ActiveTab { get; set; } = "TOUR";
         public int PageSize { get; set; } = 20;
-        public int TriggerPage { get; set; } = 1;
-        public int StandardPage { get; set; } = 1;
-        public int FgaPage { get; set; } = 1;
-        public int TriggerTotal { get; set; }
-        public int StandardTotal { get; set; }
-        public int FgaTotal { get; set; }
+        public int TourPage { get; set; } = 1;
+        public int StaffPage { get; set; } = 1;
+        public int DatabasePage { get; set; } = 1;
+        public int TourTotal { get; set; }
+        public int StaffTotal { get; set; }
+        public int DatabaseTotal { get; set; }
     }
 
     public class AuditRecord
@@ -29,5 +29,6 @@ namespace DuLich.Models
         public string PerformedBy { get; set; } = string.Empty;
         public DateTime? Timestamp { get; set; }
         public string? SqlText { get; set; }
+        public string? PolicyName { get; set; }
     }
 }

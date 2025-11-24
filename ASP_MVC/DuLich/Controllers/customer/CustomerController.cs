@@ -1,4 +1,4 @@
-﻿using DuLich.Models;
+using DuLich.Models;
 using DuLich.Services;
 using DuLich.Models.Data;
 using Microsoft.EntityFrameworkCore;
@@ -10,8 +10,15 @@ using System.Security.Claims;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-using iTextSharp.text;
-using iTextSharp.text.pdf;
+using iText.Kernel.Pdf;
+using iText.Kernel.Geom;
+using iText.Layout;
+using iText.Layout.Element;
+using iText.Layout.Properties;
+using iText.Kernel.Font;
+using iText.IO.Font.Constants;
+using iText.Kernel.Colors;
+using iText.Layout.Borders;
 
 namespace DuLich.Controllers
 {
@@ -120,7 +127,7 @@ namespace DuLich.Controllers
                 return RedirectToAction("Index", "Customer");
             }
 
-            ModelState.AddModelError(string.Empty, "T�n dang nh?p ho?c m?t kh?u kh�ng d�ng");
+            ModelState.AddModelError(string.Empty, "T�n dang nh?p v� m?t kh?u chua ch�nh x�c");
             return View(model);
         }
 
@@ -348,15 +355,15 @@ namespace DuLich.Controllers
                     .AverageAsync(d => (decimal?)d.SoSao) ?? 0;
 
                 string bookingStatusChar = "b"; // Default to pending
-                if (booking.TrangThaiDat == "�� x�c nh?n" && tour.ThoiGian > DateTime.Now)
+                if (booking.TrangThaiDat == "�� x�c nh?n" && tour.ThoiGian > DateTime.Now)
                 {
                     bookingStatusChar = "y"; // Upcoming
                 }
-                else if (booking.TrangThaiDat == "�� x�c nh?n" && tour.ThoiGian <= DateTime.Now)
+                else if (booking.TrangThaiDat == "�� x�c nh?n" && tour.ThoiGian <= DateTime.Now)
                 {
                     bookingStatusChar = "f"; // Finished
                 }
-                else if (booking.TrangThaiDat == "�� h?y")
+                else if (booking.TrangThaiDat == "�� h?y")
                 {
                     bookingStatusChar = "c"; // Cancelled
                 }
@@ -376,7 +383,7 @@ namespace DuLich.Controllers
                     TotalPrice = booking.TongTien ?? 0,
                     Images = imageIds.Select(id => $"/api/image/{id}").ToList(),
                     Rating = rating,
-                    IsPaid = booking.HoaDon?.TrangThai == "�� thanh to�n"
+                    IsPaid = booking.HoaDon?.TrangThai == "�� thanh to�n"
                 });
             }
 
@@ -424,12 +431,12 @@ namespace DuLich.Controllers
             var model = new TourDetailViewModel
             {
                 MaTour = tour.MaTour,
-                TenTour = tour.TieuDe ?? "Chua c� t�n",
+                TenTour = tour.TieuDe ?? "Chua c� t�n",
                 MoTa = tour.MoTa,
-                DiemKhoiHanh = tour.NoiKhoiHanh ?? "Chua x�c d?nh",
-                DiemDen = tour.NoiDen ?? tour.ThanhPho ?? "Chua x�c d?nh",
+                DiemKhoiHanh = tour.NoiKhoiHanh ?? "Chua x�c d?nh",
+                DiemDen = tour.NoiDen ?? tour.ThanhPho ?? "Chua x�c d?nh",
                 NgayKhoiHanh = tour.ThoiGian ?? DateTime.Now,
-                NgayKetThuc = tour.ThoiGian?.AddDays(5) ?? DateTime.Now.AddDays(5), // Gi? s? tour k�o d�i 5 ng�y
+                NgayKetThuc = tour.ThoiGian?.AddDays(5) ?? DateTime.Now.AddDays(5), // Gi? s? tour k?o d?i 5 ng?y
                 Gia = tour.GiaNguoiLon ?? 0,
                 SoLuong = tour.SoLuong ?? 0
             };
@@ -451,7 +458,7 @@ namespace DuLich.Controllers
                 .Select(t => new TourDetailViewModel
                 {
                     MaTour = t.MaTour,
-                    TenTour = t.TieuDe ?? "Chua c� t�n",
+                    TenTour = t.TieuDe ?? "Chua x�c d?nh",
                     Gia = t.GiaNguoiLon ?? 0
                 })
                 .ToListAsync();
@@ -508,11 +515,11 @@ namespace DuLich.Controllers
             var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
             if (customer == null) return Unauthorized();
 
-            // Kiểm tra số lượng chỗ (như cũ)
+            // Ki?m tra s? lu?ng ch? (nhu cu)
             var totalQuantity = model.NumAdults + model.NumChildren;
             if (tour.SoLuong.HasValue && totalQuantity > tour.SoLuong.Value)
             {
-                ModelState.AddModelError(string.Empty, "Số lượng người đặt vượt quá số chỗ còn trống");
+                ModelState.AddModelError(string.Empty, "S? lu?ng ngu?i d?t vu?t qu� s? ch? c�n tr?ng");
                 return View(model);
             }
 
@@ -520,7 +527,7 @@ namespace DuLich.Controllers
             {
                 try
                 {
-                    // 1. TẠO DỮ LIỆU ĐẶT TOUR
+                    // 1. T?O D? LI?U �?T TOUR
                     var booking = new DatTour
                     {
                         MaTour = model.TourId,
@@ -529,16 +536,16 @@ namespace DuLich.Controllers
                         SoNguoiLon = model.NumAdults,
                         SoTreEm = model.NumChildren,
                         TongTien = (model.NumAdults * (tour.GiaNguoiLon ?? 0)) + (model.NumChildren * (tour.GiaTreEm ?? 0)),
-                        TrangThaiDat = "Chưa xác nhận", // Logic PHP để là 'Chưa xác nhận'
-                        TrangThaiThanhToan = "Chưa thanh toán",
+                        TrangThaiDat = "Chua x�c nh?n", // Logic PHP d? l� 'Chua x�c nh?n'
+                        TrangThaiThanhToan = "Chua thanh to�n",
                         YeuCauDacBiet = model.SpecialRequest
                     };
 
                     _context.DatTours.Add(booking);
-                    await _context.SaveChangesAsync(); // Lưu để lấy MaDatTour
+                    await _context.SaveChangesAsync(); // Luu d? l?y MaDatTour
 
-                    // 2. TẠO HÓA ĐƠN (Lưu trước để lấy MaHoaDon và NgayXuat chuẩn)
-                    // Kiểm tra xem trigger có tự tạo hóa đơn không, nếu chưa thì tạo thủ công
+                    // 2. T?O H�A �ON (Luu tru?c d? l?y MaHoaDon v� NgayXuat chu?n)
+                    // Ki?m tra xem trigger c� t? t?o h�a don kh�ng, n?u chua th� t?o th? c�ng
                     var hoaDon = await _context.HoaDons.FirstOrDefaultAsync(h => h.MaDatTour == booking.MaDatTour);
 
                     if (hoaDon == null)
@@ -548,47 +555,47 @@ namespace DuLich.Controllers
                             MaDatTour = booking.MaDatTour,
                             NgayXuat = DateTime.Now,
                             SoTien = booking.TongTien,
-                            TrangThai = "Chưa thanh toán"
+                            TrangThai = "Chua thanh to�n"
                         };
                         _context.HoaDons.Add(hoaDon);
-                        await _context.SaveChangesAsync(); // Lưu để lấy MaHoaDon
+                        await _context.SaveChangesAsync(); // Luu d? l?y MaHoaDon
                     }
 
-                    // 3. TẠO PAYLOAD JSON (ĐỒNG BỘ VỚI PHP/FLUTTER)
-                    // Cấu trúc này khớp hoàn toàn với file create_booking.php bạn đã gửi
+                    // 3. T?O PAYLOAD JSON (�?NG B? V?I PHP/FLUTTER)
+                    // C?u tr�c n�y kh?p ho�n to�n v?i file create_booking.php b?n d� g?i
                     var payloadObj = new
                     {
                         maHoaDon = hoaDon.MaHoaDon,
                         maDatTour = booking.MaDatTour,
                         maKhachHang = booking.MaKhachHang,
-                        soTien = (double)(hoaDon.SoTien ?? 0), // Ép kiểu double cho giống JSON number
-                        ngayXuat = hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss"), // Định dạng ngày giống Oracle TO_CHAR
-                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds() // Timestamp hiện tại
+                        soTien = (double)(hoaDon.SoTien ?? 0), // �p ki?u double cho gi?ng JSON number
+                        ngayXuat = hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss"), // �?nh d?ng ng�y gi?ng Oracle TO_CHAR
+                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds() // Timestamp hi?n t?i
                     };
 
-                    // Chuyển Object sang chuỗi JSON
+                    // Chuy?n Object sang chu?i JSON
                     string payloadJson = System.Text.Json.JsonSerializer.Serialize(payloadObj);
 
-                    // 4. KÝ SỐ
-                    // Ký chuỗi JSON vừa tạo
+                    // 4. K� S?
+                    // K� chu?i JSON v?a t?o
                     string signature = _rsaService.Sign(payloadJson);
 
-                    // 5. CẬP NHẬT LẠI VÀO DATABASE
-                    hoaDon.Payload = payloadJson; // Lưu JSON gốc vào cột Payload
-                    hoaDon.ChuKySo = signature;   // Lưu chữ ký
+                    // 5. C?P NH?T L?I V�O DATABASE
+                    hoaDon.Payload = payloadJson; // Luu JSON g?c v�o c?t Payload
+                    hoaDon.ChuKySo = signature;   // Luu ch? k�
 
                     _context.HoaDons.Update(hoaDon);
                     await _context.SaveChangesAsync();
 
                     transaction.Commit();
 
-                    // Chuyển sang trang thanh toán
+                    // Chuy?n sang trang thanh to�n
                     return RedirectToAction("Payment", new { bookingId = booking.MaDatTour });
                 }
                 catch (Exception ex)
                 {
                     transaction.Rollback();
-                    ModelState.AddModelError("", "Lỗi khi đặt tour: " + ex.Message);
+                    ModelState.AddModelError("", "L?i khi d?t tour: " + ex.Message);
                     return View(model);
                 }
             }
@@ -649,9 +656,9 @@ namespace DuLich.Controllers
                 TourId = tour.MaTour,
                 BookingId = booking.MaDatTour,
                 CheckoutId = booking.HoaDon?.MaHoaDon ?? 0,
-                BookingStatus = booking.TrangThaiDat == "�� x�c nh?n" && tour.ThoiGian > DateTime.Now ? "y" :
-                                booking.TrangThaiDat == "�� x�c nh?n" && tour.ThoiGian <= DateTime.Now ? "f" :
-                                booking.TrangThaiDat == "�� h?y" ? "c" : "b", // 'b' for pending, 'y' for upcoming, 'f' for finished, 'c' for cancelled
+                BookingStatus = booking.TrangThaiDat == "�� x�c nh?n" && tour.ThoiGian > DateTime.Now ? "y" :
+                                booking.TrangThaiDat == "�� x�c nh?n" && tour.ThoiGian <= DateTime.Now ? "f" :
+                                booking.TrangThaiDat == "�� h?y" ? "c" : "b", // 'b' for pending, 'y' for upcoming, 'f' for finished, 'c' for cancelled
                 Title = tour.TieuDe ?? string.Empty,
                 Description = tour.MoTa ?? string.Empty,
                 Destination = tour.NoiDen ?? tour.NoiKhoiHanh ?? tour.ThanhPho ?? string.Empty,
@@ -667,7 +674,7 @@ namespace DuLich.Controllers
                 EndDate = tour.ThoiGian?.AddDays(3), // Assuming a default tour duration of 3 days
                 PriceAdult = tour.GiaNguoiLon ?? 0,
                 PriceChild = tour.GiaTreEm ?? 0,
-                IsPaid = booking.HoaDon?.TrangThai == "�� thanh to�n"
+                IsPaid = booking.HoaDon?.TrangThai == "�� thanh to�n"
             };
 
             var model = new TourBookedViewModel
@@ -703,16 +710,16 @@ namespace DuLich.Controllers
             }
 
             // Only allow cancellation if the booking is not already cancelled or finished
-            if (booking.TrangThaiDat != "�� h?y" && booking.TrangThaiDat != "�� ho�n th�nh")
+            if (booking.TrangThaiDat != "�� h?y" && booking.TrangThaiDat != "?? ho?n th?nh")
             {
-                booking.TrangThaiDat = "�� h?y";
+                booking.TrangThaiDat = "�� h?y";
                 _context.DatTours.Update(booking);
                 await _context.SaveChangesAsync();
-                TempData["SuccessMessage"] = "Tour d� du?c h?y th�nh c�ng.";
+                TempData["SuccessMessage"] = "Tour d? du?c h?y th?nh c?ng.";
             }
             else
             {
-                TempData["ErrorMessage"] = "Kh�ng th? h?y tour n�y.";
+                TempData["ErrorMessage"] = "Kh?ng th? h?y tour n?y.";
             }
 
             return RedirectToAction("MyTour");
@@ -737,36 +744,36 @@ namespace DuLich.Controllers
 
             var booking = await _dbContext.DatTours
                 .Include(b => b.Tour)
-                .Include(b => b.HoaDon) // Entity HoaDon giờ đã có trường Payload
+                .Include(b => b.HoaDon) // Entity HoaDon gi? d� c� tru?ng Payload
                 .FirstOrDefaultAsync(b => b.MaDatTour == bookingId && b.MaKhachHang == customer.MaKhachHang);
 
             if (booking == null || booking.HoaDon == null || booking.Tour == null)
             {
-                TempData["ErrorMessage"] = "Không tìm thấy thông tin đặt tour hoặc hóa đơn";
+                TempData["ErrorMessage"] = "Kh�ng t�m th?y th�ng tin d?t tour ho?c h�a don";
                 return RedirectToAction("MyTour");
             }
 
-            // *** BẮT ĐẦU SỬA ĐỔI LOGIC KIỂM TRA ***
+            // *** B?T �?U S?A �?I LOGIC KI?M TRA ***
 
             bool isValid = false;
 
-            // 1. Lấy Payload gốc (JSON) và Chữ ký từ Database
+            // 1. L?y Payload g?c (JSON) v� Ch? k� t? Database
             string payloadJson = booking.HoaDon.Payload ?? string.Empty;
             string signature = booking.HoaDon.ChuKySo ?? string.Empty;
 
-            // 2. Kiểm tra: Chỉ verify khi có đủ dữ liệu
+            // 2. Ki?m tra: Ch? verify khi c� d? d? li?u
             if (!string.IsNullOrEmpty(payloadJson) && !string.IsNullOrEmpty(signature))
             {
-                // Gọi RSAService để verify (Hàm này phải dùng SHA256 và PKCS1 như bạn đã sửa ở RSAService)
+                // G?i RSAService d? verify (H�m n�y ph?i d�ng SHA256 v� PKCS1 nhu b?n d� s?a ? RSAService)
                 isValid = _rsaService.Verify(payloadJson, signature);
             }
             else
             {
-                // Nếu thiếu Payload hoặc Chữ ký -> Coi như không hợp lệ (hoặc chưa ký)
+                // N?u thi?u Payload ho?c Ch? k� -> Coi nhu kh�ng h?p l? (ho?c chua k�)
                 isValid = false;
             }
 
-            // *** KẾT THÚC SỬA ĐỔI ***
+            // *** K?T TH�C S?A �?I ***
 
             var model = new InvoiceViewModel
             {
@@ -775,10 +782,10 @@ namespace DuLich.Controllers
                 SoTien = booking.HoaDon.SoTien,
                 TrangThai = booking.HoaDon.TrangThai,
 
-                // Gán kết quả kiểm tra vào đây để View hiển thị
+                // G�n k?t qu? ki?m tra v�o d�y d? View hi?n th?
                 IsSignatureValid = isValid,
 
-                // Thông tin tour & khách hàng (giữ nguyên)
+                // Th�ng tin tour & kh�ch h�ng (gi? nguy�n)
                 TenTour = booking.Tour.TieuDe,
                 NgayKhoiHanh = booking.Tour.ThoiGian,
                 SoNguoiLon = booking.SoNguoiLon,
@@ -818,15 +825,15 @@ namespace DuLich.Controllers
 
             if (booking == null || booking.HoaDon == null)
             {
-                TempData["ErrorMessage"] = "Kh�ng t�m th?y th�ng tin d?t tour ho?c h�a don";
+                TempData["ErrorMessage"] = "Kh�ng t�m th?y th�ng tin d?t tour ho?c h�a don";
                 return RedirectToAction("MyTour");
             }
 
-            if (booking.HoaDon.TrangThai != "�� thanh to�n")
+            if (booking.HoaDon.TrangThai != "�� thanh to�n")
             {
-                booking.TrangThaiDat = "�� thanh to�n";
-                booking.TrangThaiThanhToan = "�� thanh to�n";
-                booking.HoaDon.TrangThai = "�� thanh to�n";
+                booking.TrangThaiDat = "�� thanh to�n";
+                booking.TrangThaiThanhToan = "�� thanh to�n";
+                booking.HoaDon.TrangThai = "�� thanh to�n";
                 _context.DatTours.Update(booking);
                 _context.HoaDons.Update(booking.HoaDon);
                 await _context.SaveChangesAsync();
@@ -840,22 +847,22 @@ namespace DuLich.Controllers
                     {
                         signer = await _dbContext.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == "ADMIN");
                     }
-                    var signerName = signer?.HoTen ?? "Ngu?i qu?n l�";
+                    var signerName = signer?.HoTen ?? "Ngu?i qu?n l�";
 
                     var pdfBytes = CreateInvoicePdf(hoaDon, booking, booking.Tour, await _context.KhachHangs.FirstOrDefaultAsync(k => k.MaKhachHang == booking.MaKhachHang), signerName);
 
-                    var invoicesDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "invoices");
+                    var invoicesDir = System.IO.Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "invoices");
                     Directory.CreateDirectory(invoicesDir);
-                    var filePath = Path.Combine(invoicesDir, $"HoaDon_{hoaDon.MaHoaDon}.pdf");
+                    var filePath = System.IO.Path.Combine(invoicesDir, $"HoaDon_{hoaDon.MaHoaDon}.pdf");
                     await System.IO.File.WriteAllBytesAsync(filePath, pdfBytes);
 
-                    TempData["SuccessMessage"] = "Thanh to�n th�nh c�ng! H�a don d� du?c t?o.";
+                    TempData["SuccessMessage"] = "Thanh to�n th�nh c�ng! H�a don d� du?c t?o.";
                     TempData["InvoiceUrl"] = $"/invoices/HoaDon_{hoaDon.MaHoaDon}.pdf";
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine("Failed to generate/save invoice PDF after payment: " + ex.ToString());
-                    TempData["SuccessMessage"] = "Thanh to�n th�nh c�ng! Nhung kh�ng th? t?o h�a don PDF.";
+                    TempData["SuccessMessage"] = "Thanh to�n th�nh c�ng! Nhung kh�ng th? t?o h�a don PDF.";
                 }
             }
 
@@ -888,7 +895,7 @@ namespace DuLich.Controllers
             {
                 signer = await _dbContext.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == "ADMIN");
             }
-            var signerName = signer?.HoTen ?? "Ngu?i qu?n l�";
+            var signerName = signer?.HoTen ?? "Ngu?i qu?n l�";
 
             try
             {
@@ -901,7 +908,7 @@ namespace DuLich.Controllers
             {
                 Console.WriteLine($"[DownloadInvoicePdf] ERROR: {ex.Message}");
                 Console.WriteLine($"[DownloadInvoicePdf] StackTrace: {ex.StackTrace}");
-                return StatusCode(500, $"Kh�ng th? t?o file: {ex.Message}");
+                return StatusCode(500, $"Kh�ng th? t?o file: {ex.Message}");
             }
         }
 
@@ -943,102 +950,93 @@ namespace DuLich.Controllers
             return View("PrintInvoice", model);
         }
 
-        private byte[] CreateInvoicePdf(HoaDon hoaDon, DatTour? booking, Tour? tour, KhachHang? customer, string signerName)
+                private byte[] CreateInvoicePdf(HoaDon hoaDon, DatTour? booking, Tour? tour, KhachHang? customer, string signerName)
         {
             try
             {
-                using (MemoryStream ms = new MemoryStream())
+                using var ms = new MemoryStream();
+                using var writer = new PdfWriter(ms);
+                using var pdfDoc = new PdfDocument(writer);
+                using var document = new Document(pdfDoc, PageSize.A4);
+                document.SetMargins(50, 50, 50, 50);
+
+                var font = PdfFontFactory.CreateFont(StandardFonts.HELVETICA);
+                var fontBold = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD);
+
+                document.Add(new Paragraph("HOA DON DAT TOUR")
+                    .SetFont(fontBold)
+                    .SetFontSize(18)
+                    .SetTextAlignment(TextAlignment.CENTER)
+                    .SetMarginBottom(10));
+
+                var headerTable = new Table(new float[] { 1, 1 }).UseAllAvailableWidth();
+                headerTable.AddCell(new Cell().Add(new Paragraph("Ma hoa don: " + hoaDon.MaHoaDon).SetFont(font)));
+                headerTable.AddCell(new Cell().Add(new Paragraph("Ngay xuat: " + (hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss") ?? string.Empty)).SetFont(font)));
+                headerTable.AddCell(new Cell().Add(new Paragraph("Trang thai: " + hoaDon.TrangThai).SetFont(font)));
+                headerTable.AddCell(new Cell().Add(new Paragraph(" ").SetFont(font)));
+                document.Add(headerTable);
+                document.Add(new Paragraph(" ").SetMarginBottom(5));
+
+                document.Add(new Paragraph("THONG TIN KHACH HANG").SetFont(fontBold).SetFontSize(12));
+                var customerTable = new Table(new float[] { 1, 1 }).UseAllAvailableWidth();
+                customerTable.AddCell(new Cell().Add(new Paragraph("Ten: " + (customer?.HoTen ?? string.Empty)).SetFont(font)));
+                customerTable.AddCell(new Cell().Add(new Paragraph("Email: " + (customer?.Email ?? string.Empty)).SetFont(font)));
+                customerTable.AddCell(new Cell().Add(new Paragraph("Dien thoai: " + (customer?.SoDienThoai ?? string.Empty)).SetFont(font)));
+                customerTable.AddCell(new Cell().Add(new Paragraph("Dia chi: " + (customer?.DiaChi ?? string.Empty)).SetFont(font)));
+                document.Add(customerTable);
+                document.Add(new Paragraph(" ").SetMarginBottom(5));
+
+                document.Add(new Paragraph("CHI TIET TOUR").SetFont(fontBold).SetFontSize(12));
+                var tourTable = new Table(new float[] { 1, 1 }).UseAllAvailableWidth();
+                tourTable.AddCell(new Cell().Add(new Paragraph("Ten tour: " + (tour?.TieuDe ?? string.Empty)).SetFont(font)));
+                tourTable.AddCell(new Cell().Add(new Paragraph("Ngay khoi hanh: " + (tour?.ThoiGian?.ToString("dd/MM/yyyy") ?? string.Empty)).SetFont(font)));
+                tourTable.AddCell(new Cell().Add(new Paragraph("So nguoi lon: " + (booking?.SoNguoiLon ?? 0)).SetFont(font)));
+                tourTable.AddCell(new Cell().Add(new Paragraph("So tre em: " + (booking?.SoTreEm ?? 0)).SetFont(font)));
+                document.Add(tourTable);
+                document.Add(new Paragraph(" ").SetMarginBottom(5));
+
+                document.Add(new Paragraph($"TONG TIEN: {(hoaDon.SoTien ?? 0):N0} VND")
+                    .SetFont(fontBold)
+                    .SetFontSize(14)
+                    .SetTextAlignment(TextAlignment.CENTER)
+                    .SetMarginTop(5)
+                    .SetMarginBottom(10));
+
+                var signatureSource = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
+                byte[] hashBytes;
+                try
                 {
-                    // Create PDF document
-                    Document document = new Document(PageSize.A4, 50, 50, 50, 50);
-                    PdfWriter writer = PdfWriter.GetInstance(document, ms);
-                    document.Open();
-
-                    // Title
-                    Paragraph title = new Paragraph("H�A �ON �?T TOUR", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 18));
-                    title.Alignment = Element.ALIGN_CENTER;
-                    document.Add(title);
-                    document.Add(new Paragraph(" "));
-
-                    // Invoice header info
-                    PdfPTable headerTable = new PdfPTable(2);
-                    headerTable.WidthPercentage = 100;
-                    headerTable.AddCell("M� h�a don: " + hoaDon.MaHoaDon);
-                    headerTable.AddCell("Ng�y xu?t: " + (hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss") ?? ""));
-                    headerTable.AddCell("Tr?ng th�i: " + hoaDon.TrangThai);
-                    headerTable.AddCell(" ");
-                    document.Add(headerTable);
-                    document.Add(new Paragraph(" "));
-
-                    // Customer info section
-                    document.Add(new Paragraph("TH�NG TIN KH�CH H�NG", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 12)));
-                    PdfPTable customerTable = new PdfPTable(2);
-                    customerTable.WidthPercentage = 100;
-                    customerTable.AddCell("T�n: " + (customer?.HoTen ?? ""));
-                    customerTable.AddCell("Email: " + (customer?.Email ?? ""));
-                    customerTable.AddCell("�i?n tho?i: " + (customer?.SoDienThoai ?? ""));
-                    customerTable.AddCell("�?a ch?: " + (customer?.DiaChi ?? ""));
-                    document.Add(customerTable);
-                    document.Add(new Paragraph(" "));
-
-                    // Tour details
-                    document.Add(new Paragraph("CHI TI?T TOUR", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 12)));
-                    PdfPTable tourTable = new PdfPTable(2);
-                    tourTable.WidthPercentage = 100;
-                    tourTable.AddCell("T�n tour: " + (tour?.TieuDe ?? ""));
-                    tourTable.AddCell("Ng�y kh?i h�nh: " + (tour?.ThoiGian?.ToString("dd/MM/yyyy") ?? ""));
-                    tourTable.AddCell("S? ngu?i l?n: " + (booking?.SoNguoiLon ?? 0));
-                    tourTable.AddCell("S? tr? em: " + (booking?.SoTreEm ?? 0));
-                    document.Add(tourTable);
-                    document.Add(new Paragraph(" "));
-
-                    // Total
-                    Paragraph total = new Paragraph($"T?NG TI?N: {(hoaDon.SoTien ?? 0):N0} VN�", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 14));
-                    total.Alignment = Element.ALIGN_CENTER;
-                    document.Add(total);
-                    document.Add(new Paragraph(" "));
-
-                    // Signature info
-                    var signatureSource = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
-                    byte[] hashBytes;
-                    try
-                    {
-                        hashBytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(signatureSource));
-                    }
-                    catch
-                    {
-                        hashBytes = new byte[0];
-                    }
-                    var hashHex = hashBytes.Length > 0 ? BitConverter.ToString(hashBytes).Replace("-", "") : string.Empty;
-                    var authCode = hashHex.Length >= 12 ? hashHex.Substring(0, 12) : hashHex;
-
-                    document.Add(new Paragraph("TH�NG TIN X�C TH?C", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 12)));
-                    PdfPTable signTable = new PdfPTable(2);
-                    signTable.WidthPercentage = 100;
-                    signTable.AddCell("Ch? k� s?:\n" + (hoaDon.ChuKySo ?? ""));
-                    signTable.AddCell("M� x�c th?c: " + authCode);
-                    document.Add(signTable);
-                    document.Add(new Paragraph(" "));
-                    document.Add(new Paragraph("Hash (SHA256): " + hashHex, FontFactory.GetFont(FontFactory.HELVETICA, 9)));
-                    document.Add(new Paragraph(" "));
-
-                    // Signature lines
-                    document.Add(new Paragraph("K? D?A", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 12)));
-                    PdfPTable signatureTable = new PdfPTable(2);
-                    signatureTable.WidthPercentage = 100;
-                    PdfPCell cell1 = new PdfPCell(new Phrase("Ngu?i l?p\n\n\n\n(K� v� ghi r� h? t�n)"));
-                    cell1.MinimumHeight = 80;
-                    PdfPCell cell2 = new PdfPCell(new Phrase($"Ngu?i k�: {signerName}\n\n\n"));
-                    cell2.MinimumHeight = 80;
-                    signatureTable.AddCell(cell1);
-                    signatureTable.AddCell(cell2);
-                    document.Add(signatureTable);
-
-                    document.Close();
-                    writer.Close();
-
-                    return ms.ToArray();
+                    hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(signatureSource));
                 }
+                catch
+                {
+                    hashBytes = Array.Empty<byte>();
+                }
+
+                var hashHex = hashBytes.Length > 0 ? BitConverter.ToString(hashBytes).Replace("-", string.Empty) : string.Empty;
+                var authCode = hashHex.Length >= 12 ? hashHex.Substring(0, 12) : hashHex;
+
+                document.Add(new Paragraph("THONG TIN XAC THUC").SetFont(fontBold).SetFontSize(12));
+                var signTable = new Table(new float[] { 1, 1 }).UseAllAvailableWidth();
+                signTable.AddCell(new Cell().Add(new Paragraph("Chu ky so:\n" + (hoaDon.ChuKySo ?? string.Empty)).SetFont(font)));
+                signTable.AddCell(new Cell().Add(new Paragraph("Ma xac thuc: " + authCode).SetFont(font)));
+                document.Add(signTable);
+                document.Add(new Paragraph(" ").SetMarginBottom(5));
+                document.Add(new Paragraph("Hash (SHA256): " + hashHex).SetFont(font).SetFontSize(9));
+                document.Add(new Paragraph(" ").SetMarginBottom(5));
+
+                document.Add(new Paragraph("KY DUA").SetFont(fontBold).SetFontSize(12));
+                var signatureTable = new Table(new float[] { 1, 1 }).UseAllAvailableWidth();
+                var cell1 = new Cell().Add(new Paragraph("Nguoi lap\n\n\n\n(ky va ghi ro ho ten)").SetFont(font));
+                cell1.SetMinHeight(80);
+                var cell2 = new Cell().Add(new Paragraph($"Nguoi ky: {signerName}\n\n\n").SetFont(font));
+                cell2.SetMinHeight(80);
+                signatureTable.AddCell(cell1);
+                signatureTable.AddCell(cell2);
+                document.Add(signatureTable);
+
+                document.Flush();
+                return ms.ToArray();
             }
             catch (Exception ex)
             {
@@ -1047,21 +1045,20 @@ namespace DuLich.Controllers
                 throw;
             }
         }
-
-        // Thay thế hàm GenerateInvoiceHtml cũ bằng hàm này (giống hệt bên API)
+// Thay th? h�m GenerateInvoiceHtml cu b?ng h�m n�y (gi?ng h?t b�n API)
         private string GenerateInvoiceHtml(HoaDon hoaDon, DatTour booking, Tour tour, KhachHang customer, string signerName)
         {
-            // Tính toán Hash và AuthCode để hiển thị
+            // T�nh to�n Hash v� AuthCode d? hi?n th?
             var signatureData = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
             string hashHex = "";
             string authCode = "";
 
             try
             {
-                // Dùng SHA256 hash payload
+                // D�ng SHA256 hash payload
                 byte[] hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(signatureData));
                 hashHex = BitConverter.ToString(hashBytes).Replace("-", "");
-                // Lấy 12 ký tự đầu làm mã xác thực ngắn
+                // L?y 12 k� t? d?u l�m m� x�c th?c ng?n
                 authCode = hashHex.Length >= 12 ? hashHex.Substring(0, 12) : hashHex;
             }
             catch { }
@@ -1070,13 +1067,13 @@ namespace DuLich.Controllers
             var ngayXuat = hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss") ?? "N/A";
             var ngayDi = tour.ThoiGian?.ToString("dd/MM/yyyy") ?? "N/A";
 
-            // Trả về chuỗi HTML chuẩn đẹp
+            // Tr? v? chu?i HTML chu?n d?p
             return $@"
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset='UTF-8'>
-        <title>Hóa đơn #{hoaDon.MaHoaDon}</title>
+        <title>H�a don #{hoaDon.MaHoaDon}</title>
         <style>
             body {{ font-family: Arial, sans-serif; margin: 20px; font-size: 14px; line-height: 1.5; color: #333; }}
             .header {{ text-align: center; margin-bottom: 30px; border-bottom: 2px solid #007AFF; padding-bottom: 10px; }}
@@ -1093,46 +1090,46 @@ namespace DuLich.Controllers
     </head>
     <body>
         <div class='header'>
-            <h1>HÓA ĐƠN ĐIỆN TỬ</h1>
-            <p>Mã hóa đơn: <b>#{hoaDon.MaHoaDon}</b> | Ngày xuất: {ngayXuat}</p>
+            <h1>H�A �ON �I?N T?</h1>
+            <p>M� h�a don: <b>#{hoaDon.MaHoaDon}</b> | Ng�y xu?t: {ngayXuat}</p>
         </div>
 
-        <div class='section-title'>THÔNG TIN KHÁCH HÀNG</div>
+        <div class='section-title'>TH�NG TIN KH�CH H�NG</div>
         <table>
-            <tr><td class='label'>Họ tên:</td><td>{customer.HoTen}</td></tr>
+            <tr><td class='label'>H? t�n:</td><td>{customer.HoTen}</td></tr>
             <tr><td class='label'>Email:</td><td>{customer.Email}</td></tr>
-            <tr><td class='label'>Số điện thoại:</td><td>{customer.SoDienThoai}</td></tr>
-            <tr><td class='label'>Địa chỉ:</td><td>{customer.DiaChi}</td></tr>
+            <tr><td class='label'>S? di?n tho?i:</td><td>{customer.SoDienThoai}</td></tr>
+            <tr><td class='label'>�?a ch?:</td><td>{customer.DiaChi}</td></tr>
         </table>
 
-        <div class='section-title'>CHI TIẾT DỊCH VỤ</div>
+        <div class='section-title'>CHI TI?T D?CH V?</div>
         <table>
-            <tr><td class='label'>Tên Tour:</td><td><strong>{tour.TieuDe}</strong></td></tr>
-            <tr><td class='label'>Mã Tour:</td><td>#{tour.MaTour}</td></tr>
-            <tr><td class='label'>Khởi hành:</td><td>{ngayDi} tại {tour.NoiKhoiHanh}</td></tr>
-            <tr><td class='label'>Số lượng:</td><td>{booking.SoNguoiLon} Người lớn, {booking.SoTreEm} Trẻ em</td></tr>
-            <tr><td class='label'>Trạng thái:</td><td><span class='badge'>{hoaDon.TrangThai}</span></td></tr>
+            <tr><td class='label'>T�n Tour:</td><td><strong>{tour.TieuDe}</strong></td></tr>
+            <tr><td class='label'>M� Tour:</td><td>#{tour.MaTour}</td></tr>
+            <tr><td class='label'>Kh?i h�nh:</td><td>{ngayDi} t?i {tour.NoiKhoiHanh}</td></tr>
+            <tr><td class='label'>S? lu?ng:</td><td>{booking.SoNguoiLon} Ngu?i l?n, {booking.SoTreEm} Tr? em</td></tr>
+            <tr><td class='label'>Tr?ng th�i:</td><td><span class='badge'>{hoaDon.TrangThai}</span></td></tr>
         </table>
 
         <div class='total-box'>
-            TỔNG THANH TOÁN: {total:N0} VNĐ
+            T?NG THANH TO�N: {total:N0} VN�
         </div>
 
         <div class='signature-box'>
-            <div style='margin-bottom: 5px; color: #007AFF; font-weight: bold;'>THÔNG TIN XÁC THỰC (DIGITAL SIGNATURE)</div>
+            <div style='margin-bottom: 5px; color: #007AFF; font-weight: bold;'>TH�NG TIN X�C TH?C (DIGITAL SIGNATURE)</div>
             <table style='margin:0'>
-                <tr><td class='label' style='width:100px'>Mã kiểm tra:</td><td><b>{authCode}</b></td></tr>
+                <tr><td class='label' style='width:100px'>M� ki?m tra:</td><td><b>{authCode}</b></td></tr>
                 <tr><td class='label' style='width:100px'>Hash (SHA256):</td><td style='font-family:monospace; font-size:10px'>{hashHex}</td></tr>
-                <tr><td class='label' style='width:100px'>Chữ ký số:</td><td style='font-family:monospace; font-size:10px'>{hoaDon.ChuKySo}</td></tr>
+                <tr><td class='label' style='width:100px'>Ch? k� s?:</td><td style='font-family:monospace; font-size:10px'>{hoaDon.ChuKySo}</td></tr>
             </table>
             <p style='margin-top:10px; font-style:italic; color:#666;'>
-                * Hóa đơn này được ký số bảo mật. Quý khách có thể sử dụng Mã kiểm tra hoặc upload file PDF để xác thực tính toàn vẹn của hóa đơn.
+                * H�a don n�y du?c k� s? b?o m?t. Qu� kh�ch c� th? s? d?ng M� ki?m tra ho?c upload file PDF d? x�c th?c t�nh to�n v?n c?a h�a don.
             </p>
         </div>
 
         <div class='footer'>
-            Cảm ơn quý khách đã sử dụng dịch vụ của DuLich!<br/>
-            Hệ thống quản lý tour du lịch trực tuyến.
+            C?m on qu� kh�ch d� s? d?ng d?ch v? c?a DuLich!<br/>
+            H? th?ng qu?n l� tour du l?ch tr?c tuy?n.
         </div>
         <script>window.print();</script>
     </body>
@@ -1176,42 +1173,42 @@ namespace DuLich.Controllers
             {
                 if (invoiceFile == null || invoiceFile.Length == 0)
                 {
-                    return Json(new { success = false, message = "Vui lòng chọn file PDF." });
+                    return Json(new { success = false, message = "Vui l�ng ch?n file PDF." });
                 }
 
-                // 1. Lấy ID từ tên file (VD: HoaDon_123.pdf -> 123)
+                // 1. L?y ID t? t�n file (VD: HoaDon_123.pdf -> 123)
                 var fileName = invoiceFile.FileName;
                 var match = System.Text.RegularExpressions.Regex.Match(fileName, @"(\d+)");
 
                 if (!match.Success)
                 {
-                    return Json(new { success = false, message = "Tên file không hợp lệ. Phải chứa mã hóa đơn (VD: HoaDon_123.pdf)" });
+                    return Json(new { success = false, message = "T�n file kh�ng h?p l?. Ph?i ch?a m� h�a don (VD: HoaDon_123.pdf)" });
                 }
 
                 int maHoaDon = int.Parse(match.Value);
 
-                // 2. Truy vấn DB lấy Payload và Chữ ký
-                // Quan trọng: Phải lấy cột Payload, vì đó là dữ liệu gốc lúc ký
+                // 2. Truy v?n DB l?y Payload v� Ch? k�
+                // Quan tr?ng: Ph?i l?y c?t Payload, v� d� l� d? li?u g?c l�c k�
                 var hoaDon = await _dbContext.HoaDons
-                    .AsNoTracking() // Không cần track changes
+                    .AsNoTracking() // Kh�ng c?n track changes
                     .FirstOrDefaultAsync(h => h.MaHoaDon == maHoaDon);
 
                 if (hoaDon == null)
                 {
-                    return Json(new { success = false, message = $"Không tìm thấy hóa đơn #{maHoaDon} trên hệ thống." });
+                    return Json(new { success = false, message = $"Kh�ng t�m th?y h�a don #{maHoaDon} tr�n h? th?ng." });
                 }
 
                 if (string.IsNullOrEmpty(hoaDon.Payload) || string.IsNullOrEmpty(hoaDon.ChuKySo))
                 {
-                    return Json(new { success = false, message = "Hóa đơn này chưa được ký số hoặc thiếu dữ liệu gốc." });
+                    return Json(new { success = false, message = "H�a don n�y chua du?c k� s? ho?c thi?u d? li?u g?c." });
                 }
 
-                // 3. Gọi RSA Service để kiểm tra
-                // Tham số 1: Payload (JSON chuỗi) lấy từ DB
-                // Tham số 2: Chữ ký (Base64) lấy từ DB
+                // 3. G?i RSA Service d? ki?m tra
+                // Tham s? 1: Payload (JSON chu?i) l?y t? DB
+                // Tham s? 2: Ch? k� (Base64) l?y t? DB
                 bool isValid = _rsaService.Verify(hoaDon.Payload, hoaDon.ChuKySo);
 
-                // 4. Trả kết quả
+                // 4. Tr? k?t qu?
                 if (isValid)
                 {
                     return Json(new
@@ -1221,7 +1218,7 @@ namespace DuLich.Controllers
                         maHoaDon = hoaDon.MaHoaDon,
                         ngayXuat = hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm"),
                         trangThai = hoaDon.TrangThai,
-                        message = "Hóa đơn HỢP LỆ. Chữ ký số khớp hoàn toàn với dữ liệu gốc."
+                        message = "H�a don H?P L?. Ch? k� s? kh?p ho�n to�n v?i d? li?u g?c."
                     });
                 }
                 else
@@ -1231,17 +1228,24 @@ namespace DuLich.Controllers
                         success = true,
                         isValid = false,
                         maHoaDon = hoaDon.MaHoaDon,
-                        message = "CẢNH BÁO: Chữ ký số KHÔNG KHỚP! Dữ liệu có thể đã bị sửa đổi."
+                        message = "C?NH B�O: Ch? k� s? KH�NG KH?P! D? li?u c� th? d� b? s?a d?i."
                     });
                 }
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+                return Json(new { success = false, message = "Loi he thong: " + ex.Message });
             }
         }
     }
 }
+
+
+
+
+
+
+
 
 
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace DuLich.Models
 {
@@ -10,6 +11,9 @@ namespace DuLich.Models
         public string ChannelFormat { get; set; } = "CONFIGURE CHANNEL DEVICE TYPE DISK FORMAT '/u01/backup/%d_%T_%U.bkp';";
         public string ArchivelogDeletionPolicy { get; set; } = "CONFIGURE ARCHIVELOG DELETION POLICY TO BACKED UP 2 TIMES TO DISK;";
         public List<BackupHistoryItem> History { get; set; } = new();
+        public List<BackupHistoryItem> RestoreHistory { get; set; } = new();
+        public List<SelectListItem> BackupFiles { get; set; } = new();
+        public List<SelectListItem> BackupDirectories { get; set; } = new();
     }
 
     public class BackupHistoryItem

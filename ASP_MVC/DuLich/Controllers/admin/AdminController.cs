@@ -16,6 +16,7 @@ using System.Linq;
 using Oracle.ManagedDataAccess.Client;
 using System;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace DuLich.Controllers
 {
@@ -121,23 +122,22 @@ namespace DuLich.Controllers
         [Route("Admin/BookingDetails/{id}")]
         public IActionResult BookingDetails(int id)
         {
-            // Placeholder to avoid broken links; detail view can be expanded later
             TempData["Info"] = $"Chi tiết đặt tour #{id} chưa được triển khai. Vui lòng thao tác trực tiếp tại danh sách.";
             return RedirectToAction("Bookings");
         }
 
         [HttpGet]
         [Route("Admin/BackupRestore")]
-        public IActionResult BackupRestore()
+        public async Task<IActionResult> BackupRestore()
         {
-            var history = _context.BackupHistories
+            var allHistory = await _context.BackupHistories
                 .OrderByDescending(h => h.RequestedAt)
-                .Take(100)
-                .ToList();
+                .Take(200)
+                .ToListAsync();
 
-            var model = new BackupRestoreViewModel
-            {
-                History = history.Select(h => new BackupHistoryItem
+                        var backupHistoryItems = allHistory
+                .Where(h => h.ActionType != "Phuc hoi")
+                .Select(h => new BackupHistoryItem
                 {
                     Id = h.Id,
                     Type = h.ActionType,
@@ -146,7 +146,35 @@ namespace DuLich.Controllers
                     Status = h.Status,
                     Location = h.Target ?? string.Empty,
                     Note = h.Notes ?? string.Empty
-                }).ToList()
+                }).ToList();
+
+            var restoreHistoryItems = allHistory
+                .Where(h => h.ActionType == "Phuc hoi")
+                .Select(h => new BackupHistoryItem
+                {
+                    Id = h.Id,
+                    Type = h.ActionType,
+                    StartedAt = h.RequestedAt,
+                    FinishedAt = h.CompletedAt,
+                    Status = h.Status,
+                    Location = h.Target ?? string.Empty,
+                    Note = h.Notes ?? string.Empty
+                }).ToList();
+
+            var backupFiles = backupHistoryItems
+                .Where(h => !string.IsNullOrEmpty(h.Location) && h.Status == "Hoan tat")
+                .OrderByDescending(h => h.StartedAt)
+                .Select(h => new SelectListItem
+                {
+                    Text = $"{h.StartedAt:dd/MM HH:mm} - {Path.GetFileName(h.Location)}",
+                    Value = $"{h.Location.Replace("\\", "/")}|{(h.FinishedAt ?? h.StartedAt):yyyy-MM-dd HH:mm:ss}"
+                })
+                .ToList();
+            var model = new BackupRestoreViewModel
+            {
+                History = backupHistoryItems.Take(100).ToList(),
+                RestoreHistory = restoreHistoryItems.Take(100).ToList(),
+                BackupFiles = backupFiles
             };
 
             return View("BackupRestore", model);
@@ -157,22 +185,33 @@ namespace DuLich.Controllers
         [Route("Admin/Backup/Run")]
         public async Task<IActionResult> RunBackup(string type)
         {
-            var action = type?.ToUpper() == "INCREMENTAL" ? "Sao lưu thay đổi (Incremental)" : "Sao lưu toàn bộ (Full)";
-            var record = await CreateBackupHistoryAsync(action, "Đang chạy", null, "Khởi tạo từ UI admin");
+            var action = type?.ToUpper() == "INCREMENTAL" ? "Sao luu thay doi (Incremental)" : "Sao luu toan bo (Full)";
+            var record = await CreateBackupHistoryAsync(action, "Dang chay", null, "Khoi tao tu UI admin");
 
             try
             {
                 var exec = _backupSshService.RunBackup(type?.ToUpper() == "INCREMENTAL" ? "INCREMENTAL" : "FULL");
-                record.Target = string.IsNullOrWhiteSpace(exec.BackupPath) ? record.Target : exec.BackupPath;
-                record.Status = exec.ExitStatus == 0 ? "Hoàn tất" : "Thất bại";
+
+                record.Target = exec.BackupPath; // Save the returned backup path
+                record.Status = exec.ExitStatus == 0 ? "Hoan tat" : "That bai";
                 record.CompletedAt = DateTime.Now;
-                record.Notes = TruncateNote(string.IsNullOrWhiteSpace(exec.Output) ? "Backup hoàn tất" : exec.Output);
+                record.Notes = TruncateNote(exec.Output);
+
+                if (record.Status == "Hoan tat")
+                {
+                    TempData["Success"] = "Yeu cau sao luu da duoc thuc thi thanh cong.";
+                }
+                else
+                {
+                    TempData["Error"] = $"Sao luu that bai. Chi tiet: {TruncateForDisplay(exec.Output)}";
+                }
             }
             catch (Exception ex)
             {
-                record.Status = "Thất bại";
+                record.Status = "That bai";
                 record.CompletedAt = DateTime.Now;
                 record.Notes = TruncateNote(ex.ToString());
+                TempData["Error"] = "Sao luu that bai: " + ex.Message;
             }
 
             _context.BackupHistories.Update(record);
@@ -184,29 +223,44 @@ namespace DuLich.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [Route("Admin/Backup/Restore")]
-        public async Task<IActionResult> RestoreBackup(int backupId)
+        public async Task<IActionResult> RestoreBackup(string backupPath)
         {
-            var selected = await _context.BackupHistories.FirstOrDefaultAsync(b => b.Id == backupId);
-            if (selected == null)
+            if (string.IsNullOrWhiteSpace(backupPath))
             {
-                TempData["Error"] = "Không tìm thấy bản sao lưu đã chọn.";
+                TempData["Error"] = "Ban chua chon ban sao luu de phuc hoi.";
                 return RedirectToAction("BackupRestore");
             }
 
-            var record = await CreateBackupHistoryAsync("Phục hồi", "Đang chạy", selected.Target, $"Phục hồi từ ID={selected.Id}");
+            // backupPath value format: "<path>|<finished_at>" injected in BackupRestore view
+            var parts = backupPath.Split('|');
+            var backupFile = parts[0];
+            var untilTime = parts.Length > 1 ? parts[1] : null;
+
+            var directory = Path.GetDirectoryName(backupFile.Replace("\\", "/")) ?? backupFile;
+            var record = await CreateBackupHistoryAsync("Phuc hoi", "Dang chay", directory, $"Phuc hoi tu: {backupFile} (UNTIL_TIME={untilTime})");
 
             try
             {
-                var exec = _backupSshService.RunRestore(selected.Target ?? string.Empty);
-                record.Status = exec.ExitStatus == 0 ? "Hoàn tất" : "Thất bại";
+                var exec = _backupSshService.RunRestoreFromDirectory(directory, untilTime);
+                record.Status = exec.ExitStatus == 0 ? "Hoan tat" : "That bai";
                 record.CompletedAt = DateTime.Now;
-                record.Notes = TruncateNote(string.IsNullOrWhiteSpace(exec.Output) ? $"Phục hồi từ backup ID={selected.Id}" : exec.Output);
+                record.Notes = TruncateNote(exec.Output);
+
+                if (record.Status == "Hoan tat")
+                {
+                    TempData["Success"] = "Phuc hoi thanh cong.";
+                }
+                else
+                {
+                    TempData["Error"] = $"Phuc hoi that bai. Chi tiet: {TruncateForDisplay(exec.Output)}";
+                }
             }
             catch (Exception ex)
             {
-                record.Status = "Thất bại";
+                record.Status = "That bai";
                 record.CompletedAt = DateTime.Now;
                 record.Notes = TruncateNote(ex.ToString());
+                TempData["Error"] = "Phuc hoi that bai: " + ex.Message;
             }
 
             _context.BackupHistories.Update(record);
@@ -215,7 +269,7 @@ namespace DuLich.Controllers
             return RedirectToAction("BackupRestore");
         }
 
-        private async Task<BackupHistory> CreateBackupHistoryAsync(string actionType, string status, string? target, string? notes)
+private async Task<BackupHistory> CreateBackupHistoryAsync(string actionType, string status, string? target, string? notes)
         {
             var nextId = (_context.BackupHistories.Max(b => (int?)b.Id) ?? 0) + 1;
             var record = new BackupHistory
@@ -234,28 +288,41 @@ namespace DuLich.Controllers
             return record;
         }
 
-        private static string TruncateNote(string? text)
+        private static string TruncateNote(string? text, int maxLen = 490)
         {
             if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
-            const int maxLen = 490; // under DB column limit 500
             return text.Length <= maxLen ? text : text.Substring(0, maxLen);
+        }
+
+        private static string TruncateForDisplay(string? text, int maxLength = 500)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+
+            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var relevantText = string.Join("\n", lines.TakeLast(15)); // Take last 15 lines, where errors usually are
+            
+            if (relevantText.Length > maxLength)
+            {
+                return "..." + relevantText.Substring(relevantText.Length - maxLength);
+            }
+            return relevantText;
         }
 
         [HttpGet]
         [Route("Admin/Audit")]
-        public async Task<IActionResult> Audit(string tab = "TRIGGER", int pageTrigger = 1, int pageStandard = 1, int pageFga = 1)
+        public async Task<IActionResult> Audit(string tab = "TOUR", int pageTour = 1, int pageStaff = 1, int pageDatabase = 1)
         {
-            pageTrigger = pageTrigger < 1 ? 1 : pageTrigger;
-            pageStandard = pageStandard < 1 ? 1 : pageStandard;
-            pageFga = pageFga < 1 ? 1 : pageFga;
+            pageTour = pageTour < 1 ? 1 : pageTour;
+            pageStaff = pageStaff < 1 ? 1 : pageStaff;
+            pageDatabase = pageDatabase < 1 ? 1 : pageDatabase;
 
             var model = new AdminAuditViewModel
             {
                 ActiveTab = tab.ToUpper(),
                 PageSize = AuditPageSize,
-                TriggerPage = pageTrigger,
-                StandardPage = pageStandard,
-                FgaPage = pageFga
+                TourPage = pageTour,
+                StaffPage = pageStaff,
+                DatabasePage = pageDatabase
             };
 
             try
@@ -266,17 +333,17 @@ namespace DuLich.Controllers
                     await conn.OpenAsync();
                 }
 
-                var trigger = await GetTriggerAuditRecords(conn, pageTrigger, AuditPageSize);
-                model.TriggerRecords = trigger.Records;
-                model.TriggerTotal = trigger.Total;
+                var tour = await GetTourAuditRecords(conn, pageTour, AuditPageSize);
+                model.TourRecords = tour.Records;
+                model.TourTotal = tour.Total;
 
-                var standard = await GetStandardAuditRecords(conn, pageStandard, AuditPageSize);
-                model.StandardRecords = standard.Records;
-                model.StandardTotal = standard.Total;
+                var staff = await GetStaffAuditRecords(conn, pageStaff, AuditPageSize);
+                model.StaffRecords = staff.Records;
+                model.StaffTotal = staff.Total;
 
-                var fga = await GetFgaAuditRecords(conn, pageFga, AuditPageSize);
-                model.FgaRecords = fga.Records;
-                model.FgaTotal = fga.Total;
+                var db = await GetDatabaseAuditRecords(conn, pageDatabase, AuditPageSize);
+                model.DatabaseRecords = db.Records;
+                model.DatabaseTotal = db.Total;
             }
             catch (Exception ex)
             {
@@ -288,22 +355,33 @@ namespace DuLich.Controllers
 
         private static int CalcOffset(int page, int pageSize) => (page - 1) * pageSize;
 
-        private async Task<(List<AuditRecord> Records, int Total)> GetTriggerAuditRecords(DbConnection conn, int page, int pageSize)
+        private async Task<(List<AuditRecord> Records, int Total)> GetTourAuditRecords(DbConnection conn, int page, int pageSize)
         {
             var records = new List<AuditRecord>();
             var offset = CalcOffset(page, pageSize);
-            var countSql = "SELECT COUNT(*) FROM TADMIN.AUDIT_LOG_DETAIL";
+            var countSql = @"
+SELECT COUNT(*) FROM TADMIN.AUDIT_LOG_DETAIL
+WHERE UPPER(TableName) IN ('TOUR','DATTOUR','HOADON','CHITIETTOUR')";
             var startRow = offset + 1;
             var endRow = offset + pageSize;
-            var sql = $@"
+            var sql = @"
 SELECT TableName, Action, ActionTimestamp, RecordId, OldValues, NewValues FROM (
     SELECT t.*, ROW_NUMBER() OVER (ORDER BY ActionTimestamp DESC) rn
     FROM TADMIN.AUDIT_LOG_DETAIL t
+    WHERE UPPER(TableName) IN ('TOUR','DATTOUR','HOADON','CHITIETTOUR')
 )
-WHERE rn BETWEEN {startRow} AND {endRow}";
-            
+WHERE rn BETWEEN :startRow AND :endRow";
+
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
+            var pStart = cmd.CreateParameter();
+            pStart.ParameterName = "startRow";
+            pStart.Value = startRow;
+            cmd.Parameters.Add(pStart);
+            var pEnd = cmd.CreateParameter();
+            pEnd.ParameterName = "endRow";
+            pEnd.Value = endRow;
+            cmd.Parameters.Add(pEnd);
 
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -323,36 +401,61 @@ WHERE rn BETWEEN {startRow} AND {endRow}";
             return (records, total);
         }
 
-        private async Task<(List<AuditRecord> Records, int Total)> GetStandardAuditRecords(DbConnection conn, int page, int pageSize)
+        private async Task<(List<AuditRecord> Records, int Total)> GetStaffAuditRecords(DbConnection conn, int page, int pageSize)
         {
             var records = new List<AuditRecord>();
             var offset = CalcOffset(page, pageSize);
-            var countSql = @"
-SELECT COUNT(*) FROM UNIFIED_AUDIT_TRAIL
-WHERE OBJECT_SCHEMA = 'TADMIN' AND FGA_POLICY_NAME IS NULL";
+            var countSql = @"SELECT COUNT(*) FROM DBA_AUDIT_TRAIL
+WHERE OWNER = 'TADMIN' AND OBJ_NAME = 'NHANVIEN' AND ACTION_NAME IN ('INSERT','UPDATE','DELETE')";
             var startRow = offset + 1;
             var endRow = offset + pageSize;
-            var sql = $@"
-SELECT OBJECT_NAME, ACTION_NAME, SQL_TEXT, DBUSERNAME, EVENT_TIMESTAMP FROM (
-    SELECT u.*, ROW_NUMBER() OVER (ORDER BY EVENT_TIMESTAMP DESC) rn
-    FROM UNIFIED_AUDIT_TRAIL u
-    WHERE OBJECT_SCHEMA = 'TADMIN' AND FGA_POLICY_NAME IS NULL
+            var sql = @"SELECT OBJ_NAME, ACTION_NAME, SQL_TEXT, USERNAME, EXTENDED_TIMESTAMP AS TS FROM (
+    SELECT u.*, ROW_NUMBER() OVER (ORDER BY EXTENDED_TIMESTAMP DESC) rn
+    FROM DBA_AUDIT_TRAIL u
+    WHERE OWNER = 'TADMIN' AND OBJ_NAME = 'NHANVIEN' AND ACTION_NAME IN ('INSERT','UPDATE','DELETE')
 )
-WHERE rn BETWEEN {startRow} AND {endRow}";
+WHERE rn BETWEEN :startRow AND :endRow";
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
+            var pStart = cmd.CreateParameter();
+            pStart.ParameterName = "startRow";
+            pStart.Value = startRow;
+            cmd.Parameters.Add(pStart);
+            var pEnd = cmd.CreateParameter();
+            pEnd.ParameterName = "endRow";
+            pEnd.Value = endRow;
+            cmd.Parameters.Add(pEnd);
 
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
+                var tsOrdinal = reader.GetOrdinal("TS");
+                DateTime? ts = null;
+                if (!reader.IsDBNull(tsOrdinal))
+                {
+                    var rawTs = reader.GetValue(tsOrdinal);
+                    switch (rawTs)
+                    {
+                        case DateTimeOffset dto:
+                            ts = dto.DateTime;
+                            break;
+                        case DateTime dt:
+                            ts = dt;
+                            break;
+                        default:
+                            ts = null;
+                            break;
+                    }
+                }
+
                 records.Add(new AuditRecord
                 {
-                    TableName = reader["OBJECT_NAME"]?.ToString() ?? string.Empty,
+                    TableName = reader["OBJ_NAME"]?.ToString() ?? string.Empty,
                     Action = reader["ACTION_NAME"]?.ToString() ?? string.Empty,
                     SqlText = reader["SQL_TEXT"]?.ToString() ?? string.Empty,
-                    PerformedBy = reader["DBUSERNAME"]?.ToString() ?? string.Empty,
-                    Timestamp = reader["EVENT_TIMESTAMP"] as DateTime?
+                    PerformedBy = reader["USERNAME"]?.ToString() ?? string.Empty,
+                    Timestamp = ts
                 });
             }
             await using var countCmd = conn.CreateCommand();
@@ -361,54 +464,85 @@ WHERE rn BETWEEN {startRow} AND {endRow}";
             return (records, total);
         }
 
-        private async Task<(List<AuditRecord> Records, int Total)> GetFgaAuditRecords(DbConnection conn, int page, int pageSize)
+        private async Task<(List<AuditRecord> Records, int Total)> GetDatabaseAuditRecords(DbConnection conn, int page, int pageSize)
         {
             var records = new List<AuditRecord>();
             var offset = CalcOffset(page, pageSize);
-            var countSql = @"
-SELECT
-    (SELECT COUNT(*) FROM UNIFIED_AUDIT_TRAIL WHERE OBJECT_SCHEMA = 'TADMIN' AND FGA_POLICY_NAME IS NOT NULL)
-  + (SELECT COUNT(*) FROM DBA_FGA_AUDIT_TRAIL WHERE OBJECT_SCHEMA = 'TADMIN') AS TOTAL_COUNT
+            var countSql = @"SELECT
+    (SELECT COUNT(*) FROM DBA_AUDIT_TRAIL 
+        WHERE (OWNER = 'TADMIN' OR USERNAME = 'TADMIN')
+          AND ACTION_NAME IN ('CREATE TABLE','ALTER TABLE','DROP TABLE','TRUNCATE TABLE'))
+  + (SELECT COUNT(*) FROM DBA_FGA_AUDIT_TRAIL WHERE OBJECT_SCHEMA = 'TADMIN' AND STATEMENT_TYPE IN ('INSERT','UPDATE','DELETE')) AS TOTAL_COUNT
 FROM dual";
             var startRow = offset + 1;
             var endRow = offset + pageSize;
-            var sql = $@"
-SELECT OBJECT_NAME, ACTION_NAME, SQL_TEXT, POLICY_NAME, TS FROM (
-    SELECT innerq.*, ROW_NUMBER() OVER (ORDER BY TS DESC) rn FROM (
-        SELECT
-            CAST(OBJECT_NAME AS NVARCHAR2(128)) AS OBJECT_NAME,
-            CAST(ACTION_NAME AS NVARCHAR2(100)) AS ACTION_NAME,
-            CAST(DBMS_LOB.SUBSTR(SQL_TEXT, 1800, 1) AS NVARCHAR2(1800)) AS SQL_TEXT,
-            CAST(FGA_POLICY_NAME AS NVARCHAR2(200)) AS POLICY_NAME,
-            CAST(EVENT_TIMESTAMP AS TIMESTAMP) AS TS
-        FROM UNIFIED_AUDIT_TRAIL
-        WHERE OBJECT_SCHEMA = 'TADMIN' AND FGA_POLICY_NAME IS NOT NULL
-        UNION ALL
-        SELECT
-            CAST(OBJECT_NAME AS NVARCHAR2(128)) AS OBJECT_NAME,
-            CAST(STATEMENT_TYPE AS NVARCHAR2(100)) AS ACTION_NAME,
+            var sql = @"SELECT OBJECT_NAME, ACTION_NAME, SQL_TEXT, POLICY_NAME, USERNAME, TS FROM (
+        SELECT innerq.*, ROW_NUMBER() OVER (ORDER BY TS DESC) rn FROM (
+            SELECT
+                CAST(OBJ_NAME AS NVARCHAR2(128)) AS OBJECT_NAME,
+                CAST(ACTION_NAME AS NVARCHAR2(100)) AS ACTION_NAME,
+                CAST(DBMS_LOB.SUBSTR(SQL_TEXT, 1800, 1) AS NVARCHAR2(1800)) AS SQL_TEXT,
+                CAST(NULL AS NVARCHAR2(200)) AS POLICY_NAME,
+                CAST(USERNAME AS NVARCHAR2(128)) AS USERNAME,
+                CAST(EXTENDED_TIMESTAMP AS TIMESTAMP) AS TS
+            FROM DBA_AUDIT_TRAIL
+        WHERE (OWNER = 'TADMIN' OR USERNAME = 'TADMIN')
+          AND ACTION_NAME IN ('CREATE TABLE','ALTER TABLE','DROP TABLE','TRUNCATE TABLE')
+            UNION ALL
+            SELECT
+                CAST(OBJECT_NAME AS NVARCHAR2(128)) AS OBJECT_NAME,
+                CAST(STATEMENT_TYPE AS NVARCHAR2(100)) AS ACTION_NAME,
             CAST(DBMS_LOB.SUBSTR(SQL_TEXT, 1800, 1) AS NVARCHAR2(1800)) AS SQL_TEXT,
             CAST(POLICY_NAME AS NVARCHAR2(200)) AS POLICY_NAME,
+            CAST(DB_USER AS NVARCHAR2(128)) AS USERNAME,
             CAST(TIMESTAMP AS TIMESTAMP) AS TS
         FROM DBA_FGA_AUDIT_TRAIL
-        WHERE OBJECT_SCHEMA = 'TADMIN'
+        WHERE OBJECT_SCHEMA = 'TADMIN' AND STATEMENT_TYPE IN ('INSERT','UPDATE','DELETE')
     ) innerq
 )
-WHERE rn BETWEEN {startRow} AND {endRow}";
+WHERE rn BETWEEN :startRow AND :endRow";
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
+            var pStart = cmd.CreateParameter();
+            pStart.ParameterName = "startRow";
+            pStart.Value = startRow;
+            cmd.Parameters.Add(pStart);
+            var pEnd = cmd.CreateParameter();
+            pEnd.ParameterName = "endRow";
+            pEnd.Value = endRow;
+            cmd.Parameters.Add(pEnd);
 
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
+                var tsOrdinal = reader.GetOrdinal("TS");
+                DateTime? ts = null;
+                if (!reader.IsDBNull(tsOrdinal))
+                {
+                    var rawTs = reader.GetValue(tsOrdinal);
+                    switch (rawTs)
+                    {
+                        case DateTimeOffset dto:
+                            ts = dto.DateTime;
+                            break;
+                        case DateTime dt:
+                            ts = dt;
+                            break;
+                        default:
+                            ts = null;
+                            break;
+                    }
+                }
+
                 records.Add(new AuditRecord
                 {
                     TableName = reader["OBJECT_NAME"]?.ToString() ?? string.Empty,
                     Action = reader["ACTION_NAME"]?.ToString() ?? string.Empty,
                     SqlText = reader["SQL_TEXT"]?.ToString() ?? string.Empty,
-                    PerformedBy = reader["POLICY_NAME"]?.ToString() ?? string.Empty,
-                    Timestamp = reader["TS"] as DateTime?
+                    PerformedBy = reader["USERNAME"]?.ToString() ?? string.Empty,
+                    PolicyName = reader["POLICY_NAME"]?.ToString(),
+                    Timestamp = ts
                 });
             }
             await using var countCmd = conn.CreateCommand();
@@ -454,7 +588,7 @@ WHERE rn BETWEEN {startRow} AND {endRow}";
                             if (sess != null)
                             {
                                 _context.UserSessions.Remove(sess);
-await _context.SaveChangesAsync();
+                                await _context.SaveChangesAsync();
                             }
                         }
                     }
@@ -540,7 +674,7 @@ await _context.SaveChangesAsync();
                 return RedirectToAction("Users");
             }
 
-            ModelState.AddModelError(string.Empty, result.message ?? "Không thể tạo người dùng");
+            TempData["Error"] = "Không tìm thấy người dùng.";
             var allChiNhanhs = _context.ChiNhanhs.ToList() ?? new List<ChiNhanh>();
             model.ChiNhanhSelectList = new SelectList(allChiNhanhs, "MaChiNhanh", "TenChiNhanh", model.MaChiNhanh);
             return View(model);
@@ -602,7 +736,7 @@ await _context.SaveChangesAsync();
 
             await _context.SaveChangesAsync();
 
-            TempData["Success"] = "Cập nhật thông tin người dùng thành công";
+            TempData["Error"] = "Không tìm thấy người dùng.";
             return RedirectToAction("Users");
         }
 
@@ -621,7 +755,7 @@ await _context.SaveChangesAsync();
                 await _authService.GrantRoleAsync(kh.ORACLE_USERNAME!, oracleRole);
             }
 
-            TempData["Success"] = "Đã thay đổi vai trò người dùng";
+            TempData["Error"] = "Không tìm thấy người dùng.";
             return RedirectToAction("Users");
         }
 
@@ -634,7 +768,7 @@ await _context.SaveChangesAsync();
             kh.TrangThai = trangThai;
             await _context.SaveChangesAsync();
 
-            TempData["Success"] = "Đã thay đổi trạng thái người dùng";
+            TempData["Error"] = "Không tìm thấy người dùng.";
             return RedirectToAction("Users");
         }
 
@@ -657,11 +791,11 @@ await _context.SaveChangesAsync();
                     return RedirectToAction("Users");
                 }
             }
-            
+
             _context.KhachHangs.Remove(kh);
             await _context.SaveChangesAsync();
 
-            TempData["Success"] = "Đã xóa người dùng thành công.";
+            TempData["Error"] = "Không tìm thấy người dùng.";
             return RedirectToAction("Users");
         }
 

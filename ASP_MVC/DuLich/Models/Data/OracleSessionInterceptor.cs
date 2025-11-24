@@ -28,6 +28,18 @@ namespace DuLich.Models.Data
 
             if (connection is OracleConnection oraConn)
             {
+                // Set session language settings for proper character encoding
+                try
+                {
+                    using var nlsCmd = oraConn.CreateCommand();
+                    nlsCmd.CommandText = "ALTER SESSION SET NLS_LANGUAGE = 'VIETNAMESE' NLS_TERRITORY = 'VIETNAM'";
+                    await nlsCmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+                catch
+                {
+                    // Log or handle the exception if NLS settings fail, but don't block the connection
+                }
+
                 try
                 {
                     using var cmd = oraConn.CreateCommand();

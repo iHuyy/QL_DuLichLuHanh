@@ -63,7 +63,6 @@ BEGIN
 END;
 /
 -- Bước 4: Tạo lại Trigger để tự động gán chi nhánh khi tạo tour
-
 CREATE OR REPLACE TRIGGER TADMIN.trg_tour_branch_autofill
 BEFORE INSERT ON TADMIN.TOUR
 FOR EACH ROW
