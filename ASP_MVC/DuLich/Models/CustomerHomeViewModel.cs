@@ -17,5 +17,6 @@ namespace DuLich.Models
         public decimal PriceAdult { get; set; }
         public List<string> Images { get; set; } = new List<string>();
         public decimal Rating { get; set; }
+        public string QR { get; set; } = string.Empty;
     }
 }

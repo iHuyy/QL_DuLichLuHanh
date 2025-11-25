@@ -210,7 +210,7 @@ RETURNING MAANH INTO :id";
 
                     // Generate QR code and persist it immediately to avoid batching UPDATE + large BLOB INSERT
                     var scheme = Request?.Scheme ?? "http";
-                    var tourUrl = Url.Action("TourDetails", "Staff", new { id = tour.MaTour }, scheme) ?? $"/Staff/TourDetails/{tour.MaTour}";
+                    var tourUrl = Url.Action("TourDetails", "Customer", new { id = tour.MaTour }, scheme) ?? $"/Customer/TourDetails/{tour.MaTour}";
                     var qrCodeFileName = $"tour_{tour.MaTour}_{DateTime.Now:yyyyMMddHHmmss}.png";
                     var qrCodeDirectory = Path.Combine(_env.WebRootPath, "images", "qrcode");
                     Directory.CreateDirectory(qrCodeDirectory);

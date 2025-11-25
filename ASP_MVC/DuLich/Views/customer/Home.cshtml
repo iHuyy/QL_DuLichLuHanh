@@ -15,13 +15,17 @@
             <div class="row justify-content-center">
                 <div class="col-lg-9 text-center">
                     <h1 class="display-4 text-white mb-3 animated slideInDown">Tận hưởng kỳ nghỉ tuyệt vời cùng DuLich</h1>
-                    <p class="fs-5 text-white mb-4 animated slideInDown">Khám phá hàng trăm tour trong và ngoài nước, linh hoạt theo sở thích của bạn.</p>
-                    <form asp-controller="Customer" asp-action="Index" method="get" class="row g-2 bg-white rounded-pill px-3 py-2 mx-auto animated slideInDown">
+                    <p class="fs-5 text-white mb-4 animated slideInDown">Khám phá hàng trăm tour trong và ngoài nước, linh
+                        hoạt theo sở thích của bạn.</p>
+                    <form asp-controller="Customer" asp-action="Index" method="get"
+                        class="row g-2 bg-white rounded-pill px-3 py-2 mx-auto animated slideInDown">
                         <div class="col-md-3">
-                            <input type="text" name="keyword" class="form-control border-0" placeholder="Từ khóa" value="@keyword" />
+                            <input type="text" name="keyword" class="form-control border-0" placeholder="Từ khóa"
+                                value="@keyword" />
                         </div>
                         <div class="col-md-3">
-                            <input type="text" name="destination" class="form-control border-0" placeholder="Điểm đến" value="@destination" />
+                            <input type="text" name="destination" class="form-control border-0" placeholder="Điểm đến"
+                                value="@destination" />
                         </div>
                         <div class="col-md-2">
                             <input type="date" name="start_date" class="form-control border-0" value="@startDate" />
@@ -59,29 +63,34 @@
                         <img class="img-fluid" src="@image" alt="@tour.Title">
                     </div>
                     <div class="d-flex border-bottom">
-                        <small class="flex-fill text-center border-end py-2"><i class="fa fa-map-marker-alt text-primary me-2"></i>@tour.Destination</small>
-                        <small class="flex-fill text-center border-end py-2"><i class="fa fa-calendar-alt text-primary me-2"></i>@tour.Time</small>
-                        <small class="flex-fill text-center py-2"><i class="fa fa-star text-primary me-2"></i>@tour.Rating.ToString("0.0")</small>
+                        <small class="flex-fill text-center border-end py-2"><i
+                                class="fa fa-map-marker-alt text-primary me-2"></i>@tour.Destination</small>
+                        <small class="flex-fill text-center border-end py-2"><i
+                                class="fa fa-calendar-alt text-primary me-2"></i>@tour.Time</small>
+                        <small class="flex-fill text-center py-2"><i
+                                class="fa fa-star text-primary me-2"></i>@tour.Rating.ToString("0.0")</small>
                     </div>
                     <div class="p-4 d-flex flex-column flex-grow-1">
                         <h5 class="mb-3 text-center">@tour.Title</h5>
                         <ul class="list-unstyled small text-muted mb-4">
-                            <li class="mb-1"><i class="fa fa-map-marker-alt text-primary me-2"></i>Điểm đến: @tour.Destination</li>
+                            <li class="mb-1"><i class="fa fa-map-marker-alt text-primary me-2"></i>Điểm đến:
+                                @tour.Destination</li>
                             <li class="mb-1"><i class="fa fa-calendar-alt text-primary me-2"></i>Khởi hành: @tour.Time</li>
-                            <li class="mb-1"><i class="fa fa-user-friends text-primary me-2"></i>Giá người lớn: @tour.PriceAdult.ToString("N0") VNĐ</li>
+                            <li class="mb-1"><i class="fa fa-user-friends text-primary me-2"></i>Giá người lớn:
+                                @tour.PriceAdult.ToString("N0") VNĐ</li>
                         </ul>
                         <div class="d-flex flex-wrap gap-2 mt-auto">
-                            <button type="button"
-                                    class="btn btn-outline-secondary rounded-pill flex-fill"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#qrModal"
-                                    data-title="@tour.Title">
+                            <button type="button" class="btn btn-outline-secondary rounded-pill flex-fill"
+                                data-bs-toggle="modal" data-bs-target="#qrModal" data-qr="@tour.QR"
+                                data-title="@tour.Title">
                                 <i class="fa fa-qrcode me-1"></i> QR
                             </button>
-                            <a asp-controller="Customer" asp-action="Booking" asp-route-id="@tour.MaTour" class="btn btn-primary rounded-pill flex-fill">
+                            <a asp-controller="Customer" asp-action="Booking" asp-route-id="@tour.MaTour"
+                                class="btn btn-primary rounded-pill flex-fill">
                                 <i class="fa fa-ticket-alt me-1"></i> Đặt tour
                             </a>
-                            <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@tour.MaTour" class="btn btn-outline-primary rounded-pill flex-fill">
+                            <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@tour.MaTour"
+                                class="btn btn-outline-primary rounded-pill flex-fill">
                                 <i class="fa fa-info-circle me-1"></i> Chi tiết
                             </a>
                         </div>
