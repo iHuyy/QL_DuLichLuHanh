@@ -502,5 +502,36 @@ namespace DuLich.Services
                 return (false, "Không thể tạo admin, vui lòng thử lại sau");
             }
         }
+        public async Task<(bool success, string message)> ChangePasswordAsync(string username, string newPassword)
+        {
+            try
+            {
+                // Sanitize the password to prevent SQL injection-like issues with quotes.
+                // If the password contains a double quote, it must be escaped by another double quote.
+                string sanitizedPassword = newPassword.Replace("\"", "\"\"");
+
+                using var conn = new OracleConnection(_connectionString);
+                await conn.OpenAsync();
+                using var cmd = conn.CreateCommand();
+                
+                // The password must be enclosed in double quotes in the command.
+                cmd.CommandText = $"ALTER USER \"{username.ToUpper()}\" IDENTIFIED BY \"{sanitizedPassword}\"";
+                
+                await cmd.ExecuteNonQueryAsync();
+                return (true, "Mật khẩu đã được thay đổi thành công.");
+            }
+            catch (OracleException ex)
+            {
+                Console.WriteLine($"Oracle error changing password for {username}: {ex.Message}");
+                // ORA-00922: missing or invalid option -> if password contains special characters not quoted
+                // ORA-01031: insufficient privileges -> if not connected as admin
+                return (false, $"Lỗi khi thay đổi mật khẩu: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error changing password for {username}: {ex.Message}");
+                return (false, "Lỗi không xác định khi thay đổi mật khẩu.");
+            }
+        }
     }
 }

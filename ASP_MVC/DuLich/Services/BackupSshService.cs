@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Renci.SshNet;
-using System.Linq;
 
 namespace DuLich.Services
 {
@@ -14,10 +16,24 @@ namespace DuLich.Services
             _configuration = configuration;
         }
 
+        public List<BackupInfo> ListBackups()
+        {
+            var cfg = _configuration.GetSection("BackupSsh");
+            var listScript = cfg["ListBackupsScript"] ?? "/u01/app/oracle/list_backups.sh";
+
+            var result = ExecuteSshCommand(listScript);
+            if (result.ExitStatus != 0)
+            {
+                throw new InvalidOperationException($"Failed to list backups. SSH Exit Status: {result.ExitStatus}. Output: {result.Output}");
+            }
+
+            return ParseBackupList(result.Output);
+        }
+
         public BackupExecutionResult RunBackup(string type)
         {
             var cfg = _configuration.GetSection("BackupSsh");
-            var backupScript = cfg["BackupScript"] ?? "/u01/app/oracle/run_backup.sh"; // Default path
+            var backupScript = cfg["BackupScript"] ?? "/u01/app/oracle/run_backup.sh";
 
             var backupParam = type?.ToUpper() switch
             {
@@ -26,7 +42,9 @@ namespace DuLich.Services
             };
 
             var commandText = $"{backupScript} {backupParam}";
-            return ExecuteSshCommand(commandText);
+            var result = ExecuteSshCommand(commandText);
+            result.BackupPath = ParseBackupDirectoryPath(result.Output);
+            return result;
         }
 
         public BackupExecutionResult RunRestoreFromDirectory(string backupDirectory, string? untilTime = null)
@@ -37,24 +55,23 @@ namespace DuLich.Services
             }
 
             var cfg = _configuration.GetSection("BackupSsh");
-            var restoreScript = cfg["RestoreScript"] ?? "/u01/app/oracle/restore_from_path.sh"; // Default path
+            var restoreScript = cfg["RestoreScript"] ?? "/u01/app/oracle/restore_from_path.sh";
 
-            // Pass the directory path as an argument to the script, optionally with UNTIL_TIME for point-in-time restore.
-            // Format UNTIL_TIME to a consistent Oracle-friendly string.
             var formattedUntil = string.IsNullOrWhiteSpace(untilTime)
                 ? string.Empty
                 : DateTime.Parse(untilTime).ToString("yyyy-MM-dd HH:mm:ss");
 
+            // Escape double quotes and wrap args in double quotes for the shell command
             var escapedUntil = string.IsNullOrWhiteSpace(formattedUntil)
                 ? string.Empty
-                : formattedUntil.Replace("'", "'\"'\"'");
-            var escapedDir = backupDirectory.Replace("'", "'\"'\"'");
+                : formattedUntil.Replace("\"", "\\\"");
+            var escapedDir = backupDirectory.Replace("\"", "\\\"");
 
             var untilPrefix = string.IsNullOrWhiteSpace(escapedUntil)
                 ? string.Empty
-                : $"UNTIL_TIME='{escapedUntil}' ";
+                : $"UNTIL_TIME=\"{escapedUntil}\" ";
 
-            var commandText = $"{untilPrefix}{restoreScript} '{escapedDir}'";
+            var commandText = $"{untilPrefix}{restoreScript} \"{escapedDir}\" ";
             return ExecuteSshCommand(commandText);
         }
 
@@ -81,10 +98,11 @@ namespace DuLich.Services
                 }
 
                 var cmd = client.CreateCommand(commandText);
-                cmd.CommandTimeout = TimeSpan.FromMinutes(30); 
-                var result = cmd.Execute();
+                cmd.CommandTimeout = TimeSpan.FromMinutes(30);
+                var resultText = cmd.Execute();
                 var error = cmd.Error;
-                var output = string.IsNullOrEmpty(result) ? error : result;
+
+                var output = $"STDOUT:\n{resultText}\n\nSTDERR:\n{error}";
 
                 client.Disconnect();
 
@@ -92,7 +110,7 @@ namespace DuLich.Services
                 {
                     ExitStatus = cmd.ExitStatus,
                     Output = output,
-                    BackupPath = ParseBackupPath(output) // Keep parsing the output
+                    BackupPath = "" // Will be parsed by the calling method if needed
                 };
             }
             catch (Exception ex)
@@ -100,35 +118,66 @@ namespace DuLich.Services
                 return new BackupExecutionResult
                 {
                     ExitStatus = -1,
-                    Output = ex.Message,
+                    Output = ex.ToString(),
                     BackupPath = string.Empty
                 };
             }
         }
-        
-        // This method now expects the .sh script to output a line like:
-        // BACKUP_PATH=/path/to/backup.bkp
-        private static string ParseBackupPath(string scriptOutput)
+
+        private static List<BackupInfo> ParseBackupList(string scriptOutput)
+        {
+            var backups = new List<BackupInfo>();
+            if (string.IsNullOrWhiteSpace(scriptOutput)) return backups;
+
+            var matches = Regex.Matches(scriptOutput, @"---BACKUPSET_START---(?<content>.*?)---BACKUPSET_END---", RegexOptions.Singleline);
+
+            foreach (Match match in matches)
+            {
+                var content = match.Groups["content"].Value.Trim();
+                // Corrected Regex
+                var pathMatch = Regex.Match(content, @"^Path:\s*(?<path>.*)$", RegexOptions.Multiline);
+                var timestampMatch = Regex.Match(content, @"^Timestamp:\s*(?<timestamp>.*)$", RegexOptions.Multiline);
+
+                if (pathMatch.Success && timestampMatch.Success)
+                {
+                    backups.Add(new BackupInfo
+                    {
+                        Path = pathMatch.Groups["path"].Value.Trim(),
+                        Timestamp = timestampMatch.Groups["timestamp"].Value.Trim()
+                    });
+                }
+            }
+
+            return backups;
+        }
+
+        private static string ParseBackupDirectoryPath(string scriptOutput)
         {
             if (string.IsNullOrWhiteSpace(scriptOutput)) return string.Empty;
 
             try
             {
-                var line = scriptOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                    .FirstOrDefault(l => l.Trim().StartsWith("BACKUP_PATH="));
+                var lines = scriptOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                var pathLine = lines.FirstOrDefault(l => l.Trim().StartsWith("BACKUP_PATH="));
 
-                if (line != null)
+                if (pathLine != null)
                 {
-                    return line.Trim().Substring("BACKUP_PATH=".Length);
+                    return pathLine.Trim().Substring("BACKUP_PATH=".Length);
                 }
             }
             catch
             {
                 // Ignore parsing errors
             }
-            
+
             return string.Empty;
         }
+    }
+
+    public class BackupInfo
+    {
+        public string Path { get; set; } = string.Empty;
+        public string Timestamp { get; set; } = string.Empty;
     }
 
     public class BackupExecutionResult

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DuLich")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6777a531ede19862b40b235c1c5e22cab927b9fd")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1b4b00f016e50c14cb702e0d55cc4dfb7b220a65")]
 [assembly: System.Reflection.AssemblyProductAttribute("DuLich")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DuLich")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

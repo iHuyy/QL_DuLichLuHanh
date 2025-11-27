@@ -53,14 +53,8 @@ RC=$?
 
 if [ $RC -eq 0 ]; then
   echo "RMAN completed successfully."
-  # Find the newest .bkp created after START_TIME
-  LATEST_BACKUP_FILE=$(find "${BACKUP_DIR}" -type f -name "*.bkp" -newermt "@${START_TIME}" | sort | tail -n 1)
-  if [ -n "${LATEST_BACKUP_FILE}" ]; then
-    echo "Found latest backup: ${LATEST_BACKUP_FILE}"
-    echo "BACKUP_PATH=${LATEST_BACKUP_FILE}"
-  else
-    echo "No new backup file found under ${BACKUP_DIR}."
-  fi
+  echo "Backup set is located in: ${BACKUP_DIR}"
+  echo "BACKUP_PATH=${BACKUP_DIR}"
 else
   echo "RMAN failed (exit=${RC}). Tail of log:"
   tail -n 50 "${LOG_FILE}" || true
