@@ -16,12 +16,14 @@ import 'package:intl/intl.dart';
 
 // --- BỘ MÀU (GIỮ TÔNG MÀU WEB) ---
 const Color primaryGreen = Color(0xFF86B817); // Xanh lá mạ
-const Color primaryDark = Color(0xFF13357B);  // Xanh đen đậm
-const Color scaffoldBg = Color(0xFFF8F9FA);   // Nền xám trắng sáng sủa
+const Color primaryDark = Color(0xFF13357B); // Xanh đen đậm
+const Color scaffoldBg = Color(0xFFF8F9FA); // Nền xám trắng sáng sủa
 const Color cardColor = Colors.white;
 
-final GlobalKey<MyBookingPageState> _myBookingKey = GlobalKey<MyBookingPageState>();
-final GlobalKey<InvoicesPageState> _invoicesKey = GlobalKey<InvoicesPageState>();
+final GlobalKey<MyBookingPageState> _myBookingKey =
+    GlobalKey<MyBookingPageState>();
+final GlobalKey<InvoicesPageState> _invoicesKey =
+    GlobalKey<InvoicesPageState>();
 
 class HomePage extends StatefulWidget {
   final String userID;
@@ -65,33 +67,46 @@ class _HomePageState extends State<HomePage> {
   Future<void> _fetchUserProfile() async {
     try {
       if (widget.userData != null && widget.userData!['fullname'] != null) {
-        setState(() { _userFullName = widget.userData!['fullname']; });
+        setState(() {
+          _userFullName = widget.userData!['fullname'];
+        });
         return;
       }
       final response = await _apiClient.getJson('get_user.php');
       if (response.statusCode == 200) {
         final body = json.decode(response.body);
         if (body['success'] == true && body['data'] != null) {
-          setState(() { _userFullName = body['data']['fullName'] ?? ''; });
+          setState(() {
+            _userFullName = body['data']['fullName'] ?? '';
+          });
         }
       }
-    } catch (e) { print(e); }
+    } catch (e) {
+      print(e);
+    }
   }
 
   Future<List<Tour>> _fetchTours() async {
     final response = await _apiClient.getJson('get_tours.php');
-    if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
+    if (response.statusCode != 200)
+      throw Exception('HTTP ${response.statusCode}');
     final body = response.body.trim();
     if (body.startsWith('<')) throw Exception('Server Error');
     try {
       final decoded = json.decode(body);
       if (decoded is List) {
-        return decoded.map<Tour>((e) => 
-          e is Map<String, dynamic> ? Tour.fromJson(e) : Tour.fromJson(Map<String, dynamic>.from(e))
-        ).toList();
+        return decoded
+            .map<Tour>(
+              (e) => e is Map<String, dynamic>
+                  ? Tour.fromJson(e)
+                  : Tour.fromJson(Map<String, dynamic>.from(e)),
+            )
+            .toList();
       }
       return [];
-    } catch (e) { return []; }
+    } catch (e) {
+      return [];
+    }
   }
 
   Future<List<Map<String, dynamic>>> _fetchBranches() async {
@@ -102,7 +117,9 @@ class _HomePageState extends State<HomePage> {
       if (body.isEmpty || body.startsWith('<')) return [];
       final decoded = json.decode(body);
       return decoded is List ? List<Map<String, dynamic>>.from(decoded) : [];
-    } catch (e) { return []; }
+    } catch (e) {
+      return [];
+    }
   }
 
   Future<void> _logout() async {
@@ -117,22 +134,40 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _navigateToWebLoginQR() async {
-    final token = await Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const QRLoginScannerPage()),
-    );
+    final token = await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => const QRLoginScannerPage()));
     if (token != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đang xử lý đăng nhập Web...'), backgroundColor: primaryGreen),
+        const SnackBar(
+          content: Text('Đang xử lý đăng nhập Web...'),
+          backgroundColor: primaryGreen,
+        ),
       );
     }
   }
 
   void _onItemTapped(int index) {
     if (index == 2) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TourScannerPage()));
+      // Logic quét QR (giữ nguyên)
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (context) => const TourScannerPage()));
     } else {
+      // --- BỔ SUNG LOGIC RELOAD CHO HOME ---
+      if (index == 0) {
+        setState(() {
+          // Gán lại Future để kích hoạt FutureBuilder chạy lại API
+          _toursFuture = _fetchTours();
+          // Nếu muốn cập nhật cả danh sách chi nhánh thì bỏ comment dòng dưới
+          // _branchesFuture = _fetchBranches();
+        });
+      }
+      // -------------------------------------
+
       if (index == 1) _myBookingKey.currentState?.refreshData();
       if (index == 3) _invoicesKey.currentState?.refreshData();
+
       setState(() => _selectedIndex = index);
     }
   }
@@ -141,8 +176,12 @@ class _HomePageState extends State<HomePage> {
 
   // Header đơn giản, không còn Banner
   Widget _buildHeader(BuildContext context) {
-    final displayName = _userFullName.isNotEmpty ? _userFullName : widget.userID;
-    final avatarChar = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
+    final displayName = _userFullName.isNotEmpty
+        ? _userFullName
+        : widget.userID;
+    final avatarChar = displayName.isNotEmpty
+        ? displayName[0].toUpperCase()
+        : 'U';
 
     return Container(
       color: Colors.white,
@@ -155,11 +194,15 @@ class _HomePageState extends State<HomePage> {
             backgroundColor: primaryGreen.withOpacity(0.1),
             child: Text(
               avatarChar,
-              style: const TextStyle(color: primaryGreen, fontWeight: FontWeight.bold, fontSize: 22),
+              style: const TextStyle(
+                color: primaryGreen,
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+              ),
             ),
           ),
           const SizedBox(width: 14),
-          
+
           // Greeting
           Expanded(
             child: Column(
@@ -190,13 +233,17 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(width: 10),
               _buildCircleBtn(Icons.logout, _logout, isLoading: _loggingOut),
             ],
-          )
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildCircleBtn(IconData icon, VoidCallback onTap, {bool isLoading = false}) {
+  Widget _buildCircleBtn(
+    IconData icon,
+    VoidCallback onTap, {
+    bool isLoading = false,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(50),
@@ -208,12 +255,22 @@ class _HomePageState extends State<HomePage> {
           shape: BoxShape.circle,
           border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
           ],
         ),
-        child: isLoading 
-          ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2, color: primaryDark))
-          : Icon(icon, color: primaryDark, size: 20),
+        child: isLoading
+            ? const Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: primaryDark,
+                ),
+              )
+            : Icon(icon, color: primaryDark, size: 20),
       ),
     );
   }
@@ -227,7 +284,11 @@ class _HomePageState extends State<HomePage> {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
         child: TextField(
@@ -273,22 +334,37 @@ class _HomePageState extends State<HomePage> {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         children: [
           _buildSquareChip('TẤT CẢ', _selectedBranch.isEmpty, () {
-            setState(() { _selectedBranch = ''; _selectedBranchId = null; });
+            setState(() {
+              _selectedBranch = '';
+              _selectedBranchId = null;
+            });
           }),
           ...branches.map((branch) {
             final name = branch['TenChiNhanh'] ?? branch['tenChiNhanh'] ?? 'CN';
             int? id;
-            try { id = int.parse(branch['MaChiNhanh'].toString()); } catch (_) {}
-            final isSelected = (_selectedBranchId != null && id == _selectedBranchId) ||
-                               (_selectedBranchId == null && _selectedBranch == name);
+            try {
+              id = int.parse(branch['MaChiNhanh'].toString());
+            } catch (_) {}
+            final isSelected =
+                (_selectedBranchId != null && id == _selectedBranchId) ||
+                (_selectedBranchId == null && _selectedBranch == name);
             return Padding(
               padding: const EdgeInsets.only(left: 10),
-              child: _buildSquareChip(name.toString().toUpperCase(), isSelected, () {
-                setState(() {
-                  if (isSelected) { _selectedBranch = ''; _selectedBranchId = null; }
-                  else { _selectedBranch = name; _selectedBranchId = id; }
-                });
-              }),
+              child: _buildSquareChip(
+                name.toString().toUpperCase(),
+                isSelected,
+                () {
+                  setState(() {
+                    if (isSelected) {
+                      _selectedBranch = '';
+                      _selectedBranchId = null;
+                    } else {
+                      _selectedBranch = name;
+                      _selectedBranchId = id;
+                    }
+                  });
+                },
+              ),
             );
           }),
         ],
@@ -305,7 +381,9 @@ class _HomePageState extends State<HomePage> {
         decoration: BoxDecoration(
           color: isSelected ? primaryGreen : Colors.white,
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: isSelected ? primaryGreen : Colors.grey.shade300),
+          border: Border.all(
+            color: isSelected ? primaryGreen : Colors.grey.shade300,
+          ),
         ),
         child: Text(
           label,
@@ -328,7 +406,10 @@ class _HomePageState extends State<HomePage> {
             children: [
               Icon(Icons.travel_explore_outlined, size: 50, color: Colors.grey),
               SizedBox(height: 10),
-              Text('Không tìm thấy tour phù hợp', style: TextStyle(color: Colors.grey)),
+              Text(
+                'Không tìm thấy tour phù hợp',
+                style: TextStyle(color: Colors.grey),
+              ),
             ],
           ),
         ),
@@ -345,14 +426,19 @@ class _HomePageState extends State<HomePage> {
         final tour = tours[index];
         double price = 0;
         try {
-           String cleanPrice = tour.giaNguoiLon?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0';
-           price = double.parse(cleanPrice);
+          String cleanPrice =
+              tour.giaNguoiLon?.toString().replaceAll(RegExp(r'[^0-9]'), '') ??
+              '0';
+          price = double.parse(cleanPrice);
         } catch (_) {}
 
         return GestureDetector(
           onTap: () async {
             final shouldRefresh = await Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => TourDetailPage(tour: tour, userID: widget.userID)),
+              MaterialPageRoute(
+                builder: (_) =>
+                    TourDetailPage(tour: tour, userID: widget.userID),
+              ),
             );
             if (shouldRefresh == true) {
               _myBookingKey.currentState?.refreshData();
@@ -364,7 +450,11 @@ class _HomePageState extends State<HomePage> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(4), // Góc vuông nhẹ giống web
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
               ],
             ),
             child: Column(
@@ -384,11 +474,18 @@ class _HomePageState extends State<HomePage> {
                       bottom: 0,
                       left: 0,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         color: primaryGreen, // Màu xanh lá đặc trưng
                         child: Text(
                           price > 0 ? currencyFormat.format(price) : 'Liên hệ',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                     ),
@@ -396,18 +493,29 @@ class _HomePageState extends State<HomePage> {
                       top: 10,
                       right: 10,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: primaryDark.withOpacity(0.9),
                           borderRadius: BorderRadius.circular(2),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.location_on, color: primaryGreen, size: 12),
+                            const Icon(
+                              Icons.location_on,
+                              color: primaryGreen,
+                              size: 12,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               tour.noiDen ?? 'Vietnam',
-                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
@@ -415,7 +523,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ],
                 ),
-                
+
                 // Nội dung text
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -425,8 +533,8 @@ class _HomePageState extends State<HomePage> {
                       Text(
                         tour.tieuDe,
                         style: const TextStyle(
-                          fontSize: 16, 
-                          fontWeight: FontWeight.w800, 
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
                           color: primaryDark,
                           height: 1.3,
                         ),
@@ -436,11 +544,19 @@ class _HomePageState extends State<HomePage> {
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          const Icon(Icons.calendar_month_outlined, size: 16, color: primaryGreen),
+                          const Icon(
+                            Icons.calendar_month_outlined,
+                            size: 16,
+                            color: primaryGreen,
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             '${tour.thoiGian ?? "3"} ngày',
-                            style: TextStyle(fontSize: 13, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                           const Spacer(),
                           Row(
@@ -451,7 +567,7 @@ class _HomePageState extends State<HomePage> {
                               Icon(Icons.star, size: 14, color: primaryGreen),
                               Icon(Icons.star, size: 14, color: primaryGreen),
                             ],
-                          )
+                          ),
                         ],
                       ),
                     ],
@@ -474,56 +590,74 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 16),
           _buildSearchBar(),
           const SizedBox(height: 24),
-          
+
           // CHỈ GỌI 1 LẦN FutureBuilder CHO CHIP
           FutureBuilder<List<Map<String, dynamic>>>(
             future: _branchesFuture,
             builder: (context, snapshot) {
-               // Nếu đang load hoặc lỗi, vẫn hiện chip "Tất cả" mặc định
-               var branches = snapshot.hasData ? snapshot.data! : <Map<String, dynamic>>[];
-               
-               if (branches.isNotEmpty) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSectionTitle('Điểm đến phổ biến'),
-                      _buildBranchChips(branches),
-                      const SizedBox(height: 24),
-                    ],
-                  );
-               }
-               return const SizedBox.shrink();
+              // Nếu đang load hoặc lỗi, vẫn hiện chip "Tất cả" mặc định
+              var branches = snapshot.hasData
+                  ? snapshot.data!
+                  : <Map<String, dynamic>>[];
+
+              if (branches.isNotEmpty) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionTitle('Điểm đến phổ biến'),
+                    _buildBranchChips(branches),
+                    const SizedBox(height: 24),
+                  ],
+                );
+              }
+              return const SizedBox.shrink();
             },
           ),
 
           _buildSectionTitle('Tour Nổi Bật'),
-          
+
           FutureBuilder<List<Tour>>(
             future: _toursFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: primaryGreen)));
+                return const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(
+                    child: CircularProgressIndicator(color: primaryGreen),
+                  ),
+                );
               }
               if (snapshot.hasError) {
-                return Center(child: Text('Lỗi kết nối', style: const TextStyle(color: Colors.red)));
+                return Center(
+                  child: Text(
+                    'Lỗi kết nối',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                );
               }
-              
+
               var tours = snapshot.data ?? [];
-              
+
               // Filter
               if (_selectedBranchId != null || _selectedBranch.isNotEmpty) {
                 tours = tours.where((t) {
                   final branchRaw = t.chiNhanh?.toString() ?? '';
-                  if (_selectedBranchId != null) return branchRaw == _selectedBranchId.toString();
-                  return branchRaw.toLowerCase().contains(_selectedBranch.toLowerCase());
+                  if (_selectedBranchId != null)
+                    return branchRaw == _selectedBranchId.toString();
+                  return branchRaw.toLowerCase().contains(
+                    _selectedBranch.toLowerCase(),
+                  );
                 }).toList();
               }
 
               if (_searchQuery.isNotEmpty) {
-                tours = tours.where((t) => 
-                  t.tieuDe.toLowerCase().contains(_searchQuery) || 
-                  (t.noiDen ?? '').toLowerCase().contains(_searchQuery)
-                ).toList();
+                tours = tours
+                    .where(
+                      (t) =>
+                          t.tieuDe.toLowerCase().contains(_searchQuery) ||
+                          (t.noiDen ?? '').toLowerCase().contains(_searchQuery),
+                    )
+                    .toList();
               }
 
               return _buildTourList(context, tours);
@@ -547,14 +681,25 @@ class _HomePageState extends State<HomePage> {
             MyBookingPage(key: _myBookingKey, userID: widget.userID),
             Container(),
             InvoicesPage(key: _invoicesKey, userID: widget.userID),
-            ProfileScreen(userID: widget.userID, userName: _userFullName.isNotEmpty ? _userFullName : widget.userID),
+            ProfileScreen(
+              userID: widget.userID,
+              userName: _userFullName.isNotEmpty
+                  ? _userFullName
+                  : widget.userID,
+            ),
           ],
         ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
         ),
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
@@ -563,15 +708,33 @@ class _HomePageState extends State<HomePage> {
           selectedItemColor: primaryGreen,
           unselectedItemColor: Colors.grey.shade400,
           type: BottomNavigationBarType.fixed,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+          selectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 11,
+          ),
           unselectedLabelStyle: const TextStyle(fontSize: 11),
           elevation: 0,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'TRANG CHỦ'),
-            BottomNavigationBarItem(icon: Icon(Icons.confirmation_number), label: 'ĐẶT VÉ'),
-            BottomNavigationBarItem(icon: Icon(Icons.qr_code_2, size: 32), label: 'QUÉT'),
-            BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'HÓA ĐƠN'),
-            BottomNavigationBarItem(icon: Icon(Icons.account_circle), label: 'CÁ NHÂN'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_filled),
+              label: 'TRANG CHỦ',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.confirmation_number),
+              label: 'ĐẶT VÉ',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.qr_code_2, size: 32),
+              label: 'QUÉT',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.receipt),
+              label: 'HÓA ĐƠN',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.account_circle),
+              label: 'CÁ NHÂN',
+            ),
           ],
         ),
       ),

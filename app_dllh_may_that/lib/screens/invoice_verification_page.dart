@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:app_dllh/services/api_client.dart';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:app_dllh/config/app_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // --- BỘ MÀU ---
 const Color primaryGreen = Color(0xFF86B817);
@@ -20,11 +23,12 @@ class _InvoiceVerificationPageState extends State<InvoiceVerificationPage> {
   final ApiClient _api = ApiClient();
 
   String? _fileName;
+  String? _pickedFilePath; // Biến quan trọng: Lưu đường dẫn file thực tế
   int? _invoiceId;
   bool _isLoading = false;
   Map<String, dynamic>? _verificationResult;
 
-  // Hàm chọn file
+  // 1. Hàm chọn file (Chỉ chạy khi bấm vào vùng chọn file)
   Future<void> _pickFile() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -33,13 +37,12 @@ class _InvoiceVerificationPageState extends State<InvoiceVerificationPage> {
       );
 
       if (result != null) {
-        String name = result.files.single.name;
+        final file = result.files.single;
         setState(() {
-          _fileName = name;
-          _verificationResult = null; // Reset kết quả cũ
-
-          // Logic trích xuất ID từ tên file: "HoaDon_101.pdf" -> 101
-          _invoiceId = _extractIdFromFilename(name);
+          _fileName = file.name;
+          _pickedFilePath = file.path; // Lưu đường dẫn để lát nữa upload
+          _verificationResult = null;  // Reset kết quả cũ
+          _invoiceId = _extractIdFromFilename(file.name);
         });
       }
     } catch (e) {
@@ -53,8 +56,6 @@ class _InvoiceVerificationPageState extends State<InvoiceVerificationPage> {
   }
 
   int? _extractIdFromFilename(String filename) {
-    // Regex tìm số sau dấu gạch dưới hoặc trong chuỗi
-    // Ví dụ: HoaDon_101.pdf, Invoice-205.pdf
     final RegExp regex = RegExp(r'(\d+)');
     final match = regex.firstMatch(filename);
     if (match != null) {
@@ -63,46 +64,55 @@ class _InvoiceVerificationPageState extends State<InvoiceVerificationPage> {
     return null;
   }
 
-  // Gọi API kiểm tra
+  // 2. Hàm Verify (Upload file sang C#)
+  // SỬA LỖI: Không gọi pickFiles ở đây nữa
   Future<void> _verify() async {
-    // ... (Code kiểm tra id null giữ nguyên)
+    if (_pickedFilePath == null) {
+       ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng chọn file PDF trước.')),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
     try {
-      final resp = await _api.postJson(
-        'verify_invoice.php',
-        body: {'maHoaDon': _invoiceId},
-      );
-
-      final body = resp.body.trim();
-      print("Verify Response: $body"); // Log để debug
-
-      // Kiểm tra nếu server trả về HTML lỗi thay vì JSON
-      if (body.startsWith('<') || !body.startsWith('{')) {
-        setState(() {
-          _verificationResult = {
-            'success': false,
-            'message':
-                'Lỗi máy chủ: Phản hồi không đúng định dạng JSON.\nNội dung: ${body.substring(0, 100)}...',
-          };
-        });
-        return;
+      // URL API C#: http://IP:5127/api/hoadon/verify
+      var uri = Uri.parse('${AppConfig.dotnetBaseUrl}/api/hoadon/verify');
+      
+      var request = http.MultipartRequest('POST', uri);
+      
+      // Thêm Token JWT (nếu có)
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
       }
 
-      try {
-        final decoded = jsonDecode(body);
+      // Đính kèm file từ đường dẫn đã chọn
+      request.files.add(await http.MultipartFile.fromPath(
+        'invoiceFile', // Tên tham số khớp với API C#
+        _pickedFilePath!,
+      ));
+
+      // Gửi request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
         setState(() {
           _verificationResult = decoded;
         });
-      } catch (e) {
+      } else {
         setState(() {
           _verificationResult = {
             'success': false,
-            'message': 'Lỗi phân tích dữ liệu: $e',
+            'message': 'Lỗi server (${response.statusCode}): ${response.body}'
           };
         });
       }
+
     } catch (e) {
       setState(() {
         _verificationResult = {'success': false, 'message': 'Lỗi kết nối: $e'};
@@ -145,7 +155,7 @@ class _InvoiceVerificationPageState extends State<InvoiceVerificationPage> {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Chọn file PDF hóa đơn (ví dụ: HoaDon_123.pdf) để kiểm tra tính toàn vẹn dữ liệu trên hệ thống.',
+                      'Chọn file PDF hóa đơn để hệ thống kiểm tra chữ ký số và nội dung.',
                       style: TextStyle(color: Colors.black87, fontSize: 13),
                     ),
                   ),
@@ -198,11 +208,8 @@ class _InvoiceVerificationPageState extends State<InvoiceVerificationPage> {
                     ),
                     if (_invoiceId != null)
                       Text(
-                        '(Mã hóa đơn nhận diện: $_invoiceId)',
-                        style: const TextStyle(
-                          color: Colors.green,
-                          fontSize: 12,
-                        ),
+                        '(Mã hóa đơn: $_invoiceId)',
+                        style: const TextStyle(color: Colors.green, fontSize: 12),
                       ),
                   ],
                 ),
@@ -216,7 +223,8 @@ class _InvoiceVerificationPageState extends State<InvoiceVerificationPage> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: (_invoiceId != null && !_isLoading) ? _verify : null,
+                // Chỉ enable nút khi đã chọn file (_pickedFilePath != null)
+                onPressed: (_pickedFilePath != null && !_isLoading) ? _verify : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryGreen,
                   disabledBackgroundColor: Colors.grey.shade300,
@@ -236,10 +244,7 @@ class _InvoiceVerificationPageState extends State<InvoiceVerificationPage> {
                       )
                     : const Text(
                         'KIỂM TRA NGAY',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
               ),
             ),
@@ -258,7 +263,12 @@ class _InvoiceVerificationPageState extends State<InvoiceVerificationPage> {
     bool isSuccess = _verificationResult!['success'] == true;
     bool isValid = _verificationResult!['isValid'] == true;
     String message = _verificationResult!['message'] ?? '';
-    Map<String, dynamic>? data = _verificationResult!['data'];
+    
+    // Lấy data an toàn
+    Map<String, dynamic>? data;
+    if (_verificationResult!['data'] is Map<String, dynamic>) {
+        data = _verificationResult!['data'];
+    }
 
     Color cardColor;
     IconData icon;
@@ -312,7 +322,7 @@ class _InvoiceVerificationPageState extends State<InvoiceVerificationPage> {
             style: const TextStyle(fontSize: 14),
           ),
 
-          if (isValid && data != null) ...[
+          if (data != null) ...[
             const Divider(height: 24),
             _buildInfoRow('Mã hóa đơn:', '#${data['maHoaDon']}'),
             _buildInfoRow('Ngày xuất:', '${data['ngayXuat']}'),

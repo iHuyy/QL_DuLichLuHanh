@@ -46,4 +46,35 @@ class BookingService {
       };
     }
   }
+
+  // --- BỔ SUNG HÀM HỦY TOUR ---
+  /// Hủy đặt tour
+  Future<Map<String, dynamic>> cancelBooking(int bookingId, String reason) async {
+    try {
+      final response = await _apiClient.postJson(
+        "cancel_booking.php",
+        body: {
+          "bookingId": bookingId,
+          "lyDo": reason
+        },
+      );
+
+      final body = response.body.trim();
+      
+      // Xử lý lỗi nếu server trả về HTML thay vì JSON
+      if (body.startsWith('<')) {
+         return {
+          "success": false,
+          "message": "Lỗi máy chủ (HTML response)"
+        };
+      }
+      
+      return jsonDecode(body);
+    } catch (e) {
+      return {
+        "success": false,
+        "message": "Lỗi kết nối: $e"
+      };
+    }
+  }
 }

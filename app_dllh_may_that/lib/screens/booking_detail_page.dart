@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:app_dllh/services/api_client.dart';
+import 'package:app_dllh/services/booking_service.dart'; // Import Service hủy
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:app_dllh/utils/image_helper.dart';
@@ -22,7 +23,11 @@ class BookingDetailPage extends StatefulWidget {
 class _BookingDetailPageState extends State<BookingDetailPage> {
   late Future<Map<String, dynamic>> _detailFuture;
   final ApiClient _apiClient = ApiClient();
+  final BookingService _bookingService = BookingService(); // Khởi tạo Service
   final currencyFormat = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
+  
+  // Biến trạng thái loading khi hủy
+  bool _isCanceling = false;
 
   @override
   void initState() {
@@ -37,7 +42,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
     
     final body = resp.body.trim();
-    // Xử lý trường hợp server trả về HTML lỗi kèm JSON
     if (body.startsWith('<')) {
       final idx = body.indexOf('{');
       if (idx >= 0) {
@@ -56,9 +60,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     return decoded['booking'];
   }
 
-  // --- CÁC HÀM HELPER AN TOÀN (FIX LỖI STRING/INT) ---
-
-  // Lấy chuỗi an toàn (tránh null)
+  // --- CÁC HÀM HELPER ---
   String _getString(Map<String, dynamic> m, List<String> keys) {
     for (var key in keys) {
       if (m[key] != null && m[key].toString().isNotEmpty) return m[key].toString();
@@ -66,30 +68,72 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     return '';
   }
 
-  // Lấy số thực an toàn (tự động parse từ String)
   double _getDouble(Map<String, dynamic> m, List<String> keys) {
     String val = _getString(m, keys);
-    // Xóa ký tự không phải số nếu cần (ví dụ 1,000.00 -> 1000.00)
     val = val.replaceAll(RegExp(r'[^0-9\.-]'), '');
     return double.tryParse(val) ?? 0.0;
   }
 
-  // Lấy số nguyên an toàn
   int _getInt(Map<String, dynamic> m, List<String> keys) {
     String val = _getString(m, keys);
-    // Lấy phần nguyên nếu là số thực (ví dụ 10.0 -> 10)
     if (val.contains('.')) val = val.split('.')[0];
     return int.tryParse(val) ?? 0;
   }
 
-  // Xử lý chuỗi ảnh Base64
   String _processImage(String raw) {
     if (raw.isEmpty) return '';
     if (!raw.startsWith('http') && !raw.startsWith('data:')) {
-       // Nếu thiếu header, tự động thêm vào
        return 'data:image/jpeg;base64,$raw';
     }
     return raw;
+  }
+
+  // --- LOGIC HỦY TOUR ---
+  void _confirmCancel() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xác nhận hủy', style: TextStyle(color: Colors.red)),
+        content: const Text('Bạn có chắc chắn muốn hủy đơn đặt tour này không?\nHành động này không thể hoàn tác.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Đóng', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx); // Đóng dialog
+              _handleCancel();    // Thực hiện hủy
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Hủy Tour', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleCancel() async {
+    setState(() => _isCanceling = true);
+    
+    // Gọi API hủy (cần đảm bảo cancel_booking.php đã có trên server)
+    final result = await _bookingService.cancelBooking(widget.bookingId, "Khách hàng hủy qua App");
+    
+    setState(() => _isCanceling = false);
+
+    if (result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã hủy đặt tour thành công'), backgroundColor: Colors.green),
+      );
+      // Tải lại trang để cập nhật trạng thái
+      setState(() {
+        _detailFuture = _fetchDetail();
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['message'] ?? 'Lỗi khi hủy'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
@@ -124,19 +168,17 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
           
           final m = snapshot.data!;
           
-          // --- TRÍCH XUẤT DỮ LIỆU AN TOÀN ---
           final title = _getString(m, ['TIEUDE', 'TieuDe', 'tieuDe']);
-          
-          String tourImage = _getString(m, ['HINHANH', 'hinhAnh', 'HinhAnh', 'image', 'DULIEUANH', 'ANHTHUMB', 'AnhThumb']);
+          String tourImage = _getString(m, ['HINHANH', 'hinhAnh', 'DULIEUANH', 'ANHTHUMB']);
           tourImage = _processImage(tourImage);
 
-          final bookingId = _getString(m, ['MADATTOUR', 'MaDatTour', 'maDatTour']);
-          final invoiceId = _getInt(m, ['MAHOADON', 'MaHoaDon', 'maHoaDon']); // Lấy về dạng int an toàn
+          final bookingId = _getString(m, ['MADATTOUR', 'MaDatTour']);
+          final invoiceId = _getInt(m, ['MAHOADON', 'MaHoaDon']);
           
-          final bookingDate = _getString(m, ['NGAYDAT', 'NgayDat', 'ngayDat']);
-          final tourDate = _getString(m, ['THOIGIAN', 'ThoiGian', 'thoiGian']);
-          final startPlace = _getString(m, ['NOIKHOIHANH', 'NoiKhoiHanh', 'noiKhoiHanh']);
-          final destination = _getString(m, ['NOIDEN', 'NoiDen', 'noiDen']);
+          final bookingDate = _getString(m, ['NGAYDAT', 'NgayDat']);
+          final tourDate = _getString(m, ['THOIGIAN', 'ThoiGian']);
+          final startPlace = _getString(m, ['NOIKHOIHANH', 'NoiKhoiHanh']);
+          final destination = _getString(m, ['NOIDEN', 'NoiDen']);
           
           final adults = _getInt(m, ['SONGUOILON', 'SoNguoiLon']);
           final children = _getInt(m, ['SOTREEM', 'SoTreEm']);
@@ -144,8 +186,15 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
           
           final description = _getString(m, ['MOTA', 'MoTa']);
           final specialRequest = _getString(m, ['YEUCAUDACBIET', 'YeuCauDacBiet']);
+          
           final status = _getString(m, ['TRANGTHAIDAT', 'TrangThaiDat']);
           final paymentStatus = _getString(m, ['TRANGTHAITHANHTOAN', 'TrangThaiThanhToan']);
+
+          // Logic kiểm tra xem có được phép hủy hay không
+          // Cho phép hủy nếu trạng thái KHÔNG chứa "hủy", "hoàn thành", "kết thúc"
+          final bool canCancel = !status.toLowerCase().contains('hủy') && 
+                                 !status.toLowerCase().contains('hoàn thành') &&
+                                 !status.toLowerCase().contains('kết thúc');
 
           return Column(
             children: [
@@ -154,7 +203,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 1. Hình ảnh & Tiêu đề
                       Container(
                         color: Colors.white,
                         padding: const EdgeInsets.only(bottom: 20),
@@ -162,19 +210,9 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (tourImage.isNotEmpty) 
-                              ImageHelper.imageFromData(
-                                tourImage, 
-                                width: double.infinity, 
-                                height: 220, 
-                                fit: BoxFit.cover
-                              )
+                              ImageHelper.imageFromData(tourImage, width: double.infinity, height: 220, fit: BoxFit.cover)
                             else
-                              Container(
-                                height: 180,
-                                width: double.infinity,
-                                color: Colors.blue.shade50,
-                                child: const Icon(Icons.image_not_supported, size: 60, color: Colors.blue),
-                              ),
+                              Container(height: 180, width: double.infinity, color: Colors.blue.shade50, child: const Icon(Icons.image_not_supported, size: 60, color: Colors.blue)),
                             
                             Padding(
                               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -200,7 +238,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
 
                       const SizedBox(height: 12),
 
-                      // 2. Thông tin Tour
                       _buildCard(
                         title: 'THÔNG TIN HÀNH TRÌNH',
                         icon: Icons.map_outlined,
@@ -215,7 +252,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
 
                       const SizedBox(height: 12),
 
-                      // 3. Chi tiết Booking
                       _buildCard(
                         title: 'CHI TIẾT ĐẶT CHỖ #$bookingId',
                         icon: Icons.confirmation_number_outlined,
@@ -239,7 +275,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
 
                       const SizedBox(height: 12),
 
-                      // 4. Thông tin thêm
                       if (description.isNotEmpty || specialRequest.isNotEmpty)
                         _buildCard(
                           title: 'THÔNG TIN THÊM',
@@ -277,38 +312,73 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                 ),
               ),
               
-              // 5. BOTTOM BAR (Nút chuyển sang Hóa Đơn)
-              // Chỉ hiện khi có mã hóa đơn hợp lệ (> 0)
-              if (invoiceId > 0) 
+              // --- THANH BOTTOM BAR: Nút Hủy & Xem Hóa Đơn ---
+              if (invoiceId > 0 || canCancel) 
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
                   ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        // Chuyển sang màn hình chi tiết hóa đơn
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => InvoiceDetailPage(invoiceId: invoiceId)
+                  child: Row(
+                    children: [
+                      // 1. Nút Hủy Đặt Tour (Màu đỏ nhạt)
+                      if (canCancel) 
+                        Expanded(
+                          child: SizedBox(
+                            height: 50,
+                            child: ElevatedButton.icon(
+                              onPressed: _isCanceling ? null : _confirmCancel,
+                              icon: _isCanceling 
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.red, strokeWidth: 2))
+                                  : const Icon(Icons.cancel_outlined, color: Colors.red),
+                              label: Text(
+                                _isCanceling ? 'Đang hủy...' : 'Hủy Đặt Tour',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red.shade50,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: BorderSide(color: Colors.red.shade200)
+                                ),
+                              ),
+                            ),
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.receipt_long_rounded),
-                      label: const Text('Xem Hóa Đơn', 
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryDark, 
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
+                        ),
+                      
+                      // Khoảng cách nếu có cả 2 nút
+                      if (canCancel && invoiceId > 0) 
+                        const SizedBox(width: 12),
+
+                      // 2. Nút Xem Hóa Đơn (Màu xanh đậm)
+                      if (invoiceId > 0)
+                        Expanded(
+                          child: SizedBox(
+                            height: 50,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => InvoiceDetailPage(invoiceId: invoiceId)
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.receipt_long_rounded),
+                              label: const Text('Xem Hóa Đơn', 
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primaryDark, 
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
             ],
@@ -317,8 +387,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
       ),
     );
   }
-
-  // --- CÁC WIDGET CON (Giữ nguyên style đẹp) ---
 
   Widget _buildCard({required String title, required IconData icon, required List<Widget> children}) {
     return Container(

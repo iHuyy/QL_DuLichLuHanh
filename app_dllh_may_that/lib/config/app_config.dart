@@ -6,9 +6,9 @@ class AppConfig {
   
   static const String serverPort = "80";
   
-  static const String baseUrl = "http://192.168.0.101/KLTN";
+  static const String baseUrl = "http://192.168.0.111/KLTN";
 
-  static const String dotnetBaseUrl = "http://192.168.0.101:5127";
+  static const String dotnetBaseUrl = "http://192.168.0.111:5127";
   
   // Thời gian timeout cho request (giây)
   static const int requestTimeoutSeconds = 12;

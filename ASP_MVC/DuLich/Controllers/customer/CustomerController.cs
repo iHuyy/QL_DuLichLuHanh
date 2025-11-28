@@ -21,6 +21,10 @@ using iText.IO.Font.Constants;
 using iText.Kernel.Colors;
 using iText.Layout.Borders;
 using iText.IO.Font;
+using iText.Kernel.Pdf.Canvas.Parser;
+using iText.Kernel.Pdf.Canvas.Parser.Listener;
+using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace DuLich.Controllers
 {
@@ -579,15 +583,14 @@ namespace DuLich.Controllers
                     };
 
                     // Chuy?n Object sang chu?i JSON
-                    string payloadJson = System.Text.Json.JsonSerializer.Serialize(payloadObj);
+                    string payloadStr = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
 
-                    // 4. K� S?
-                    // K� chu?i JSON v?a t?o
-                    string signature = _rsaService.Sign(payloadJson);
+                    // 4. KÝ SỐ
+                    string signature = _rsaService.Sign(payloadStr);
 
-                    // 5. C?P NH?T L?I V�O DATABASE
-                    hoaDon.Payload = payloadJson; // Luu JSON g?c v�o c?t Payload
-                    hoaDon.ChuKySo = signature;   // Luu ch? k�
+                    // 5. CẬP NHẬT VÀO DATABASE
+                    hoaDon.Payload = payloadStr; // Lưu chuỗi Payload mới (dạng key=value)
+                    hoaDon.ChuKySo = signature;  // Lưu chữ ký
 
                     _context.HoaDons.Update(hoaDon);
                     await _context.SaveChangesAsync();
@@ -900,7 +903,7 @@ namespace DuLich.Controllers
             {
                 signer = await _dbContext.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == "ADMIN");
             }
-            var signerName = signer?.HoTen ?? "Ngu?i qu?n l�";
+            var signerName = signer?.HoTen ?? "Người quản lý";
 
             try
             {
@@ -913,7 +916,7 @@ namespace DuLich.Controllers
             {
                 Console.WriteLine($"[DownloadInvoicePdf] ERROR: {ex.Message}");
                 Console.WriteLine($"[DownloadInvoicePdf] StackTrace: {ex.StackTrace}");
-                return StatusCode(500, $"Kh�ng th? t?o file: {ex.Message}");
+                return StatusCode(500, $"Không thể tạo file: {ex.Message}");
             }
         }
 
@@ -967,28 +970,44 @@ namespace DuLich.Controllers
                 using (var pdfDoc = new PdfDocument(writer))
                 using (var document = new Document(pdfDoc, iText.Kernel.Geom.PageSize.A4))
                 {
-                    // --- SỬA LỖI Ở ĐÂY ---
-                    // Thay vì dùng 'Path.Combine', phải dùng 'System.IO.Path.Combine'
-                    string fontPath = System.IO.Path.Combine(_env.WebRootPath, "fonts", "Arial.ttf");
-                    // ---------------------
+                    // 1. CẤU HÌNH FONT TIẾNG VIỆT
+                    // Đường dẫn ưu tiên: wwwroot/fonts/Arial.ttf
+                    string fontFile = "Arial.ttf";
+                    string fontPath = System.IO.Path.Combine(_env.WebRootPath, "fonts", fontFile);
+
+                    // Đường dẫn dự phòng: C:/Windows/Fonts/arial.ttf (Chỉ chạy trên Windows)
+                    if (!System.IO.File.Exists(fontPath))
+                    {
+                        string systemFontPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "arial.ttf");
+                        if (System.IO.File.Exists(systemFontPath))
+                        {
+                            fontPath = systemFontPath;
+                        }
+                    }
 
                     PdfFont font;
                     PdfFont fontBold;
 
                     if (System.IO.File.Exists(fontPath))
                     {
+                        // Load font hỗ trợ tiếng Việt với encoding Identity-H
                         font = PdfFontFactory.CreateFont(fontPath, PdfEncodings.IDENTITY_H);
                         fontBold = PdfFontFactory.CreateFont(fontPath, PdfEncodings.IDENTITY_H);
                     }
                     else
                     {
+                        // NẾU VẪN KHÔNG TÌM THẤY FONT -> Báo lỗi ra PDF
                         font = PdfFontFactory.CreateFont(iText.IO.Font.Constants.StandardFonts.HELVETICA);
                         fontBold = PdfFontFactory.CreateFont(iText.IO.Font.Constants.StandardFonts.HELVETICA_BOLD);
+
+                        // --- SỬA LỖI TẠI ĐÂY ---
+                        // Sử dụng ColorConstants.RED thay vì DeviceGray.RED
+                        document.Add(new Paragraph("ERROR: KHONG TIM THAY FILE FONT ARIAL.TTF").SetFontColor(ColorConstants.RED));
                     }
 
                     document.SetMargins(30, 30, 30, 30);
 
-                    // 1. TIÊU ĐỀ
+                    // 2. TIÊU ĐỀ
                     document.Add(new Paragraph("HÓA ĐƠN / INVOICE")
                         .SetFont(fontBold)
                         .SetFontSize(20)
@@ -997,28 +1016,37 @@ namespace DuLich.Controllers
 
                     document.Add(new LineSeparator(new iText.Kernel.Pdf.Canvas.Draw.SolidLine(1f)).SetMarginBottom(15));
 
-                    // 2. THÔNG TIN CHUNG
+                    // 3. THÔNG TIN CHUNG
                     Table infoTable = new Table(UnitValue.CreatePercentArray(new float[] { 1, 1 })).UseAllAvailableWidth();
 
                     infoTable.AddCell(CreateNoBorderCell($"Mã đơn hàng / Order ID: {hoaDon.MaHoaDon}", fontBold));
                     infoTable.AddCell(CreateNoBorderCell($"Ngày / Date: {(hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss") ?? "")}", font));
 
-                    infoTable.AddCell(CreateNoBorderCell($"Khách hàng / Customer: {(customer?.HoTen ?? "Guest")}", fontBold));
-                    string paymentMethod = hoaDon.TrangThai?.Contains("Thanh toán") == true ? "Chuyển khoản / Online" : "Chưa thanh toán";
+                    // Lưu ý: Các biến như customer?.HoTen cần đảm bảo không null
+                    infoTable.AddCell(CreateNoBorderCell($"Khách hàng / Customer: {(customer?.HoTen ?? "Khách lẻ")}", fontBold));
+
+                    string paymentMethod = "Chưa thanh toán";
+                    if (!string.IsNullOrEmpty(hoaDon.TrangThai))
+                    {
+                        paymentMethod = hoaDon.TrangThai.Contains("Thanh toán") || hoaDon.TrangThai.Contains("Paid")
+                                       ? "Chuyển khoản / Online"
+                                       : "Chưa thanh toán";
+                    }
                     infoTable.AddCell(CreateNoBorderCell($"Thanh toán / Payment: {paymentMethod}", font));
 
                     document.Add(infoTable);
 
-                    document.Add(new Paragraph($"Địa chỉ / Address: {(customer?.DiaChi ?? "")} - SĐT: {(customer?.SoDienThoai ?? "")}")
+                    document.Add(new Paragraph($"Địa chỉ / Address: {(customer?.DiaChi ?? "---")} - SĐT: {(customer?.SoDienThoai ?? "---")}")
                         .SetFont(font)
                         .SetFontSize(10)
                         .SetMarginTop(5)
                         .SetMarginBottom(15));
 
-                    // 3. BẢNG SẢN PHẨM
+                    // 4. BẢNG SẢN PHẨM
                     Table productTable = new Table(UnitValue.CreatePercentArray(new float[] { 4, 1.5f, 2, 2.5f })).UseAllAvailableWidth();
 
                     Color headerBg = new DeviceGray(0.9f);
+                    // Dùng fontBold cho header
                     productTable.AddHeaderCell(CreateHeaderCell("Sản phẩm / Product", fontBold, headerBg));
                     productTable.AddHeaderCell(CreateHeaderCell("SL / Qty", fontBold, headerBg).SetTextAlignment(TextAlignment.CENTER));
                     productTable.AddHeaderCell(CreateHeaderCell("Đơn giá / Price", fontBold, headerBg).SetTextAlignment(TextAlignment.RIGHT));
@@ -1046,6 +1074,7 @@ namespace DuLich.Controllers
                         productTable.AddCell(CreateCell($"{subtotal:N0}", font).SetTextAlignment(TextAlignment.RIGHT));
                     }
 
+                    // Hàng Tổng cộng
                     Cell totalLabelCell = new Cell(1, 3)
                         .Add(new Paragraph("Tổng cộng / Total"))
                         .SetFont(fontBold)
@@ -1065,7 +1094,7 @@ namespace DuLich.Controllers
 
                     document.Add(productTable);
 
-                    // 4. FOOTER
+                    // 5. FOOTER (NGƯỜI KÝ)
                     document.Add(new Paragraph("\n"));
 
                     Table footerTable = new Table(UnitValue.CreatePercentArray(new float[] { 1 })).UseAllAvailableWidth();
@@ -1149,82 +1178,103 @@ namespace DuLich.Controllers
             try
             {
                 if (invoiceFile == null || invoiceFile.Length == 0)
+                    return Json(new { success = false, message = "Vui lòng chọn file PDF." });
+
+                // 1. Đọc text từ PDF
+                string pdfText = string.Empty;
+                try
                 {
-                    return Json(new { success = false, message = "Vui l�ng ch?n file PDF." });
+                    using (var reader = new PdfReader(invoiceFile.OpenReadStream()))
+                    using (var pdfDoc = new PdfDocument(reader))
+                    {
+                        var strategy = new LocationTextExtractionStrategy();
+                        pdfText = PdfTextExtractor.GetTextFromPage(pdfDoc.GetPage(1), strategy);
+                    }
+                }
+                catch { return Json(new { success = false, message = "Không đọc được nội dung PDF." }); }
+
+                // 2. Trích xuất thông tin (Regex)
+                var matchId = Regex.Match(pdfText, @"Order ID:\s*(\d+)");
+                // Regex ngày nới lỏng hơn một chút để bắt dính ký tự
+                var matchDate = Regex.Match(pdfText, @"Date:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})");
+                var matchTotal = Regex.Match(pdfText, @"Total\s*([\d,.]+)\s*VNĐ");
+
+                if (!matchId.Success) return Json(new { success = false, message = "Không tìm thấy Mã hóa đơn trên PDF." });
+
+                string pdfMaHoaDon = matchId.Groups[1].Value;
+                string pdfNgayXuat = matchDate.Success ? matchDate.Groups[1].Value : "";
+                string pdfSoTienRaw = matchTotal.Success ? matchTotal.Groups[1].Value.Replace(",", "").Replace(".", "") : "0";
+
+                // Format tiền về dạng chuẩn "35000"
+                if (decimal.TryParse(pdfSoTienRaw, out decimal parsedMoney))
+                {
+                    pdfSoTienRaw = parsedMoney.ToString("0.##", CultureInfo.InvariantCulture);
                 }
 
-                // 1. L?y ID t? t�n file (VD: HoaDon_123.pdf -> 123)
-                var fileName = invoiceFile.FileName;
-                var match = System.Text.RegularExpressions.Regex.Match(fileName, @"(\d+)");
+                // 3. Tái tạo Payload
+                string reconstructedPayload = $"MaHoaDon={pdfMaHoaDon}|SoTien={pdfSoTienRaw}|NgayXuat={pdfNgayXuat}";
 
-                if (!match.Success)
+                // 4. Lấy DB
+                int id = int.Parse(pdfMaHoaDon);
+                var hoaDonDB = await _dbContext.HoaDons.AsNoTracking().FirstOrDefaultAsync(h => h.MaHoaDon == id);
+
+                if (hoaDonDB == null)
+                    return Json(new { success = false, message = "Hóa đơn không tồn tại trong hệ thống." });
+
+                // Chuẩn bị dữ liệu trả về cho UI (để không bị undefined)
+                var resultData = new
                 {
-                    return Json(new { success = false, message = "T�n file kh�ng h?p l?. Ph?i ch?a m� h�a don (VD: HoaDon_123.pdf)" });
+                    maHoaDon = pdfMaHoaDon,
+                    ngayXuat = pdfNgayXuat, // Lấy từ PDF để hiện thị
+                    trangThai = hoaDonDB.TrangThai ?? "Chưa xác định"
+                };
+
+                if (string.IsNullOrEmpty(hoaDonDB.ChuKySo))
+                {
+                    return Json(new
+                    {
+                        success = true,
+                        isValid = false,
+                        maHoaDon = resultData.maHoaDon,
+                        ngayXuat = resultData.ngayXuat,
+                        trangThai = resultData.trangThai,
+                        message = "Hóa đơn gốc chưa được ký số."
+                    });
                 }
 
-                int maHoaDon = int.Parse(match.Value);
+                // 5. Xác thực
+                bool isValid = _rsaService.Verify(reconstructedPayload, hoaDonDB.ChuKySo);
 
-                // 2. Truy v?n DB l?y Payload v� Ch? k�
-                // Quan tr?ng: Ph?i l?y c?t Payload, v� d� l� d? li?u g?c l�c k�
-                var hoaDon = await _dbContext.HoaDons
-                    .AsNoTracking() // Kh�ng c?n track changes
-                    .FirstOrDefaultAsync(h => h.MaHoaDon == maHoaDon);
-
-                if (hoaDon == null)
-                {
-                    return Json(new { success = false, message = $"Kh�ng t�m th?y h�a don #{maHoaDon} tr�n h? th?ng." });
-                }
-
-                if (string.IsNullOrEmpty(hoaDon.Payload) || string.IsNullOrEmpty(hoaDon.ChuKySo))
-                {
-                    return Json(new { success = false, message = "H�a don n�y chua du?c k� s? ho?c thi?u d? li?u g?c." });
-                }
-
-                // 3. G?i RSA Service d? ki?m tra
-                // Tham s? 1: Payload (JSON chu?i) l?y t? DB
-                // Tham s? 2: Ch? k� (Base64) l?y t? DB
-                bool isValid = _rsaService.Verify(hoaDon.Payload, hoaDon.ChuKySo);
-
-                // 4. Tr? k?t qu?
                 if (isValid)
                 {
                     return Json(new
                     {
                         success = true,
                         isValid = true,
-                        maHoaDon = hoaDon.MaHoaDon,
-                        ngayXuat = hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm"),
-                        trangThai = hoaDon.TrangThai,
-                        message = "H�a don H?P L?. Ch? k� s? kh?p ho�n to�n v?i d? li?u g?c."
+                        maHoaDon = resultData.maHoaDon,
+                        ngayXuat = resultData.ngayXuat,
+                        trangThai = resultData.trangThai,
+                        message = "Hợp lệ! File PDF chuẩn xác."
                     });
                 }
                 else
                 {
+                    // Trả về cả payload tái tạo để bạn Debug xem sai ở đâu
                     return Json(new
                     {
                         success = true,
                         isValid = false,
-                        maHoaDon = hoaDon.MaHoaDon,
-                        message = "C?NH B�O: Ch? k� s? KH�NG KH?P! D? li?u c� th? d� b? s?a d?i."
+                        maHoaDon = resultData.maHoaDon,
+                        ngayXuat = resultData.ngayXuat,
+                        trangThai = resultData.trangThai,
+                        message = $"KHÔNG HỢP LỆ! Dữ liệu PDF không khớp chữ ký.\n(Payload từ PDF: {reconstructedPayload})"
                     });
                 }
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Loi he thong: " + ex.Message });
+                return Json(new { success = false, message = "Lỗi: " + ex.Message });
             }
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
