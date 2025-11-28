@@ -1,4 +1,4 @@
-using DuLich.Models;
+﻿using DuLich.Models;
 using DuLich.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +8,9 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using DuLich.Models.Data;
+using DuLich.BackgroundServices;
+using DuLich.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Hosting;
 using System.IO;
 using System.Data;
@@ -17,6 +20,7 @@ using Oracle.ManagedDataAccess.Client;
 using System;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace DuLich.Controllers
 {
@@ -24,252 +28,367 @@ namespace DuLich.Controllers
     public class AdminController : BaseController
     {
         private readonly OracleAuthService _authService;
-        private readonly IWebHostEnvironment _env;
-        private readonly BackupSshService _backupSshService;
-        private const int AuditPageSize = 20;
-
-        public AdminController(OracleAuthService authService, ApplicationDbContext context, IWebHostEnvironment env, BackupSshService backupSshService) : base(context)
-        {
-            _authService = authService;
-            _env = env;
-            _backupSshService = backupSshService;
-        }
-
-        [AllowAnonymous]
-        [HttpGet]
-        [Route("Admin/Login")]
-        public IActionResult Login()
-        {
-            return View();
-        }
-
-        [AllowAnonymous]
-        [HttpPost]
-        [Route("Admin/Login")]
-        public async Task<IActionResult> Login(LoginModel model)
-        {
-            if (!ModelState.IsValid)
-                return View(model);
-
-            var (success, role) = await _authService.ValidateLoginAsync(model.Username, model.Password);
-
-            if (!success)
-            {
-                ModelState.AddModelError(string.Empty, "Đăng nhập không thành công");
-                return View(model);
-            }
-
-            if (role == "ROLE_ADMIN" || role == "ROLE_STAFF" || role == "ROLE_CUSTOMER")
-            {
-                var claims = new List<Claim>
+                private readonly IWebHostEnvironment _env;
+                private readonly IBackgroundTaskQueue _taskQueue;
+                private readonly IHubContext<RestoreHub, IRestoreClient> _hubContext;
+                private readonly RestoreStateService _restoreState;
+                private const int AuditPageSize = 20;
+        
+                public AdminController(
+                    OracleAuthService authService,
+                    ApplicationDbContext context,
+                    IWebHostEnvironment env,
+                    IBackgroundTaskQueue taskQueue,
+                    IHubContext<RestoreHub, IRestoreClient> hubContext,
+                    RestoreStateService restoreState) : base(context)
                 {
-                    new Claim(ClaimTypes.Name, model.Username),
-                    new Claim(ClaimTypes.Role, role)
-                };
-
-                if (role == "ROLE_STAFF")
+                    _authService = authService;
+                    _env = env;
+                    _taskQueue = taskQueue;
+                    _hubContext = hubContext;
+                    _restoreState = restoreState;
+                }
+        
+                [AllowAnonymous]
+                [HttpGet]
+                [Route("Admin/Login")]
+                public IActionResult Login()
                 {
-                    var staff = await _context.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME == model.Username.ToUpper());
-                    if (staff != null && staff.MaChiNhanh.HasValue)
+                    return View();
+                }
+        
+                [AllowAnonymous]
+                [HttpPost]
+                [Route("Admin/Login")]
+                public async Task<IActionResult> Login(LoginModel model)
+                {
+                    if (!ModelState.IsValid)
+                        return View(model);
+        
+                    var (success, role) = await _authService.ValidateLoginAsync(model.Username, model.Password);
+        
+                    if (!success)
                     {
-                        claims.Add(new Claim("MaChiNhanh", staff.MaChiNhanh.Value.ToString()));
+                        ModelState.AddModelError(string.Empty, "Đăng nhập không thành công");
+                        return View(model);
                     }
+        
+                    if (role == "ROLE_ADMIN" || role == "ROLE_STAFF" || role == "ROLE_CUSTOMER")
+                    {
+                        var claims = new List<Claim>
+                        {
+                            new Claim(ClaimTypes.Name, model.Username),
+                            new Claim(ClaimTypes.Role, role)
+                        };
+        
+                        if (role == "ROLE_STAFF")
+                        {
+                            var staff = await _context.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME == model.Username.ToUpper());
+                            if (staff != null && staff.MaChiNhanh.HasValue)
+                            {
+                                claims.Add(new Claim("MaChiNhanh", staff.MaChiNhanh.Value.ToString()));
+                            }
+                        }
+        
+                        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+                        var authProperties = new AuthenticationProperties();
+        
+                        await HttpContext.SignInAsync(
+                            CookieAuthenticationDefaults.AuthenticationScheme,
+                            new ClaimsPrincipal(claimsIdentity),
+                            authProperties);
+        
+                        if (role == "ROLE_ADMIN")
+                            return RedirectToAction("Dashboard", "Admin");
+        
+                        if (role == "ROLE_STAFF")
+                            return RedirectToAction("Index", "Staff");
+        
+                        return RedirectToAction("Index", "Home");
+                    }
+        
+                    ModelState.AddModelError(string.Empty, "Đăng nhập không thành công");
+                    return View(model);
                 }
-
-                var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-                var authProperties = new AuthenticationProperties();
-
-                await HttpContext.SignInAsync(
-                    CookieAuthenticationDefaults.AuthenticationScheme,
-                    new ClaimsPrincipal(claimsIdentity),
-                    authProperties);
-
-                if (role == "ROLE_ADMIN")
-                    return RedirectToAction("Dashboard", "Admin");
-
-                if (role == "ROLE_STAFF")
-                    return RedirectToAction("Index", "Staff");
-
-                return RedirectToAction("Index", "Home");
-            }
-
-            ModelState.AddModelError(string.Empty, "Đăng nhập không thành công");
-            return View(model);
-        }
-
-        [HttpGet]
-        [Route("Admin/Dashboard")]
-        public IActionResult Dashboard()
-        {
-            return View();
-        }
-
-        [HttpGet]
-        [Route("Admin/Bookings")]
-        public IActionResult Bookings()
-        {
-            return View();
-        }
-
-        [HttpGet]
-        [Route("Admin/Invoices")]
-        public IActionResult Invoices()
-        {
-            return View();
-        }
-
-        [HttpGet]
-        [Route("Admin/BookingDetails/{id}")]
-        public IActionResult BookingDetails(int id)
-        {
-            TempData["Info"] = $"Chi tiết đặt tour #{id} chưa được triển khai. Vui lòng thao tác trực tiếp tại danh sách.";
-            return RedirectToAction("Bookings");
-        }
-
-        [HttpGet]
-        [Route("Admin/BackupRestore")]
-        public async Task<IActionResult> BackupRestore()
-        {
-            var allHistory = await _context.BackupHistories
-                .OrderByDescending(h => h.RequestedAt)
-                .Take(200)
-                .ToListAsync();
-
-                        var backupHistoryItems = allHistory
-                .Where(h => h.ActionType != "Phuc hoi")
-                .Select(h => new BackupHistoryItem
+        
+                [HttpGet]
+                [Route("Admin/Dashboard")]
+                public IActionResult Dashboard()
                 {
-                    Id = h.Id,
-                    Type = h.ActionType,
-                    StartedAt = h.RequestedAt,
-                    FinishedAt = h.CompletedAt,
-                    Status = h.Status,
-                    Location = h.Target ?? string.Empty,
-                    Note = h.Notes ?? string.Empty
-                }).ToList();
-
-            var restoreHistoryItems = allHistory
-                .Where(h => h.ActionType == "Phuc hoi")
-                .Select(h => new BackupHistoryItem
-                {
-                    Id = h.Id,
-                    Type = h.ActionType,
-                    StartedAt = h.RequestedAt,
-                    FinishedAt = h.CompletedAt,
-                    Status = h.Status,
-                    Location = h.Target ?? string.Empty,
-                    Note = h.Notes ?? string.Empty
-                }).ToList();
-
-            var backupFiles = backupHistoryItems
-                .Where(h => !string.IsNullOrEmpty(h.Location) && h.Status == "Hoan tat")
-                .OrderByDescending(h => h.StartedAt)
-                .Select(h => new SelectListItem
-                {
-                    Text = $"{h.StartedAt:dd/MM HH:mm} - {Path.GetFileName(h.Location)}",
-                    Value = $"{h.Location.Replace("\\", "/")}|{(h.FinishedAt ?? h.StartedAt):yyyy-MM-dd HH:mm:ss}"
-                })
-                .ToList();
-            var model = new BackupRestoreViewModel
-            {
-                History = backupHistoryItems.Take(100).ToList(),
-                RestoreHistory = restoreHistoryItems.Take(100).ToList(),
-                BackupFiles = backupFiles
-            };
-
-            return View("BackupRestore", model);
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [Route("Admin/Backup/Run")]
-        public async Task<IActionResult> RunBackup(string type)
-        {
-            var action = type?.ToUpper() == "INCREMENTAL" ? "Sao luu thay doi (Incremental)" : "Sao luu toan bo (Full)";
-            var record = await CreateBackupHistoryAsync(action, "Dang chay", null, "Khoi tao tu UI admin");
-
-            try
-            {
-                var exec = _backupSshService.RunBackup(type?.ToUpper() == "INCREMENTAL" ? "INCREMENTAL" : "FULL");
-
-                record.Target = exec.BackupPath; // Save the returned backup path
-                record.Status = exec.ExitStatus == 0 ? "Hoan tat" : "That bai";
-                record.CompletedAt = DateTime.Now;
-                record.Notes = TruncateNote(exec.Output);
-
-                if (record.Status == "Hoan tat")
-                {
-                    TempData["Success"] = "Yeu cau sao luu da duoc thuc thi thanh cong.";
+                    return View();
                 }
-                else
+        
+                [HttpGet]
+                [Route("Admin/Bookings")]
+                public IActionResult Bookings()
                 {
-                    TempData["Error"] = $"Sao luu that bai. Chi tiet: {TruncateForDisplay(exec.Output)}";
+                    return View();
                 }
-            }
-            catch (Exception ex)
-            {
-                record.Status = "That bai";
-                record.CompletedAt = DateTime.Now;
-                record.Notes = TruncateNote(ex.ToString());
-                TempData["Error"] = "Sao luu that bai: " + ex.Message;
-            }
-
-            _context.BackupHistories.Update(record);
-            await _context.SaveChangesAsync();
-
-            return RedirectToAction("BackupRestore");
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [Route("Admin/Backup/Restore")]
-        public async Task<IActionResult> RestoreBackup(string backupPath)
-        {
-            if (string.IsNullOrWhiteSpace(backupPath))
-            {
-                TempData["Error"] = "Ban chua chon ban sao luu de phuc hoi.";
-                return RedirectToAction("BackupRestore");
-            }
-
-            // backupPath value format: "<path>|<finished_at>" injected in BackupRestore view
-            var parts = backupPath.Split('|');
-            var backupFile = parts[0];
-            var untilTime = parts.Length > 1 ? parts[1] : null;
-
-            var directory = Path.GetDirectoryName(backupFile.Replace("\\", "/")) ?? backupFile;
-            var record = await CreateBackupHistoryAsync("Phuc hoi", "Dang chay", directory, $"Phuc hoi tu: {backupFile} (UNTIL_TIME={untilTime})");
-
-            try
-            {
-                var exec = _backupSshService.RunRestoreFromDirectory(directory, untilTime);
-                record.Status = exec.ExitStatus == 0 ? "Hoan tat" : "That bai";
-                record.CompletedAt = DateTime.Now;
-                record.Notes = TruncateNote(exec.Output);
-
-                if (record.Status == "Hoan tat")
+        
+                [HttpGet]
+                [Route("Admin/Invoices")]
+                public IActionResult Invoices()
                 {
-                    TempData["Success"] = "Phuc hoi thanh cong.";
+                    return View();
                 }
-                else
+        
+                [HttpGet]
+                [Route("Admin/BookingDetails/{id}")]
+                public IActionResult BookingDetails(int id)
                 {
-                    TempData["Error"] = $"Phuc hoi that bai. Chi tiet: {TruncateForDisplay(exec.Output)}";
+                    TempData["Info"] = $"Chi tiết đặt tour #{id} chưa được triển khai. Vui lòng thao tác trực tiếp tới danh sách.";
+                    return RedirectToAction("Bookings");
                 }
-            }
-            catch (Exception ex)
-            {
-                record.Status = "That bai";
-                record.CompletedAt = DateTime.Now;
-                record.Notes = TruncateNote(ex.ToString());
-                TempData["Error"] = "Phuc hoi that bai: " + ex.Message;
-            }
+        
+                [HttpGet]
+                [Route("Admin/BackupRestore")]
+                public async Task<IActionResult> BackupRestore()
+                {
+                    var model = new BackupRestoreViewModel();
+                    try
+                    {
+                        // BackupSshService is now resolved from DI, but ListBackups might be problematic if DB is down.
+                        // For simplicity, we assume it works or we handle the exception gracefully.
+                        var backupSshService = HttpContext.RequestServices.GetRequiredService<BackupSshService>();
+                        var availableBackups = backupSshService.ListBackups();
+                        model.BackupFiles = availableBackups
+                            .OrderByDescending(b => b.Timestamp)
+                            .Select(b => new SelectListItem
+                            {
+                                Text = $"Backup luc {b.Timestamp} (Duong dan: {b.Path})",
+                                Value = b.Path // The value is now the clean directory path
+                            })
+                            .ToList();
+                    }
+                    catch (Exception ex)
+                    {
+                        TempData["Error"] = "Không thể lấy danh sách sao lưu: " + ex.Message;
+                        model.BackupFiles = new List<SelectListItem>();
+                    }
+        
+                    // Keep the history part as it is useful for tracking requests
+                    var allHistory = await _context.BackupHistories
+                        .OrderByDescending(h => h.RequestedAt)
+                        .Take(200)
+                        .ToListAsync();
+        
+                    model.History = allHistory
+                        .Where(h => h.ActionType != "Phuc hoi")
+                        .Select(h => new BackupHistoryItem
+                        {
+                            Id = h.Id,
+                            Type = h.ActionType,
+                            StartedAt = h.RequestedAt,
+                            FinishedAt = h.CompletedAt,
+                            Status = h.Status,
+                            Location = h.Target ?? string.Empty,
+                            Note = h.Notes ?? string.Empty
+                        }).ToList();
+        
+                    model.RestoreHistory = allHistory
+                        .Where(h => h.ActionType == "Phuc hoi")
+                        .Select(h => new BackupHistoryItem
+                        {
+                            Id = h.Id,
+                            Type = h.ActionType,
+                            StartedAt = h.RequestedAt,
+                            FinishedAt = h.CompletedAt,
+                            Status = h.Status,
+                            Location = h.Target ?? string.Empty,
+                            Note = h.Notes ?? string.Empty
+                        }).ToList();
+        
+                    return View("BackupRestore", model);
+                }
+        
+                [HttpPost]
+                [ValidateAntiForgeryToken]
+                [Route("Admin/Backup/Run")]
+                public async Task<IActionResult> RunBackup(string type)
+                {
+                    var action = type?.ToUpper() == "INCREMENTAL" ? "Sao lưu thay đổi (Incremental)" : "Sao lưu toàn bộ (Full)";
+                    var record = await CreateBackupHistoryAsync(action, "Dang chay", null, "Khởi tạo từ UI admin");
+        
+                    try
+                    {
+                        // This is still a blocking operation, which is not ideal but less critical than restore.
+                        var backupSshService = HttpContext.RequestServices.GetRequiredService<BackupSshService>();
+                        var exec = backupSshService.RunBackup(type?.ToUpper() == "INCREMENTAL" ? "INCREMENTAL" : "FULL");
+        
+                        record.Target = exec.BackupPath; // Save the returned backup path
+                        record.Status = exec.ExitStatus == 0 ? "Hoan tat" : "That bai";
+                        record.CompletedAt = DateTime.Now;
+                        record.Notes = TruncateNote(exec.Output);
+        
+                        if (record.Status == "Hoan tat")
+                        {
+                            TempData["Success"] = "Yêu cầu sao lưu đã được thực thi thành công.";
+                        }
+                        else
+                        {
+                            TempData["Error"] = $"Sao lưu thất bại. Chi tiết: {TruncateForDisplay(exec.Output)}";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        record.Status = "That bai";
+                        record.CompletedAt = DateTime.Now;
+                        record.Notes = TruncateNote(ex.ToString());
+                        TempData["Error"] = "Sao lưu thất bại: " + ex.Message;
+                    }
+        
+                    _context.BackupHistories.Update(record);
+                    await _context.SaveChangesAsync();
+        
+                    return RedirectToAction("BackupRestore");
+                }
+        
+                [HttpPost]
+                [ValidateAntiForgeryToken]
+                [Route("Admin/Backup/Restore")]
+                public IActionResult RestoreBackup(string backupPath, string? untilTime)
+                {
+                    if (string.IsNullOrWhiteSpace(backupPath))
+                    {
+                        TempData["Error"] = "Bạn chưa chọn bản sao lưu để phục hồi.";
+                        return RedirectToAction("BackupRestore");
+                    }
+        
+                    // --- REFACTORED LOGIC ---
+                    // 1. Enqueue the long-running task to the background worker.
+                    // 2. Return immediately to the user.
+        
+                    _taskQueue.QueueBackgroundWorkItemAsync(async (serviceProvider, cancellationToken) =>
+                    {
+                        // Create a unique ID for this restore job to send to the client
+                        var operationId = Guid.NewGuid().ToString();
+                        var directory = backupPath; // Capture variable
 
-            _context.BackupHistories.Update(record);
-            await _context.SaveChangesAsync();
+                        // Resolve services from the scoped service provider
+                        var dbContext = serviceProvider.GetRequiredService<ApplicationDbContext>();
+                        var backupSshService = serviceProvider.GetRequiredService<BackupSshService>();
+                        var hubContext = serviceProvider.GetRequiredService<IHubContext<RestoreHub, IRestoreClient>>();
+                        var logger = serviceProvider.GetRequiredService<ILogger<AdminController>>();
+                        var restoreState = serviceProvider.GetRequiredService<RestoreStateService>();
+                        var progressCts = new CancellationTokenSource();
+                        Task? progressTask = null;
 
-            return RedirectToAction("BackupRestore");
-        }
+                        // Create a history record first
+                        var pointInTimeNote = string.IsNullOrWhiteSpace(untilTime) ? string.Empty : $" (UNTIL_TIME={untilTime})";
+                        var record = await CreateBackupHistoryInScope(dbContext, "Phuc hoi", "Dang xep hang", directory, $"Phuc hoi tu thu muc: {directory}{pointInTimeNote}");
 
-private async Task<BackupHistory> CreateBackupHistoryAsync(string actionType, string status, string? target, string? notes)
+                        // Broadcast progress to both SignalR (UI) and console logs (dotnet watch)
+                        async Task SendProgressAsync(string status, string message, int percent)
+                        {
+                            logger.LogInformation("[Restore {RecordId}] {Status} {Percent}% - {Message}", record.Id, status, percent, message);
+                            await hubContext.Clients.All.ReceiveRestoreProgress(status, message, percent);
+                        }
+
+                        try
+                        {
+                            restoreState.Start(directory);
+                            logger.LogInformation($"Starting background restore job {record.Id} for path {directory}.");
+                            await SendProgressAsync("started", $"Bat dau phuc hoi tu: {directory}", 5);
+        
+                            record.Status = "Dang chay";
+                            dbContext.BackupHistories.Update(record);
+                            await SaveChangesSafeAsync(dbContext, logger, cancellationToken);
+
+                            // Kick off a lightweight progress ticker so the UI sees activity while RMAN runs
+                            progressTask = Task.Run(async () =>
+                            {
+                                var pct = 5;
+                                while (!progressCts.IsCancellationRequested)
+                                {
+                                    try
+                                    {
+                                        pct = Math.Min(pct + 5, 90);
+                                        await SendProgressAsync("running", $"Dang phuc hoi... ({pct}%)", pct);
+                                        await Task.Delay(TimeSpan.FromSeconds(3), progressCts.Token);
+                                    }
+                                    catch (OperationCanceledException)
+                                    {
+                                        break;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        logger.LogWarning(ex, "Progress ticker error.");
+                                        break;
+                                    }
+                                }
+                            }, CancellationToken.None);
+
+                            // Execute the long-running restore operation
+                            var exec = backupSshService.RunRestoreFromDirectory(directory, untilTime);
+                            
+                            record.CompletedAt = DateTime.Now;
+                            record.Notes = TruncateNote(exec.Output);
+        
+                            if (exec.ExitStatus == 0)
+                            {
+                                record.Status = "Hoan tat";
+                                logger.LogInformation($"Background restore job {record.Id} completed successfully.");
+                                await SendProgressAsync("clearing_pools", "Phục hồi CSDL thành công. Đang xóa các kết nối cũ...", 90);
+
+                                // Clear connection pools after successful restore
+                                OracleConnection.ClearAllPools();
+                                
+                                await SendProgressAsync("success", "Hoàn tất! Hệ thống đã sẵn sàng.", 100);
+                            }
+                            else
+                            {
+                                record.Status = "That bai";
+                                logger.LogError($"Background restore job {record.Id} failed. Output: {exec.Output}");
+                                await SendProgressAsync("error", $"Phục hồi thất bại: {TruncateForDisplay(exec.Output)}", 100);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, $"An exception occurred in background restore job {record.Id}.");
+                            record.Status = "That bai";
+                            record.CompletedAt = DateTime.Now;
+                            record.Notes = TruncateNote(ex.ToString());
+                            await SendProgressAsync("error", $"Phục hồi thất bại: {ex.Message}", 100);
+                        }
+                        finally
+                        {
+                            // Final update to the history record
+                            dbContext.BackupHistories.Update(record);
+                            await SaveChangesSafeAsync(dbContext, logger, cancellationToken);
+                            restoreState.Complete();
+                            progressCts.Cancel();
+                            if (progressTask != null)
+                            {
+                                try { await progressTask; } catch (OperationCanceledException) { }
+                            }
+                        }
+                    });
+        
+                    TempData["Success"] = "Yêu cầu phục hồi đã được đưa vào hàng đợi. Quá trình sẽ bắt đầu trong giây lát.";
+                    return RedirectToAction("BackupRestore");
+                }
+                
+                // Helper to create history record within a specific DI scope
+                private async Task<BackupHistory> CreateBackupHistoryInScope(ApplicationDbContext dbContext, string actionType, string status, string? target, string? notes)
+                {
+                    var nextId = (await dbContext.BackupHistories.MaxAsync(b => (int?)b.Id) ?? 0) + 1;
+                    var record = new BackupHistory
+                    {
+                        Id = nextId,
+                        ActionType = actionType,
+                        RequestedAt = DateTime.Now,
+                        Status = status,
+                        Target = target,
+                        Notes = TruncateNote(notes),
+                        RequestedBy = "system-background" // User is not available in background task
+                    };
+        
+                    dbContext.BackupHistories.Add(record);
+                    await dbContext.SaveChangesAsync();
+                    return record;
+                }
+        
+        private async Task<BackupHistory> CreateBackupHistoryAsync(string actionType, string status, string? target, string? notes)
         {
             var nextId = (_context.BackupHistories.Max(b => (int?)b.Id) ?? 0) + 1;
             var record = new BackupHistory
@@ -286,6 +405,23 @@ private async Task<BackupHistory> CreateBackupHistoryAsync(string actionType, st
             _context.BackupHistories.Add(record);
             await _context.SaveChangesAsync();
             return record;
+        }
+
+        // Best-effort save without breaking the restore flow if the DB was rolled back (e.g., after restore)
+        private static async Task SaveChangesSafeAsync(ApplicationDbContext dbContext, ILogger logger, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                logger.LogWarning(ex, "Concurrency conflict when saving restore history (likely because DB was rolled back).");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to persist restore history.");
+            }
         }
 
         private static string TruncateNote(string? text, int maxLen = 490)
@@ -1033,3 +1169,6 @@ WHERE rn BETWEEN :startRow AND :endRow";
         }
     }
 }
+
+
+

@@ -4,6 +4,22 @@
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
 }
 
+@section Styles {
+    <style>
+        #restore-progress-toast {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            width: 360px;
+            z-index: 1080;
+            display: none;
+        }
+        #restore-progress-toast .progress {
+            height: 10px;
+        }
+    </style>
+}
+
 <div class="row mb-4">
     <div class="col-12">
         <div class="page-title-box d-flex align-items-center justify-content-between">
@@ -18,6 +34,139 @@
         </div>
     </div>
 </div>
+
+<div id="restore-progress-toast" class="card shadow-lg">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center">
+            <span id="restore-status-pill" class="badge badge-secondary">Dang cho</span>
+            <span class="ml-2 font-weight-bold">Phuc hoi CSDL</span>
+        </div>
+        <button type="button" class="close" aria-label="Close" id="restore-close-btn">
+            <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="d-flex align-items-center mb-2">
+            <div class="spinner-border spinner-border-sm text-primary mr-2" role="status" id="restore-spinner"></div>
+            <small class="text-muted mb-0" id="restore-message">Dang khoi dong...</small>
+        </div>
+        <div class="progress">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" id="restore-progress-bar" role="progressbar" style="width: 10%;" aria-valuenow="10" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+    </div>
+    <div class="card-footer d-flex align-items-center">
+        <small class="text-muted mr-auto">Gi? trang nay mo de nhan cap nhat truc tiep.</small>
+        <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="restore-dismiss-btn">Dong</button>
+    </div>
+    <div class="position-absolute w-100" style="left:0; bottom:-8px; height:8px;">
+        <div class="w-100 h-100 bg-primary rounded-bottom" style="opacity:0.15;"></div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/%40microsoft/signalr@8.0.6/dist/browser/signalr.min.js" crossorigin="anonymous"></script>
+    <script>
+        (function () {
+            const toast = document.getElementById('restore-progress-toast');
+            if (!toast || typeof signalR === 'undefined') return;
+
+            const statusPill = document.getElementById('restore-status-pill');
+            const spinner = document.getElementById('restore-spinner');
+            const messageEl = document.getElementById('restore-message');
+            const progressBar = document.getElementById('restore-progress-bar');
+            const closeBtn = document.getElementById('restore-close-btn');
+            const dismissBtn = document.getElementById('restore-dismiss-btn');
+            const restoreForm = document.getElementById('restoreForm');
+
+            const showToast = () => { toast.style.display = 'block'; };
+            const hideToast = () => { toast.style.display = 'none'; };
+            const setBadge = (cls, text) => {
+                statusPill.className = 'badge ' + cls;
+                statusPill.textContent = text;
+            };
+            const setProgress = (percent) => {
+                const pct = Math.max(0, Math.min(100, parseInt(percent || 0, 10)));
+                progressBar.style.width = pct + '%';
+                progressBar.setAttribute('aria-valuenow', pct.toString());
+            };
+            const clearBarState = () => {
+                progressBar.classList.remove('bg-info', 'bg-warning', 'bg-danger', 'bg-success');
+            };
+            const stopSpinner = (isSuccess) => {
+                spinner.classList.add('d-none');
+                progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+                clearBarState();
+                progressBar.classList.add(isSuccess ? 'bg-success' : 'bg-danger');
+            };
+
+            closeBtn?.addEventListener('click', hideToast);
+            dismissBtn?.addEventListener('click', hideToast);
+
+            if (restoreForm) {
+                restoreForm.addEventListener('submit', () => {
+                    showToast();
+                    setBadge('badge-info', 'Dang gui yeu cau');
+                    messageEl.textContent = 'Dang dua yeu cau phuc hoi vao hang doi...';
+                    spinner.classList.remove('d-none');
+                    progressBar.classList.add('progress-bar-animated', 'progress-bar-striped', 'bg-info');
+                    setProgress(10);
+                    dismissBtn.classList.add('d-none');
+                });
+            }
+
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl('/restoreHub')
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on('ReceiveRestoreProgress', (status, message, percent) => {
+                showToast();
+                if (message) messageEl.textContent = message;
+                setProgress(percent);
+                clearBarState();
+
+                switch ((status || '').toLowerCase()) {
+                    case 'started':
+                        setBadge('badge-info', 'Dang phuc hoi');
+                        spinner.classList.remove('d-none');
+                        progressBar.classList.add('progress-bar-animated', 'progress-bar-striped');
+                        progressBar.classList.remove('bg-success', 'bg-danger');
+                        break;
+                    case 'running':
+                        setBadge('badge-info', 'Dang phuc hoi');
+                        spinner.classList.remove('d-none');
+                        progressBar.classList.add('progress-bar-animated', 'progress-bar-striped');
+                        progressBar.classList.add('bg-info');
+                        break;
+                    case 'clearing_pools':
+                        setBadge('badge-info', 'Dang don ket noi');
+                        progressBar.classList.add('bg-info');
+                        break;
+                    case 'success':
+                        setBadge('badge-success', 'Hoan tat');
+                        stopSpinner(true);
+                        dismissBtn.classList.remove('d-none');
+                        setTimeout(() => window.location.reload(), 2500);
+                        break;
+                    case 'error':
+                        setBadge('badge-danger', 'That bai');
+                        stopSpinner(false);
+                        dismissBtn.classList.remove('d-none');
+                        break;
+                    default:
+                        setBadge('badge-warning', 'Dang xu ly');
+                        spinner.classList.remove('d-none');
+                        progressBar.classList.add('progress-bar-animated', 'progress-bar-striped', 'bg-warning');
+                        break;
+                }
+            });
+
+            connection.start().catch(err => {
+                console.error('SignalR connection error', err);
+            });
+        })();
+    </script>
+}
 
 @if (TempData["Success"] != null)
 {
@@ -69,26 +218,32 @@
                         </div>
                     </div>
                 </form>
+                
                 <div class="border-top pt-3">
-                    <h6 class="mb-3">Phục hồi</h6>
-                    <form asp-action="RestoreBackup" asp-controller="Admin" method="post">
+                    <h6 class="mb-3">Ph?c h?i</h6>
+                    <form asp-action="RestoreBackup" asp-controller="Admin" method="post" id="restoreForm">
                         @Html.AntiForgeryToken()
-                        <div class="form-row align-items-end">
-                            <div class="form-group col-md-8">
-                                <label for="backupPath">Chọn bản sao lưu để phục hồi</label>
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label for="backupPath">Ch?n b?n sao l?u ?? ph?c h?i</label>
                                 <select id="backupPath" name="backupPath" class="form-control" asp-items="Model.BackupFiles" required>
-                                    <option value="" disabled selected>-- Chọn một bản sao lưu cụ thể --</option>
+                                    <option value="" disabled selected>-- Ch?n m?t b?n sao l?u c? th? --</option>
                                 </select>
-                                <small class="form-text text-muted">Ứng dụng sẽ phục hồi đến thời điểm kết thúc bản backup (point-in-time an toàn).</small>
+                                <small class="form-text text-muted">M?c ??nh s? ph?c h?i t?i th?i ?i?m k?t th?c b?n backup.</small>
                             </div>
                             <div class="form-group col-md-4">
+                                <label for="untilTime">Kh?i ph?c t?i th?i ?i?m (tu? ch?n)</label>
+                                <input type="datetime-local" id="untilTime" name="untilTime" class="form-control" />
+                                <small class="form-text text-muted">?? tr?ng n?u mu?n ?p d?ng to?n b? redo sau backup.</small>
+                            </div>
+                            <div class="form-group col-md-2 d-flex align-items-end">
                                 <button type="submit" class="btn btn-danger btn-block">
-                                    <i class="fa fa-undo mr-2"></i> Phục hồi
+                                    <i class="fa fa-undo mr-2"></i> Ph?c h?i
                                 </button>
                             </div>
                         </div>
                     </form>
-                    <p class="text-muted small mb-0">Thao tác sẽ thực thi RMAN RESTORE/RECOVER trên máy chủ CSDL.</p>
+                    <p class="text-muted small mb-0">Thao t?c s? th?c thi RMAN RESTORE/RECOVER tr?n m?y ch? CSDL.</p>
                 </div>
             </div>
         </div>
