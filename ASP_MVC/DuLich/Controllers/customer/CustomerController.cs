@@ -1,4 +1,4 @@
-﻿using DuLich.Models;
+﻿﻿using DuLich.Models;
 using DuLich.Services;
 using DuLich.Models.Data;
 using Microsoft.AspNetCore.Hosting;
@@ -21,10 +21,9 @@ using iText.IO.Font.Constants;
 using iText.Kernel.Colors;
 using iText.Layout.Borders;
 using iText.IO.Font;
-using iText.Kernel.Pdf.Canvas.Parser;
-using iText.Kernel.Pdf.Canvas.Parser.Listener;
-using System.Text.RegularExpressions;
-using System.Globalization;
+using System.Data;
+using System.Data.Common;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace DuLich.Controllers
 {
@@ -34,13 +33,17 @@ namespace DuLich.Controllers
         private readonly RSAService _rsaService;
         private readonly ApplicationDbContext _dbContext;
         private readonly IWebHostEnvironment _env;
+        private readonly IMemoryCache _cache;
+        private readonly EmailService _emailService;
 
-        public CustomerController(OracleAuthService authService, ApplicationDbContext context, RSAService rsaService, IWebHostEnvironment env) : base(context)
+        public CustomerController(OracleAuthService authService, ApplicationDbContext context, RSAService rsaService, IWebHostEnvironment env, IMemoryCache cache, EmailService emailService) : base(context)
         {
             _authService = authService;
             _rsaService = rsaService;
             _dbContext = context;
             _env = env;
+            _cache = cache;
+            _emailService = emailService;
         }
 
         [HttpGet]
@@ -199,7 +202,8 @@ namespace DuLich.Controllers
             var ratingsByTourId = await _context.DanhGiaTours
                 .Where(d => tourIds.Contains(d.MaTour))
                 .GroupBy(d => d.MaTour)
-                .Select(g => new {
+                .Select(g => new
+                {
                     MaTour = g.Key,
                     AverageRating = g.Average(d => (decimal?)d.SoSao) ?? 0
                 })
@@ -594,16 +598,8 @@ namespace DuLich.Controllers
                     };
 
                     // Chuy?n Object sang chu?i JSON
-                    string payloadStr = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
+                    string payloadJson = System.Text.Json.JsonSerializer.Serialize(payloadObj);
 
-<<<<<<< HEAD
-                    // 4. KÝ SỐ
-                    string signature = _rsaService.Sign(payloadStr);
-
-                    // 5. CẬP NHẬT VÀO DATABASE
-                    hoaDon.Payload = payloadStr; // Lưu chuỗi Payload mới (dạng key=value)
-                    hoaDon.ChuKySo = signature;  // Lưu chữ ký
-=======
                     // 4. Kï¿½ S?
                     // Kï¿½ chu?i JSON v?a t?o
                     string signature = _rsaService.Sign(payloadJson);
@@ -611,7 +607,6 @@ namespace DuLich.Controllers
                     // 5. C?P NH?T L?I Vï¿½O DATABASE
                     hoaDon.Payload = payloadJson; // Luu JSON g?c vï¿½o c?t Payload
                     hoaDon.ChuKySo = signature;   // Luu ch? kï¿½
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
 
                     _context.HoaDons.Update(hoaDon);
                     await _context.SaveChangesAsync();
@@ -653,6 +648,108 @@ namespace DuLich.Controllers
             };
 
             return View(model);
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "ROLE_CUSTOMER,ROLE_ADMIN,ROLE_STAFF")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateProfile(CustomerProfileViewModel model)
+        {
+            // 1. Validate dữ liệu đầu vào
+            if (!ModelState.IsValid)
+            {
+                var firstError = ModelState.Values.SelectMany(v => v.Errors).FirstOrDefault()?.ErrorMessage ?? "Vui lòng kiểm tra dữ liệu.";
+                return Json(new { success = false, message = firstError });
+            }
+
+            try
+            {
+                var username = User.Identity?.Name;
+                if (string.IsNullOrEmpty(username)) return Json(new { success = false, message = "Phiên đăng nhập hết hạn." });
+
+                // 2. Mở kết nối Database (Dùng kết nối cấp thấp ADO.NET)
+                var conn = _dbContext.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open) await conn.OpenAsync();
+
+                // 3. Tìm MaKhachHang dựa trên Username
+                // (Dùng SQL thuần để tránh mọi tác động của EF Core)
+                int maKhachHang = 0;
+                string oldEmail = "";
+
+                using (var cmdGet = conn.CreateCommand())
+                {
+                    cmdGet.CommandText = "SELECT MAKHACHHANG, EMAIL FROM TADMIN.KHACHHANG WHERE UPPER(ORACLE_USERNAME) = UPPER(:u)";
+
+                    var pUser = cmdGet.CreateParameter();
+                    pUser.ParameterName = "u";
+                    pUser.Value = username;
+                    cmdGet.Parameters.Add(pUser);
+
+                    using (var reader = await cmdGet.ExecuteReaderAsync())
+                    {
+                        if (await reader.ReadAsync())
+                        {
+                            maKhachHang = Convert.ToInt32(reader["MAKHACHHANG"]);
+                            oldEmail = reader["EMAIL"]?.ToString() ?? "";
+                        }
+                        else
+                        {
+                            return Json(new { success = false, message = "Không tìm thấy thông tin người dùng." });
+                        }
+                    }
+                }
+
+                // 4. Kiểm tra trùng Email (nếu có thay đổi)
+                var newEmail = model.Email?.Trim();
+                if (!string.Equals(oldEmail, newEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    using (var cmdCheck = conn.CreateCommand())
+                    {
+                        cmdCheck.CommandText = "SELECT COUNT(*) FROM TADMIN.KHACHHANG WHERE EMAIL = :em AND MAKHACHHANG <> :id";
+
+                        var pEmail = cmdCheck.CreateParameter(); pEmail.ParameterName = "em"; pEmail.Value = newEmail; cmdCheck.Parameters.Add(pEmail);
+                        var pId = cmdCheck.CreateParameter(); pId.ParameterName = "id"; pId.Value = maKhachHang; cmdCheck.Parameters.Add(pId);
+
+                        var count = Convert.ToInt32(await cmdCheck.ExecuteScalarAsync());
+                        if (count > 0) return Json(new { success = false, message = "Email này đã được sử dụng." });
+                    }
+                }
+
+                // 5. THỰC HIỆN UPDATE (QUAN TRỌNG NHẤT)
+                // Sử dụng SQL thuần túy, tham số hóa đầy đủ
+                using (var cmdUpdate = conn.CreateCommand())
+                {
+                    cmdUpdate.CommandText = @"
+                UPDATE TADMIN.KHACHHANG 
+                SET HOTEN = :ht, 
+                    EMAIL = :em, 
+                    SODIENTHOAI = :sdt, 
+                    DIACHI = :dc 
+                WHERE MAKHACHHANG = :mkh";
+
+                    // Tạo tham số an toàn
+                    var pHoTen = cmdUpdate.CreateParameter(); pHoTen.ParameterName = "ht"; pHoTen.Value = (object?)model.HoTen ?? DBNull.Value; cmdUpdate.Parameters.Add(pHoTen);
+
+                    var pMail = cmdUpdate.CreateParameter(); pMail.ParameterName = "em"; pMail.Value = (object?)newEmail ?? DBNull.Value; cmdUpdate.Parameters.Add(pMail);
+
+                    var pPhone = cmdUpdate.CreateParameter(); pPhone.ParameterName = "sdt"; pPhone.Value = (object?)model.SoDienThoai ?? DBNull.Value; cmdUpdate.Parameters.Add(pPhone);
+
+                    var pAddr = cmdUpdate.CreateParameter(); pAddr.ParameterName = "dc"; pAddr.Value = (object?)model.DiaChi ?? DBNull.Value; cmdUpdate.Parameters.Add(pAddr);
+
+                    var pId = cmdUpdate.CreateParameter(); pId.ParameterName = "mkh"; pId.Value = maKhachHang; cmdUpdate.Parameters.Add(pId);
+
+                    // Thực thi
+                    await cmdUpdate.ExecuteNonQueryAsync();
+                }
+
+                return Json(new { success = true, message = "Cập nhật thông tin thành công!" });
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi chi tiết
+                Console.WriteLine($"Update Error: {ex.Message}");
+                return Json(new { success = false, message = "Lỗi cập nhật: " + ex.Message });
+            }
         }
 
         [HttpGet]
@@ -991,7 +1088,6 @@ namespace DuLich.Controllers
                 using (var pdfDoc = new PdfDocument(writer))
                 using (var document = new Document(pdfDoc, iText.Kernel.Geom.PageSize.A4))
                 {
-<<<<<<< HEAD
                     // 1. CẤU HÌNH FONT TIẾNG VIỆT
                     // Đường dẫn ưu tiên: wwwroot/fonts/Arial.ttf
                     string fontFile = "Arial.ttf";
@@ -1006,12 +1102,6 @@ namespace DuLich.Controllers
                             fontPath = systemFontPath;
                         }
                     }
-=======
-                    // --- Sá»¬A Lá»–I á»ž ÄÃ‚Y ---
-                    // Thay vÃ¬ dÃ¹ng 'Path.Combine', pháº£i dÃ¹ng 'System.IO.Path.Combine'
-                    string fontPath = System.IO.Path.Combine(_env.WebRootPath, "fonts", "Arial.ttf");
-                    // ---------------------
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
 
                     PdfFont font;
                     PdfFont fontBold;
@@ -1035,13 +1125,8 @@ namespace DuLich.Controllers
 
                     document.SetMargins(30, 30, 30, 30);
 
-<<<<<<< HEAD
                     // 2. TIÊU ĐỀ
                     document.Add(new Paragraph("HÓA ĐƠN / INVOICE")
-=======
-                    // 1. TIÃŠU Äá»€
-                    document.Add(new Paragraph("HÃ“A ÄÆ N / INVOICE")
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
                         .SetFont(fontBold)
                         .SetFontSize(20)
                         .SetTextAlignment(TextAlignment.CENTER)
@@ -1049,17 +1134,12 @@ namespace DuLich.Controllers
 
                     document.Add(new LineSeparator(new iText.Kernel.Pdf.Canvas.Draw.SolidLine(1f)).SetMarginBottom(15));
 
-<<<<<<< HEAD
                     // 3. THÔNG TIN CHUNG
-=======
-                    // 2. THÃ”NG TIN CHUNG
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
                     Table infoTable = new Table(UnitValue.CreatePercentArray(new float[] { 1, 1 })).UseAllAvailableWidth();
 
-                    infoTable.AddCell(CreateNoBorderCell($"MÃ£ Ä‘Æ¡n hÃ ng / Order ID: {hoaDon.MaHoaDon}", fontBold));
-                    infoTable.AddCell(CreateNoBorderCell($"NgÃ y / Date: {(hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss") ?? "")}", font));
+                    infoTable.AddCell(CreateNoBorderCell($"Mã đơn hàng / Order ID: {hoaDon.MaHoaDon}", fontBold));
+                    infoTable.AddCell(CreateNoBorderCell($"Ngày / Date: {(hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss") ?? "")}", font));
 
-<<<<<<< HEAD
                     // Lưu ý: Các biến như customer?.HoTen cần đảm bảo không null
                     infoTable.AddCell(CreateNoBorderCell($"Khách hàng / Customer: {(customer?.HoTen ?? "Khách lẻ")}", fontBold));
 
@@ -1075,44 +1155,27 @@ namespace DuLich.Controllers
                     document.Add(infoTable);
 
                     document.Add(new Paragraph($"Địa chỉ / Address: {(customer?.DiaChi ?? "---")} - SĐT: {(customer?.SoDienThoai ?? "---")}")
-=======
-                    infoTable.AddCell(CreateNoBorderCell($"KhÃ¡ch hÃ ng / Customer: {(customer?.HoTen ?? "Guest")}", fontBold));
-                    string paymentMethod = hoaDon.TrangThai?.Contains("Thanh toÃ¡n") == true ? "Chuyá»ƒn khoáº£n / Online" : "ChÆ°a thanh toÃ¡n";
-                    infoTable.AddCell(CreateNoBorderCell($"Thanh toÃ¡n / Payment: {paymentMethod}", font));
-
-                    document.Add(infoTable);
-
-                    document.Add(new Paragraph($"Äá»‹a chá»‰ / Address: {(customer?.DiaChi ?? "")} - SÄT: {(customer?.SoDienThoai ?? "")}")
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
                         .SetFont(font)
                         .SetFontSize(10)
                         .SetMarginTop(5)
                         .SetMarginBottom(15));
 
-<<<<<<< HEAD
                     // 4. BẢNG SẢN PHẨM
                     Table productTable = new Table(UnitValue.CreatePercentArray(new float[] { 4, 1.5f, 2, 2.5f })).UseAllAvailableWidth();
 
                     Color headerBg = new DeviceGray(0.9f);
                     // Dùng fontBold cho header
                     productTable.AddHeaderCell(CreateHeaderCell("Sản phẩm / Product", fontBold, headerBg));
-=======
-                    // 3. Báº¢NG Sáº¢N PHáº¨M
-                    Table productTable = new Table(UnitValue.CreatePercentArray(new float[] { 4, 1.5f, 2, 2.5f })).UseAllAvailableWidth();
-
-                    Color headerBg = new DeviceGray(0.9f);
-                    productTable.AddHeaderCell(CreateHeaderCell("Sáº£n pháº©m / Product", fontBold, headerBg));
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
                     productTable.AddHeaderCell(CreateHeaderCell("SL / Qty", fontBold, headerBg).SetTextAlignment(TextAlignment.CENTER));
-                    productTable.AddHeaderCell(CreateHeaderCell("ÄÆ¡n giÃ¡ / Price", fontBold, headerBg).SetTextAlignment(TextAlignment.RIGHT));
-                    productTable.AddHeaderCell(CreateHeaderCell("ThÃ nh tiá»n / Subtotal", fontBold, headerBg).SetTextAlignment(TextAlignment.RIGHT));
+                    productTable.AddHeaderCell(CreateHeaderCell("Đơn giá / Price", fontBold, headerBg).SetTextAlignment(TextAlignment.RIGHT));
+                    productTable.AddHeaderCell(CreateHeaderCell("Thành tiền / Subtotal", fontBold, headerBg).SetTextAlignment(TextAlignment.RIGHT));
 
                     if ((booking?.SoNguoiLon ?? 0) > 0)
                     {
                         decimal price = tour?.GiaNguoiLon ?? 0;
                         decimal subtotal = (booking?.SoNguoiLon ?? 0) * price;
 
-                        productTable.AddCell(CreateCell($"VÃ© ngÆ°á»i lá»›n - {tour?.TieuDe}", font));
+                        productTable.AddCell(CreateCell($"Vé người lớn - {tour?.TieuDe}", font));
                         productTable.AddCell(CreateCell($"{booking?.SoNguoiLon}", font).SetTextAlignment(TextAlignment.CENTER));
                         productTable.AddCell(CreateCell($"{price:N0}", font).SetTextAlignment(TextAlignment.RIGHT));
                         productTable.AddCell(CreateCell($"{subtotal:N0}", font).SetTextAlignment(TextAlignment.RIGHT));
@@ -1123,7 +1186,7 @@ namespace DuLich.Controllers
                         decimal price = tour?.GiaTreEm ?? 0;
                         decimal subtotal = (booking?.SoTreEm ?? 0) * price;
 
-                        productTable.AddCell(CreateCell($"VÃ© tráº» em - {tour?.TieuDe}", font));
+                        productTable.AddCell(CreateCell($"Vé trẻ em - {tour?.TieuDe}", font));
                         productTable.AddCell(CreateCell($"{booking?.SoTreEm}", font).SetTextAlignment(TextAlignment.CENTER));
                         productTable.AddCell(CreateCell($"{price:N0}", font).SetTextAlignment(TextAlignment.RIGHT));
                         productTable.AddCell(CreateCell($"{subtotal:N0}", font).SetTextAlignment(TextAlignment.RIGHT));
@@ -1131,7 +1194,7 @@ namespace DuLich.Controllers
 
                     // Hàng Tổng cộng
                     Cell totalLabelCell = new Cell(1, 3)
-                        .Add(new Paragraph("Tá»•ng cá»™ng / Total"))
+                        .Add(new Paragraph("Tổng cộng / Total"))
                         .SetFont(fontBold)
                         .SetTextAlignment(TextAlignment.RIGHT)
                         .SetBorder(Border.NO_BORDER);
@@ -1139,7 +1202,7 @@ namespace DuLich.Controllers
                     productTable.AddCell(totalLabelCell.SetBorderTop(new SolidBorder(1)));
 
                     Cell totalValueCell = new Cell()
-                        .Add(new Paragraph($"{(hoaDon.SoTien ?? 0):N0} VNÄ"))
+                        .Add(new Paragraph($"{(hoaDon.SoTien ?? 0):N0} VNĐ"))
                         .SetFont(fontBold)
                         .SetFontSize(12)
                         .SetTextAlignment(TextAlignment.RIGHT)
@@ -1155,7 +1218,7 @@ namespace DuLich.Controllers
                     Table footerTable = new Table(UnitValue.CreatePercentArray(new float[] { 1 })).UseAllAvailableWidth();
 
                     Paragraph signerPara = new Paragraph()
-                        .Add(new Text("NgÆ°á»i kÃ½ / Signed by:\n").SetFont(fontBold))
+                        .Add(new Text("Người ký / Signed by:\n").SetFont(fontBold))
                         .Add(new Text(signerName.ToUpper() + "\n").SetFont(fontBold))
                         .Add(new Text(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss K")).SetFont(font));
 
@@ -1177,7 +1240,7 @@ namespace DuLich.Controllers
             }
         }
 
-        // --- CÃC HÃ€M Bá»” TRá»¢ (Helper Methods) ---
+        // --- CÁC HÀM BỔ TRỢ (Helper Methods) ---
 
         private Cell CreateNoBorderCell(string text, PdfFont font)
         {
@@ -1234,87 +1297,20 @@ namespace DuLich.Controllers
             try
             {
                 if (invoiceFile == null || invoiceFile.Length == 0)
-                    return Json(new { success = false, message = "Vui lòng chọn file PDF." });
-
-                // 1. Đọc text từ PDF
-                string pdfText = string.Empty;
-                try
                 {
-<<<<<<< HEAD
-                    using (var reader = new PdfReader(invoiceFile.OpenReadStream()))
-                    using (var pdfDoc = new PdfDocument(reader))
-                    {
-                        var strategy = new LocationTextExtractionStrategy();
-                        pdfText = PdfTextExtractor.GetTextFromPage(pdfDoc.GetPage(1), strategy);
-                    }
-                }
-                catch { return Json(new { success = false, message = "Không đọc được nội dung PDF." }); }
-
-                // 2. Trích xuất thông tin (Regex)
-                var matchId = Regex.Match(pdfText, @"Order ID:\s*(\d+)");
-                // Regex ngày nới lỏng hơn một chút để bắt dính ký tự
-                var matchDate = Regex.Match(pdfText, @"Date:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})");
-                var matchTotal = Regex.Match(pdfText, @"Total\s*([\d,.]+)\s*VNĐ");
-
-                if (!matchId.Success) return Json(new { success = false, message = "Không tìm thấy Mã hóa đơn trên PDF." });
-
-                string pdfMaHoaDon = matchId.Groups[1].Value;
-                string pdfNgayXuat = matchDate.Success ? matchDate.Groups[1].Value : "";
-                string pdfSoTienRaw = matchTotal.Success ? matchTotal.Groups[1].Value.Replace(",", "").Replace(".", "") : "0";
-
-                // Format tiền về dạng chuẩn "35000"
-                if (decimal.TryParse(pdfSoTienRaw, out decimal parsedMoney))
-                {
-                    pdfSoTienRaw = parsedMoney.ToString("0.##", CultureInfo.InvariantCulture);
-                }
-
-                // 3. Tái tạo Payload
-                string reconstructedPayload = $"MaHoaDon={pdfMaHoaDon}|SoTien={pdfSoTienRaw}|NgayXuat={pdfNgayXuat}";
-=======
                     return Json(new { success = false, message = "Vui long chon file PDF." });
                 }
 
                 var fileName = invoiceFile.FileName;
                 var match = System.Text.RegularExpressions.Regex.Match(fileName, @"(\d+)");
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
 
-                // 4. Lấy DB
-                int id = int.Parse(pdfMaHoaDon);
-                var hoaDonDB = await _dbContext.HoaDons.AsNoTracking().FirstOrDefaultAsync(h => h.MaHoaDon == id);
-
-                if (hoaDonDB == null)
-                    return Json(new { success = false, message = "Hóa đơn không tồn tại trong hệ thống." });
-
-                // Chuẩn bị dữ liệu trả về cho UI (để không bị undefined)
-                var resultData = new
+                if (!match.Success)
                 {
-<<<<<<< HEAD
-                    maHoaDon = pdfMaHoaDon,
-                    ngayXuat = pdfNgayXuat, // Lấy từ PDF để hiện thị
-                    trangThai = hoaDonDB.TrangThai ?? "Chưa xác định"
-                };
-
-                if (string.IsNullOrEmpty(hoaDonDB.ChuKySo))
-                {
-                    return Json(new
-                    {
-                        success = true,
-                        isValid = false,
-                        maHoaDon = resultData.maHoaDon,
-                        ngayXuat = resultData.ngayXuat,
-                        trangThai = resultData.trangThai,
-                        message = "Hóa đơn gốc chưa được ký số."
-                    });
-=======
                     return Json(new { success = false, message = "Ten file khong hop le. Phai chua ma hoa don (VD: HoaDon_123.pdf)" });
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
                 }
 
-                // 5. Xác thực
-                bool isValid = _rsaService.Verify(reconstructedPayload, hoaDonDB.ChuKySo);
+                int maHoaDon = int.Parse(match.Value);
 
-<<<<<<< HEAD
-=======
                 var hoaDon = await _dbContext.HoaDons
                     .AsNoTracking()
                     .FirstOrDefaultAsync(h => h.MaHoaDon == maHoaDon);
@@ -1331,52 +1327,30 @@ namespace DuLich.Controllers
 
                 bool isValid = _rsaService.Verify(hoaDon.Payload, hoaDon.ChuKySo);
 
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
                 if (isValid)
                 {
                     return Json(new
                     {
                         success = true,
                         isValid = true,
-<<<<<<< HEAD
-                        maHoaDon = resultData.maHoaDon,
-                        ngayXuat = resultData.ngayXuat,
-                        trangThai = resultData.trangThai,
-                        message = "Hợp lệ! File PDF chuẩn xác."
-=======
                         maHoaDon = hoaDon.MaHoaDon,
                         ngayXuat = hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm"),
                         trangThai = hoaDon.TrangThai,
                         message = "Hoa don hop le. Chu ky so khop voi du lieu goc."
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
                     });
                 }
 
                 return Json(new
                 {
-<<<<<<< HEAD
-                    // Trả về cả payload tái tạo để bạn Debug xem sai ở đâu
-                    return Json(new
-                    {
-                        success = true,
-                        isValid = false,
-                        maHoaDon = resultData.maHoaDon,
-                        ngayXuat = resultData.ngayXuat,
-                        trangThai = resultData.trangThai,
-                        message = $"KHÔNG HỢP LỆ! Dữ liệu PDF không khớp chữ ký.\n(Payload từ PDF: {reconstructedPayload})"
-                    });
-                }
-=======
                     success = true,
                     isValid = false,
                     maHoaDon = hoaDon.MaHoaDon,
                     message = "Canh bao: Chu ky so khong khop! Du lieu co the da bi sua doi."
                 });
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Lỗi: " + ex.Message });
+                return Json(new { success = false, message = "Loi he thong: " + ex.Message });
             }
         }
 
@@ -1392,83 +1366,38 @@ namespace DuLich.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
         {
-            var isAjax = IsAjaxRequest();
+            // Luôn coi là Ajax request vì form ở Profile được xử lý bằng JS fetch
+            bool isAjax = true;
 
             if (!ModelState.IsValid)
             {
-                var firstError = "Vui lòng kiểm tra lại thông tin.";
-                foreach (var state in ModelState.Values)
-                {
-                    if (state.Errors.Count > 0)
-                    {
-                        firstError = state.Errors[0].ErrorMessage ?? firstError;
-                        break;
-                    }
-                }
-
-                if (isAjax)
-                {
-                    return Json(new { success = false, message = firstError });
-                }
-
-                // For non-AJAX, the validation summary will show the errors.
-                return View(model);
+                var firstError = ModelState.Values.SelectMany(v => v.Errors).FirstOrDefault()?.ErrorMessage ?? "Vui lòng kiểm tra lại thông tin.";
+                return Json(new { success = false, message = firstError });
             }
 
             var username = User.Identity?.Name;
             if (string.IsNullOrEmpty(username))
             {
-                if (isAjax)
-                {
-                    return Json(new { success = false, message = "Phiên hết hạn, vui lòng đăng nhập lại." });
-                }
-                return Unauthorized();
+                return Json(new { success = false, message = "Phiên đăng nhập hết hạn, vui lòng đăng nhập lại." });
             }
 
-            // 1. Verify the old password is correct
+            // 1. Xác thực mật khẩu cũ
             var (success, role) = await _authService.ValidateLoginAsync(username, model.OldPassword);
             if (!success)
             {
-                var message = "Mật khẩu hiện tại không đúng.";
-                ModelState.AddModelError(string.Empty, message);
-
-                if (isAjax)
-                {
-                    return Json(new { success = false, message = message });
-                }
-                return View(model);
+                return Json(new { success = false, message = "Mật khẩu hiện tại không đúng." });
             }
 
-            // 2. Attempt to change the password in the database
+            // 2. Thực hiện đổi mật khẩu
             var (changeSuccess, changeMessage) = await _authService.ChangePasswordAsync(username, model.NewPassword);
-            
-            // Add logging to diagnose the issue
-            Console.WriteLine($"ChangePasswordAsync returned: success={changeSuccess}, message='{changeMessage}'");
 
             if (changeSuccess)
             {
-                var successMessage = "Mật khẩu đã được thay đổi thành công.";
-                if (isAjax)
-                {
-                    return Json(new { success = true, message = successMessage });
-                }
-
-                TempData["SuccessMessage"] = successMessage;
-                return RedirectToAction("Profile");
+                return Json(new { success = true, message = "Mật khẩu đã được thay đổi thành công." });
             }
 
-            // 3. Handle failure
-            var errorMessage = $"Lỗi từ hệ thống: '{(string.IsNullOrWhiteSpace(changeMessage) ? "Không có thông tin lỗi cụ thể." : changeMessage)}'. Vui lòng thử lại hoặc liên hệ quản trị viên.";
-
-            ModelState.AddModelError(string.Empty, errorMessage);
-            ViewBag.ErrorMessage = errorMessage; // Also add to ViewBag for good measure.
-
-            if (isAjax)
-            {
-                return Json(new { success = false, message = errorMessage });
-            }
-
-            return View(model);
+            // 3. Xử lý lỗi từ Oracle
+            return Json(new { success = false, message = changeMessage ?? "Lỗi hệ thống khi đổi mật khẩu." });
         }
 
         private bool IsAjaxRequest()
@@ -1484,9 +1413,131 @@ namespace DuLich.Controllers
             return string.Equals(xhr, "XMLHttpRequest", StringComparison.OrdinalIgnoreCase)
                 || (!string.IsNullOrEmpty(accept) && accept.Contains("application/json", StringComparison.OrdinalIgnoreCase));
         }
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult ForgotPassword()
+        {
+            return View();
+        }
+
+        [HttpPost]
+        [AllowAnonymous]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
+        {
+            if (!ModelState.IsValid) return View(model);
+
+            // Tìm user trong bảng KhachHang (hoặc NhanVien nếu cần)
+            var user = await _dbContext.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == model.Username.ToUpper());
+
+            if (user == null || string.IsNullOrEmpty(user.Email))
+            {
+                // Bảo mật: Không thông báo chi tiết user không tồn tại
+                ModelState.AddModelError("", "Không tìm thấy thông tin tài khoản hoặc tài khoản chưa có email.");
+                return View(model);
+            }
+
+            // Tạo OTP
+            var otp = new Random().Next(100000, 999999).ToString();
+            var cacheKey = $"OTP_WEB_{model.Username.ToUpper()}";
+
+            // Lưu OTP vào Cache 3 phút
+            _cache.Set(cacheKey, otp, TimeSpan.FromMinutes(3));
+
+            // Gửi Email
+            try
+            {
+                await _emailService.SendEmailAsync(user.Email, "Mã xác thực Quên mật khẩu",
+                    $"<h3>Mã xác thực của bạn là: <b style='color:red'>{otp}</b></h3><p>Có hiệu lực trong 3 phút.</p>");
+            }
+            catch (Exception ex)
+            {
+                ModelState.AddModelError("", "Lỗi gửi email: " + ex.Message);
+                return View(model);
+            }
+
+            // Chuyển sang bước nhập OTP
+            return RedirectToAction("VerifyOtp", new { username = model.Username });
+        }
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult VerifyOtp(string username)
+        {
+            if (string.IsNullOrEmpty(username)) return RedirectToAction("Login");
+            return View(new VerifyOtpViewModel { Username = username });
+        }
+
+        [HttpPost]
+        [AllowAnonymous]
+        [ValidateAntiForgeryToken]
+        public IActionResult VerifyOtp(VerifyOtpViewModel model)
+        {
+            if (!ModelState.IsValid) return View(model);
+
+            var cacheKey = $"OTP_WEB_{model.Username.ToUpper()}";
+            if (_cache.TryGetValue(cacheKey, out string storedOtp))
+            {
+                if (storedOtp == model.Otp)
+                {
+                    // OTP đúng -> Cho phép đổi mật khẩu
+                    // Dùng TempData để đánh dấu là đã verify thành công (ngăn truy cập trực tiếp bước 3)
+                    TempData["VerifiedUser"] = model.Username;
+                    TempData["CurrentOtp"] = model.Otp; // Truyền OTP sang bước sau để check lại lần cuối nếu cần
+                    return RedirectToAction("ResetPassword");
+                }
+            }
+
+            ModelState.AddModelError("", "Mã xác thực không đúng hoặc đã hết hạn.");
+            return View(model);
+        }
+
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult ResetPassword()
+        {
+            // Kiểm tra xem đã qua bước verify chưa
+            if (TempData["VerifiedUser"] == null)
+            {
+                return RedirectToAction("ForgotPassword");
+            }
+
+            var username = TempData["VerifiedUser"].ToString();
+            var otp = TempData["CurrentOtp"]?.ToString(); // Giữ lại OTP để submit
+
+            // Cần giữ lại TempData cho lần POST tiếp theo
+            TempData.Keep("VerifiedUser");
+            TempData.Keep("CurrentOtp");
+
+            return View(new ResetPasswordViewModel { Username = username, Otp = otp });
+        }
+
+        [HttpPost]
+        [AllowAnonymous]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResetPassword(ResetPasswordViewModel model)
+        {
+            if (!ModelState.IsValid) return View(model);
+
+            // Check lại cache lần cuối để đảm bảo OTP còn hiệu lực và quy trình đúng
+            var cacheKey = $"OTP_WEB_{model.Username.ToUpper()}";
+            if (!_cache.TryGetValue(cacheKey, out string storedOtp) || storedOtp != model.Otp)
+            {
+                ModelState.AddModelError("", "Phiên giao dịch đã hết hạn. Vui lòng thực hiện lại.");
+                return View(model);
+            }
+
+            // Thực hiện đổi mật khẩu trong Oracle
+            var (success, message) = await _authService.ChangePasswordAsync(model.Username, model.NewPassword);
+
+            if (success)
+            {
+                _cache.Remove(cacheKey); // Xóa OTP
+                TempData["SuccessMessage"] = "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.";
+                return RedirectToAction("Login");
+            }
+
+            ModelState.AddModelError("", message);
+            return View(model);
+        }
     }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 6314f219591f10118305cc47ef5fdc7c10b9cc86

@@ -103,6 +103,10 @@ builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
            .AddInterceptors(interceptor);
 });
 
+builder.Services.AddTransient<DuLich.Services.EmailService>();
+
+builder.Services.AddMemoryCache();
+
 // Đăng ký OracleAuthService
 builder.Services.AddScoped<OracleAuthService>();
 

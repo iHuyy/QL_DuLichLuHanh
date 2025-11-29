@@ -51,46 +51,64 @@
         <div class="card-body">
             <div class="tab-content">
                 <div class="tab-pane fade show active" id="tab-info" role="tabpanel">
-                    <h4 class="mb-4 text-primary">Thông tin tài khoản</h4>
-                    <form asp-action="UpdateProfile" asp-controller="Customer" method="post">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" asp-for="MaKhachHang" />
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label asp-for="HoTen" class="form-label">Họ và tên</label>
-                                <input asp-for="HoTen" class="form-control" placeholder="Nhập họ tên đầy đủ" />
-                                <span asp-validation-for="HoTen" class="text-danger small"></span>
-                            </div>
-                            <div class="col-md-6">
-                                <label asp-for="SoDienThoai" class="form-label">Số điện thoại</label>
-                                <input asp-for="SoDienThoai" class="form-control" placeholder="09xx xxx xxx" />
-                                <span asp-validation-for="SoDienThoai" class="text-danger small"></span>
-                            </div>
-                            <div class="col-md-6">
-                                <label asp-for="Email" class="form-label">Email</label>
-                                <input asp-for="Email" class="form-control" type="email"
-                                    placeholder="example@domain.com" />
-                                <span asp-validation-for="Email" class="text-danger small"></span>
-                            </div>
-                            <div class="col-md-6">
-                                <label asp-for="DiaChi" class="form-label">Địa chỉ</label>
-                                <input asp-for="DiaChi" class="form-control" placeholder="Số nhà, đường, quận/huyện" />
-                                <span asp-validation-for="DiaChi" class="text-danger small"></span>
-                            </div>
+                    <div class="d-flex flex-column align-items-start gap-3 w-100">
+                        <div>
+                            <h4 class="text-primary mb-2">Thông tin tài khoản</h4>
+                            <p class="text-muted mb-0">Vui lòng cập nhật thông tin chính xác để chúng tôi phục vụ tốt
+                                hơn.</p>
                         </div>
-                        <div class="text-end mt-4">
-                            <button type="submit" class="btn btn-primary rounded-pill px-4" id="update_profile">Lưu thay
-                                đổi</button>
+
+                        <div class="w-100">
+                            <div id="profileAlert" class="alert d-none" role="alert"></div>
+
+                            <form id="profileForm" asp-action="UpdateProfile" asp-controller="Customer" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" asp-for="MaKhachHang" />
+
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label asp-for="HoTen" class="form-label fw-semibold">Họ và tên</label>
+                                        <input asp-for="HoTen" class="form-control" placeholder="Nhập họ tên đầy đủ"
+                                            required />
+                                        <span asp-validation-for="HoTen" class="text-danger small"></span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label asp-for="SoDienThoai" class="form-label fw-semibold">Số điện
+                                            thoại</label>
+                                        <input asp-for="SoDienThoai" class="form-control" placeholder="09xx xxx xxx" />
+                                        <span asp-validation-for="SoDienThoai" class="text-danger small"></span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label asp-for="Email" class="form-label fw-semibold">Email</label>
+                                        <input asp-for="Email" class="form-control" type="email"
+                                            placeholder="example@domain.com" required />
+                                        <span asp-validation-for="Email" class="text-danger small"></span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label asp-for="DiaChi" class="form-label fw-semibold">Địa chỉ</label>
+                                        <input asp-for="DiaChi" class="form-control"
+                                            placeholder="Số nhà, đường, quận/huyện" />
+                                        <span asp-validation-for="DiaChi" class="text-danger small"></span>
+                                    </div>
+                                </div>
+
+                                <div class="text-end mt-4">
+                                    <button type="submit" class="btn btn-primary rounded-pill px-4"
+                                        id="btnUpdateProfile">
+                                        <i class="bi bi-save me-1"></i> Lưu thay đổi
+                                    </button>
+                                </div>
+                            </form>
                         </div>
-                    </form>
+                    </div>
                 </div>
 
 
                 <div class="tab-pane fade" id="tab-password" role="tabpanel">
                     <div class="d-flex flex-column align-items-start gap-3 w-100">
                         <div>
-                            <h4 class="text-primary mb-2">D?i m?t kh?u</h4>
-                            <p class="text-muted mb-0">C?p nh?t m?t kh?u d?nh k? d? d?m b?o an to?n t?i kho?n.</p>
+                            <h4 class="text-primary mb-2">Đổi mật khẩu</h4>
+                            <p class="text-muted mb-0">Cập nhật mật khẩu định kỳ để đảm bảo an toàn tài khoản.</p>
                         </div>
                         <div class="w-100">
                             <div id="passwordAlert" class="alert d-none" role="alert"></div>
@@ -98,24 +116,27 @@
                                 @Html.AntiForgeryToken()
                                 <div class="row g-3">
                                     <div class="col-md-12">
-                                        <label class="form-label fw-semibold" for="OldPassword">M?t kh?u c?</label>
+                                        <label class="form-label fw-semibold" for="OldPassword">Mật khẩu cũ</label>
                                         <input class="form-control" type="password" name="OldPassword" id="OldPassword"
-                                            placeholder="Nh?p m?t kh?u hi?n t?i" required />
+                                            placeholder="Nhập mật khẩu hiện tại" required />
                                     </div>
                                     <div class="col-md-12">
-                                        <label class="form-label fw-semibold" for="NewPassword">M?t kh?u m?i</label>
+                                        <label class="form-label fw-semibold" for="NewPassword">Mật khẩu mới</label>
                                         <input class="form-control" type="password" name="NewPassword" id="NewPassword"
-                                            placeholder="Nh?p m?t kh?u m?i" minlength="6" required />
+                                            placeholder="Nhập mật khẩu mới" minlength="6" required />
                                     </div>
                                     <div class="col-md-12">
-                                        <label class="form-label fw-semibold" for="ConfirmPassword">X?c nh?n m?t kh?u m?i</label>
-                                        <input class="form-control" type="password" name="ConfirmPassword" id="ConfirmPassword"
-                                            placeholder="Nh?p l?i m?t kh?u m?i" minlength="6" required />
+                                        <label class="form-label fw-semibold" for="ConfirmPassword">Xác nhận mật khẩu
+                                            mới</label>
+                                        <input class="form-control" type="password" name="ConfirmPassword"
+                                            id="ConfirmPassword" placeholder="Nhập lại mật khẩu mới" minlength="6"
+                                            required />
                                     </div>
                                 </div>
                                 <div class="text-end mt-4">
-                                    <button type="submit" class="btn btn-primary rounded-pill px-4" id="btnChangePassword">
-                                        <i class="bi bi-key me-1"></i> D?i m?t kh?u
+                                    <button type="submit" class="btn btn-primary rounded-pill px-4"
+                                        id="btnChangePassword">
+                                        <i class="bi bi-key me-1"></i> Đổi mật khẩu
                                     </button>
                                 </div>
                             </form>
@@ -217,12 +238,12 @@
                 data.sessions.forEach(sess => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                                    <td>${sess.device_type || 'WEB'}</td>
-                                    <td>${sess.device_info || ''}</td>
-                                    <td>${new Date(sess.login_time).toLocaleString()}</td>
-                                    <td class="text-center">
-                                        <button class="btn btn-sm btn-outline-danger" data-session="${sess.session_id}">Đăng xuất</button>
-                                    </td>`;
+                                                    <td>${sess.device_type || 'WEB'}</td>
+                                                    <td>${sess.device_info || ''}</td>
+                                                    <td>${new Date(sess.login_time).toLocaleString()}</td>
+                                                    <td class="text-center">
+                                                        <button class="btn btn-sm btn-outline-danger" data-session="${sess.session_id}">Đăng xuất</button>
+                                                    </td>`;
                     tr.querySelector('button').addEventListener('click', () => remoteLogout(sess.session_id));
                     tableBody.appendChild(tr);
                 });
@@ -270,11 +291,11 @@
                     if (data.isValid) {
                         alertDiv.className = 'alert alert-success d-flex align-items-center';
                         alertDiv.innerHTML = `<i class="bi bi-check-circle-fill fs-4 me-2"></i> 
-                                              <div><strong>HỢP LỆ!</strong> ${data.message}</div>`;
+                                                              <div><strong>HỢP LỆ!</strong> ${data.message}</div>`;
                     } else {
                         alertDiv.className = 'alert alert-danger d-flex align-items-center';
                         alertDiv.innerHTML = `<i class="bi bi-exclamation-triangle-fill fs-4 me-2"></i> 
-                                              <div><strong>KHÔNG HỢP LỆ!</strong> ${data.message}</div>`;
+                                                              <div><strong>KHÔNG HỢP LỆ!</strong> ${data.message}</div>`;
                     }
                 } else {
                     alertDiv.className = 'alert alert-warning';
@@ -307,40 +328,123 @@
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
 
-                const token = form.querySelector('input[name="__RequestVerificationToken"]')?.value;
-                const headers = token ? { 'RequestVerificationToken': token } : {};
-                const formData = new FormData(form);
+                // Kiểm tra mật khẩu mới và xác nhận có khớp không ở phía client
+                const newPass = document.getElementById('NewPassword').value;
+                const confirmPass = document.getElementById('ConfirmPassword').value;
+                if (newPass !== confirmPass) {
+                    showPasswordAlert('Mật khẩu xác nhận không khớp.', 'danger');
+                    return;
+                }
 
-                if (submitBtn) submitBtn.disabled = true;
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Đang xử lý...';
+                }
+
                 const alertBox = document.getElementById('passwordAlert');
                 if (alertBox) {
                     alertBox.classList.add('d-none');
                 }
 
                 try {
-                    const res = await fetch(form.getAttribute('action') || '/Customer/ChangePassword', {
+                    const formData = new FormData(form);
+                    // Lấy URL từ action của form
+                    const url = form.getAttribute('action');
+
+                    const res = await fetch(url, {
                         method: 'POST',
-                        headers,
-                        body: formData
+                        body: formData,
+                        headers: {
+                            'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+                        }
                     });
 
-                    const isJson = res.headers.get('content-type')?.includes('application/json');
-                    const data = isJson ? await res.json() : null;
+                    // Xử lý phản hồi JSON
+                    const data = await res.json();
 
-                    if (data?.success) {
-                        showPasswordAlert(data.message || 'Mat khau da duoc thay doi.', 'success');
-                        form.reset();
+                    if (data.success) {
+                        showPasswordAlert(data.message || 'Mật khẩu đã được thay đổi thành công.', 'success');
+                        form.reset(); // Xóa trắng form sau khi thành công
                     } else {
-                        const message = data?.message || 'Khong the doi mat khau, vui long thu lai.';
-                        showPasswordAlert(message, 'danger');
+                        showPasswordAlert(data.message || 'Không thể đổi mật khẩu, vui lòng thử lại.', 'danger');
                     }
                 } catch (err) {
-                    showPasswordAlert('Co loi xay ra, vui long thu lai.', 'danger');
+                    console.error(err);
+                    showPasswordAlert('Có lỗi kết nối xảy ra, vui lòng thử lại.', 'danger');
                 } finally {
-                    if (submitBtn) submitBtn.disabled = false;
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="bi bi-key me-1"></i> Đổi mật khẩu';
+                    }
                 }
             });
         }
+
+        function showProfileAlert(message, type) {
+            const alertBox = document.getElementById('profileAlert');
+            if (!alertBox) return;
+            alertBox.className = `alert alert-${type}`;
+            alertBox.textContent = message;
+            alertBox.classList.remove('d-none');
+
+            // Tự động ẩn sau 5 giây
+            setTimeout(() => alertBox.classList.add('d-none'), 5000);
+        }
+
+        function wireProfileForm() {
+            const form = document.getElementById('profileForm');
+            if (!form) return;
+
+            const submitBtn = document.getElementById('btnUpdateProfile');
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Đang lưu...';
+                }
+
+                const alertBox = document.getElementById('profileAlert');
+                if (alertBox) alertBox.classList.add('d-none');
+
+                try {
+                    const formData = new FormData(form);
+                    const url = form.getAttribute('action');
+
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value
+                        }
+                    });
+
+                    const data = await res.json();
+
+                    if (data.success) {
+                        showProfileAlert(data.message || 'Cập nhật thông tin thành công!', 'success');
+                        // Không cần reset form vì đây là form sửa thông tin
+                    } else {
+                        showProfileAlert(data.message || 'Cập nhật thất bại, vui lòng thử lại.', 'danger');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showProfileAlert('Có lỗi kết nối xảy ra.', 'danger');
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="bi bi-save me-1"></i> Lưu thay đổi';
+                    }
+                }
+            });
+        }
+
+        // Đừng quên gọi hàm này trong sự kiện DOMContentLoaded:
+        document.addEventListener('DOMContentLoaded', () => {
+            // ... các hàm khác (loadSessions, wirePasswordForm...)
+            wireProfileForm(); // <--- Thêm dòng này
+        });
 
         async function remoteLogout(sessionId) {
             if (!confirm('Bạn có chắc muốn đăng xuất phiên này?')) return;
@@ -366,9 +470,9 @@
         function showSessionAlert(message, type) {
             const container = document.getElementById('sessionAlerts');
             container.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
-                            ${message}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>`;
+                                            ${message}
+                                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                        </div>`;
         }
 
         document.addEventListener('DOMContentLoaded', () => {
