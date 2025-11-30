@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Admin Dashboard</title>
     <!-- Favicon icon -->
-    <link rel="icon" type="image/png" sizes="16x16" href="~/admin/images/favicon.png">
+    <link rel="icon" type="image/x-icon" href="~/favicon.ico" asp-append-version="true">
     <!-- Vectormap -->
     <link href="~/admin/vendor/jqvmap/css/jqvmap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="~/admin/vendor/chartist/css/chartist.min.css">
@@ -82,7 +82,8 @@
                             <span class="nav-text">Dashboard</span>
                         </a>
                     </li>
-                    <li class="@(controller == "Admin" && (action == "Users" || action == "CreateUser") ? "mm-active" : string.Empty)">
+                    <li
+                        class="@(controller == "Admin" && (action == "Users" || action == "CreateUser") ? "mm-active" : string.Empty)">
                         <a class="has-arrow ai-icon" href="javascript:void(0)" aria-expanded="false">
                             <i class="flaticon-028-user-1"></i>
                             <span class="nav-text">Quản lý người dùng</span>
@@ -120,12 +121,6 @@
                         <a href="/Admin/BackupRestore" class="ai-icon" aria-expanded="false">
                             <i class="flaticon-041-graph"></i>
                             <span class="nav-text">Sao lưu &amp; phục hồi</span>
-                        </a>
-                    </li>
-                    <li class="@(controller == "Admin" && action == "Reports" ? "mm-active" : string.Empty)">
-                        <a href="/Admin/Reports" class="ai-icon" aria-expanded="false">
-                            <i class="flaticon-041-graph"></i>
-                            <span class="nav-text">Báo cáo</span>
                         </a>
                     </li>
                 </ul>

@@ -6,8 +6,11 @@
 <div class="row page-titles mx-0">
     <div class="col-sm-6 p-md-0">
         <div class="welcome-text">
-            <h4>Quản lý khách hàng</h4>
+            <h4>Quản lý khách hàng (theo chi nhánh của bạn)</h4>
         </div>
+    </div>
+    <div class="col-sm-6 p-md-0 justify-content-sm-end mt-2 mt-sm-0 d-flex">
+        <span class="text-muted mt-2">Chỉ hiển thị khách đã đặt tour thuộc chi nhánh của bạn.</span>
     </div>
 </div>
 
@@ -16,55 +19,21 @@
         <div class="card">
             <div class="card-body">
                 <div class="table-responsive">
-                    <table id="customersList" class="display" style="min-width: 845px">
+                    <table id="customersList" class="display" style="min-width: 1000px">
                         <thead>
                             <tr>
-                                <th>Mã KH</th>
+                                <th>Ma KH</th>
                                 <th>Họ tên</th>
-                                <th>Email</th>
                                 <th>Số điện thoại</th>
-                                <th>Ngày sinh</th>
-                                <th>Địa chỉ</th>
+                                <th>Email</th>
                                 <th>Số tour đã đặt</th>
-                                <th>Thao tác</th>
+                                <th>Tour gần nhất</th>
+                                <th>Ngày đặt gần nhất</th>
                             </tr>
                         </thead>
-                        <tbody>
-                        </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="customerHistoryModal">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Lịch sử đặt tour</h5>
-                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-            </div>
-            <div class="modal-body">
-                <div class="table-responsive">
-                    <table class="table" id="bookingHistoryTable">
-                        <thead>
-                            <tr>
-                                <th>Mã đơn</th>
-                                <th>Tour</th>
-                                <th>Ngày đặt</th>
-                                <th>Số người</th>
-                                <th>Tổng tiền</th>
-                                <th>Trạng thái</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-danger light" data-dismiss="modal">Đóng</button>
             </div>
         </div>
     </div>
@@ -78,74 +47,23 @@
 
         function loadCustomers() {
             $('#customersList').DataTable({
-                ajax: '/staff/api/customers',
+                ajax: '/staff/api/customers/bookings',
+                order: [[6, 'desc']],
                 columns: [
                     { data: 'maKhachHang' },
                     { data: 'hoTen' },
-                    { data: 'email' },
                     { data: 'soDienThoai' },
+                    { data: 'email' },
+                    { data: 'soTourDaDat' },
+                    { data: 'lastTour' },
                     {
-                        data: 'ngaySinh',
+                        data: 'lastBookingDate',
                         render: function (data) {
                             return data ? moment(data).format('DD/MM/YYYY') : '';
-                        }
-                    },
-                    { data: 'diaChi' },
-                    { data: 'soTourDaDat' },
-                    {
-                        data: null,
-                        render: function (data) {
-                            return `
-                                    <div class="d-flex">
-                                        <a href="/staff/customers/details/${data.maKhachHang}" class="btn btn-primary shadow btn-xs sharp mr-1"><i class="fa fa-eye"></i></a>
-                                        <button onclick="showBookingHistory(${data.maKhachHang})" class="btn btn-info shadow btn-xs sharp"><i class="fa fa-history"></i></button>
-                                    </div>`;
                         }
                     }
                 ]
             });
-        }
-
-        function showBookingHistory(customerId) {
-            $.ajax({
-                url: `/staff/api/customers/${customerId}/bookings`,
-                method: 'GET',
-                success: function (data) {
-                    const tbody = $('#bookingHistoryTable tbody');
-                    tbody.empty();
-
-                    data.forEach(booking => {
-                        tbody.append(`
-                                <tr>
-                                    <td>${booking.maDatTour}</td>
-                                    <td>${booking.tenTour}</td>
-                                    <td>${moment(booking.ngayDat).format('DD/MM/YYYY')}</td>
-                                    <td>${booking.soNguoiLon + booking.soTreEm} người</td>
-                                    <td>${new Intl.NumberFormat('vi-VN', {
-                            style: 'currency',
-                            currency: 'VND'
-                        }).format(booking.tongTien)}</td>
-                                    <td>${getStatusBadge(booking.trangThai)}</td>
-                                </tr>
-                            `);
-                    });
-
-                    $('#customerHistoryModal').modal('show');
-                },
-                error: function () {
-                    toastr.error('Không thể tải lịch sử đặt tour. Vui lòng thử lại sau.');
-                }
-            });
-        }
-
-        function getStatusBadge(status) {
-            const badges = {
-                'Chờ xử lý': 'badge-warning',
-                'Đã xác nhận': 'badge-success',
-                'Đã hủy': 'badge-danger',
-                'Hoàn thành': 'badge-info'
-            };
-            return `<span class="badge ${badges[status] || 'badge-secondary'}">${status}</span>`;
         }
     </script>
 }

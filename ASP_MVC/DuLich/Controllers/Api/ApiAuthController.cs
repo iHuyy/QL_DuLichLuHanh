@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Security.Cryptography;
 
+
 namespace DuLich.Controllers.Api
 {
     [Route("api/[controller]")]
@@ -62,77 +63,83 @@ namespace DuLich.Controllers.Api
         [AllowAnonymous]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
         {
+            if (string.IsNullOrEmpty(request.Username)) return BadRequest(new { success = false, message = "Vui lòng nhập tên đăng nhập." });
+
             var user = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME == request.Username.ToUpper());
+            
             if (user == null || string.IsNullOrEmpty(user.Email))
             {
-                // Trả về thành công giả để bảo mật, hoặc báo lỗi tùy chính sách
-                return NotFound(new { success = false, message = "Không tìm thấy tài khoản hoặc tài khoản chưa đăng ký email." });
+                // Trả về message chung chung để bảo mật hoặc báo lỗi
+                return Ok(new { success = false, message = "Không tìm thấy tài khoản hoặc tài khoản chưa đăng ký email." });
             }
 
-            // Tạo mã OTP 6 số ngẫu nhiên
+            // Tạo OTP 6 số
             var otp = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
 
-            // Lưu OTP vào Cache trong 180 giây (3 phút)
-            _cache.Set($"OTP_{request.Username.ToUpper()}", otp, TimeSpan.FromSeconds(180));
+            // Lưu vào Cache (hết hạn sau 180 giây)
+            _cache.Set($"OTP_MOBILE_{request.Username.ToUpper()}", otp, TimeSpan.FromSeconds(180));
 
             // Gửi Email
             try
             {
-                string subject = "Mã xác thực Quên mật khẩu - DuLich App";
-                string body = $"<h3>Mã xác thực của bạn là: <b style='color:red; font-size:20px;'>{otp}</b></h3>" +
-                              $"<p>Mã này có hiệu lực trong vòng 3 phút. Vui lòng không chia sẻ cho ai khác.</p>";
+                await _emailService.SendEmailAsync(user.Email, "Mã xác thực Quên mật khẩu (Mobile)", 
+                    $"<h3>Mã OTP của bạn là: <b style='color:red;font-size:24px'>{otp}</b></h3><p>Mã này có hiệu lực trong 3 phút.</p>");
                 
-                await _emailService.SendEmailAsync(user.Email, subject, body);
-                
-                // Mask email để hiển thị cho user biết (v.d: a***@gmail.com)
-                string maskedEmail = string.Format("{0}****{1}", user.Email[0], user.Email.Substring(user.Email.IndexOf('@')));
-                
-                return Ok(new { success = true, message = $"Mã xác thực đã được gửi đến {maskedEmail}" });
+                return Ok(new { success = true, message = $"Mã xác thực đã được gửi tới email: {MaskEmail(user.Email)}" });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { success = false, message = "Lỗi gửi email: " + ex.Message });
+                return Ok(new { success = false, message = "Lỗi gửi email: " + ex.Message });
             }
         }
 
-        // BƯỚC 2: Xác thực OTP
+        // 2. Kiểm tra OTP
         [HttpPost("verify-otp")]
         [AllowAnonymous]
         public IActionResult VerifyOtp([FromBody] VerifyOtpRequest request)
         {
-            if (_cache.TryGetValue($"OTP_{request.Username.ToUpper()}", out string storedOtp))
+            if (_cache.TryGetValue($"OTP_MOBILE_{request.Username.ToUpper()}", out string storedOtp))
             {
                 if (storedOtp == request.Otp)
                 {
                     return Ok(new { success = true, message = "Mã xác thực chính xác." });
                 }
             }
-            return BadRequest(new { success = false, message = "Mã xác thực không đúng hoặc đã hết hạn." });
+            return Ok(new { success = false, message = "Mã xác thực không đúng hoặc đã hết hạn." });
         }
 
-        // BƯỚC 3: Đổi mật khẩu mới
+        // 3. Đổi mật khẩu
         [HttpPost("reset-password")]
         [AllowAnonymous]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
         {
-            // Kiểm tra lại OTP lần cuối để đảm bảo an toàn (tránh việc user bỏ qua bước verify)
-            if (!_cache.TryGetValue($"OTP_{request.Username.ToUpper()}", out string storedOtp) || storedOtp != request.Otp)
+            // Kiểm tra lại OTP lần cuối để bảo mật
+            if (!_cache.TryGetValue($"OTP_MOBILE_{request.Username.ToUpper()}", out string storedOtp) || storedOtp != request.Otp)
             {
-                 return BadRequest(new { success = false, message = "Phiên giao dịch hết hạn. Vui lòng thử lại từ đầu." });
+                 return Ok(new { success = false, message = "Phiên xác thực đã hết hạn. Vui lòng thực hiện lại." });
             }
 
-            // Gọi hàm đổi mật khẩu của OracleAuthService
             var (success, message) = await _authService.ChangePasswordAsync(request.Username, request.NewPassword);
 
             if (success)
             {
-                // Xóa OTP sau khi đổi thành công
-                _cache.Remove($"OTP_{request.Username.ToUpper()}");
-                return Ok(new { success = true, message = "Đổi mật khẩu thành công. Vui lòng đăng nhập lại." });
+                _cache.Remove($"OTP_MOBILE_{request.Username.ToUpper()}"); // Xóa OTP
+                return Ok(new { success = true, message = "Đổi mật khẩu thành công." });
             }
             
-            return BadRequest(new { success = false, message = message });
+            return Ok(new { success = false, message = message });
         }
+
+        private string MaskEmail(string email)
+        {
+            if (string.IsNullOrEmpty(email) || !email.Contains("@")) return email;
+            var parts = email.Split('@');
+            if (parts[0].Length > 2)
+                return parts[0].Substring(0, 2) + "***@" + parts[1];
+            return "***@" + parts[1];
+        }
+
+        // DTO Classes
         public class ForgotPasswordRequest { public string Username { get; set; } }
         public class VerifyOtpRequest { public string Username { get; set; } public string Otp { get; set; } }
         public class ResetPasswordRequest { public string Username { get; set; } public string Otp { get; set; } public string NewPassword { get; set; } }

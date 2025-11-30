@@ -46,16 +46,21 @@ class MyBookingPageState extends State<MyBookingPage> {
       final endpoint = 'get_user_bookings.php?makhachhang=${widget.userID}';
       final response = await _apiClient.getJson(endpoint);
 
-      if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
+      if (response.statusCode != 200)
+        throw Exception('HTTP ${response.statusCode}');
 
       final body = response.body.trim();
-      if (body.isEmpty || body.startsWith('<')) throw Exception('Lỗi dữ liệu từ máy chủ');
+      if (body.isEmpty || body.startsWith('<'))
+        throw Exception('Lỗi dữ liệu từ máy chủ');
 
       final decoded = json.decode(body);
-      if (decoded['success'] != true) throw Exception(decoded['error'] ?? 'Lỗi không xác định');
+      if (decoded['success'] != true)
+        throw Exception(decoded['error'] ?? 'Lỗi không xác định');
 
       final bookingsList = decoded['data'] as List;
-      return bookingsList.map<BookingItem>((e) => BookingItem.fromJson(e)).toList();
+      return bookingsList
+          .map<BookingItem>((e) => BookingItem.fromJson(e))
+          .toList();
     } catch (e) {
       throw Exception('Không thể tải danh sách: $e');
     }
@@ -84,7 +89,9 @@ class MyBookingPageState extends State<MyBookingPage> {
         future: _bookingsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: primaryGreen));
+            return const Center(
+              child: CircularProgressIndicator(color: primaryGreen),
+            );
           }
 
           if (snapshot.hasError) {
@@ -92,14 +99,23 @@ class MyBookingPageState extends State<MyBookingPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error_outline, size: 50, color: Colors.redAccent),
+                  const Icon(
+                    Icons.error_outline,
+                    size: 50,
+                    color: Colors.redAccent,
+                  ),
                   const SizedBox(height: 16),
                   Text('Lỗi: ${snapshot.error}', textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: refreshData,
-                    style: ElevatedButton.styleFrom(backgroundColor: primaryDark),
-                    child: const Text('Thử lại', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryDark,
+                    ),
+                    child: const Text(
+                      'Thử lại',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
                 ],
               ),
@@ -113,11 +129,19 @@ class MyBookingPageState extends State<MyBookingPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.confirmation_number_outlined, size: 80, color: Colors.grey[300]),
+                  Icon(
+                    Icons.confirmation_number_outlined,
+                    size: 80,
+                    color: Colors.grey[300],
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     'Bạn chưa đặt tour nào',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[600]),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[600],
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -132,23 +156,31 @@ class MyBookingPageState extends State<MyBookingPage> {
           // Phân loại
           final closedBookings = bookings.where((b) {
             final status = b.trangThaiDat.toLowerCase();
-            return status.contains('hủy') || status.contains('hoàn thành') || status.contains('closed');
+            return status.contains('hủy') ||
+                status.contains('hoàn thành') ||
+                status.contains('closed');
           }).toList();
 
-          final onGoingBookings = bookings.where((b) => !closedBookings.contains(b)).toList();
+          final onGoingBookings = bookings
+              .where((b) => !closedBookings.contains(b))
+              .toList();
 
           return ListView(
             padding: const EdgeInsets.symmetric(vertical: 16),
             children: [
               if (onGoingBookings.isNotEmpty) ...[
                 _buildSectionHeader('SẮP DIỄN RA (${onGoingBookings.length})'),
-                ...onGoingBookings.map((b) => _buildBookingCard(context, b, isActive: true)),
+                ...onGoingBookings.map(
+                  (b) => _buildBookingCard(context, b, isActive: true),
+                ),
               ],
-              
+
               if (closedBookings.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 _buildSectionHeader('LỊCH SỬ (${closedBookings.length})'),
-                ...closedBookings.map((b) => _buildBookingCard(context, b, isActive: false)),
+                ...closedBookings.map(
+                  (b) => _buildBookingCard(context, b, isActive: false),
+                ),
               ],
             ],
           );
@@ -171,31 +203,19 @@ class MyBookingPageState extends State<MyBookingPage> {
     );
   }
 
-  Widget _buildBookingCard(BuildContext context, BookingItem booking, {required bool isActive}) {
-    // Xác định trạng thái hiển thị
-    String statusText = booking.trangThaiDat;
-    Color statusColor = primaryDark;
-    Color statusBg = primaryDark.withOpacity(0.1);
-
-    if (isActive) {
-       if (statusText.contains('Đã xác nhận')) {
-         statusColor = primaryGreen;
-         statusBg = primaryGreen.withOpacity(0.1);
-       } else {
-         statusColor = Colors.orange;
-         statusBg = Colors.orange.withOpacity(0.1);
-       }
-    } else {
-       statusColor = Colors.grey;
-       statusBg = Colors.grey.withOpacity(0.1);
-    }
-
+  Widget _buildBookingCard(
+    BuildContext context,
+    BookingItem booking, {
+    required bool isActive,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: InkWell(
         onTap: () async {
           await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => BookingDetailPage(bookingId: booking.maDatTour)),
+            MaterialPageRoute(
+              builder: (_) => BookingDetailPage(bookingId: booking.maDatTour),
+            ),
           );
           refreshData();
         },
@@ -205,7 +225,11 @@ class MyBookingPageState extends State<MyBookingPage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
             ],
           ),
           child: Row(
@@ -220,11 +244,12 @@ class MyBookingPageState extends State<MyBookingPage> {
                 child: ImageHelper.imageFromData(
                   booking.hinhAnh,
                   width: 100,
-                  height: 120, // Chiều cao cố định cho card đẹp hơn
+                  height:
+                      130, // Tăng chiều cao một chút để chứa đủ 2 dòng trạng thái
                   fit: BoxFit.cover,
                 ),
               ),
-              
+
               // Nội dung (Phải)
               Expanded(
                 child: Padding(
@@ -232,20 +257,30 @@ class MyBookingPageState extends State<MyBookingPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Badge trạng thái
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: statusBg,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          statusText.toUpperCase(),
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
-                        ),
+                      // --- SỬA ĐỔI: Hiển thị 2 Badge trạng thái ---
+                      Wrap(
+                        spacing: 6, // Khoảng cách giữa 2 badge
+                        runSpacing: 6,
+                        children: [
+                          // 1. Badge Trạng thái Đặt Tour
+                          _buildStatusBadge(
+                            booking.trangThaiDat,
+                            isBookingStatus: true,
+                          ),
+
+                          // 2. Badge Trạng thái Thanh toán
+                          _buildStatusBadge(
+                            booking.hoaDonTrangThai.isEmpty
+                                ? 'Chưa thanh toán'
+                                : booking.hoaDonTrangThai,
+                            isBookingStatus: false,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 6),
-                      
+
+                      // --------------------------------------------
+                      const SizedBox(height: 8),
+
                       // Tên Tour
                       Text(
                         booking.tieuDe,
@@ -258,17 +293,24 @@ class MyBookingPageState extends State<MyBookingPage> {
                           height: 1.2,
                         ),
                       ),
-                      
+
                       const SizedBox(height: 8),
-                      
+
                       // Thông tin phụ
                       Row(
                         children: [
-                          Icon(Icons.calendar_today, size: 12, color: Colors.grey[600]),
+                          Icon(
+                            Icons.calendar_today,
+                            size: 12,
+                            color: Colors.grey[600],
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             booking.ngayDat,
-                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
                           ),
                           const Spacer(),
                           Text(
@@ -288,6 +330,59 @@ class MyBookingPageState extends State<MyBookingPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // Hàm helper để tạo Badge màu sắc (Thêm hàm này vào trong class MyBookingPageState)
+  Widget _buildStatusBadge(String status, {required bool isBookingStatus}) {
+    Color bgColor;
+    Color textColor;
+    String text = status.toUpperCase();
+
+    // Logic màu sắc
+    if (status.toLowerCase().contains('hủy') ||
+        status.toLowerCase().contains('cancelled')) {
+      bgColor = Colors.red.withOpacity(0.1);
+      textColor = Colors.red;
+    } else if (status.toLowerCase().contains('đã thanh toán') ||
+        status.toLowerCase().contains('hoàn thành') ||
+        status.toLowerCase().contains('đã xác nhận')) {
+      bgColor = primaryGreen.withOpacity(0.1);
+      textColor = primaryGreen;
+    } else if (status.toLowerCase().contains('chờ') ||
+        status.toLowerCase().contains('chưa')) {
+      bgColor = Colors.orange.withOpacity(0.1);
+      textColor = Colors.orange;
+    } else {
+      bgColor = Colors.grey.withOpacity(0.1);
+      textColor = Colors.grey;
+    }
+
+    // Icon phân biệt
+    IconData icon = isBookingStatus ? Icons.confirmation_number : Icons.payment;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: textColor.withOpacity(0.2), width: 0.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: textColor),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
+        ],
       ),
     );
   }

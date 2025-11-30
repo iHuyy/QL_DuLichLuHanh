@@ -126,33 +126,10 @@ function updatePopularToursTable(data) {
             <tr>
                 <td>${tour.tenTour}</td>
                 <td>${tour.soLuotDat}</td>
-                <td>
-                    <div class="rating">
-                        ${generateStarRating(tour.danhGia)}
-                    </div>
-                </td>
                 <td>${formatCurrency(tour.doanhThu)}</td>
             </tr>
         `);
     });
-}
-
-function generateStarRating(rating) {
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 >= 0.5;
-    let stars = '';
-
-    for (let i = 0; i < 5; i++) {
-        if (i < fullStars) {
-            stars += '<i class="fa fa-star text-warning"></i>';
-        } else if (i === fullStars && hasHalfStar) {
-            stars += '<i class="fa fa-star-half-alt text-warning"></i>';
-        } else {
-            stars += '<i class="far fa-star text-warning"></i>';
-        }
-    }
-
-    return stars;
 }
 
 function formatCurrency(amount) {

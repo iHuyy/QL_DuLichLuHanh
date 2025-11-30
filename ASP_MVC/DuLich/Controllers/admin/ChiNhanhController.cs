@@ -20,11 +20,33 @@ namespace DuLich.Controllers.admin
         [Route("admin/ChiNhanh")]
         public async Task<IActionResult> Index()
         {
+            // 1. Get all branches
             var chiNhanhs = await _context.ChiNhanhs
-                .Include(c => c.NhanViens)
-                .Include(c => c.Tours)
-                .ToListAsync();
-            return View("~/Views/admin/ChiNhanh/Index.cshtml", chiNhanhs);
+                                          .Include(c => c.NhanViens)
+                                          .Include(c => c.Tours)
+                                          .ToListAsync();
+
+            // 2. Get all revenue grouped by branch
+            var revenues = await _context.HoaDons
+                .Where(hd => hd.DatTour != null && hd.DatTour.Tour != null && hd.DatTour.Tour.MaChiNhanh != null)
+                .GroupBy(hd => hd.DatTour.Tour.MaChiNhanh)
+                .Select(g => new
+                {
+                    MaChiNhanh = g.Key.Value,
+                    DoanhThu = g.Sum(hd => hd.SoTien ?? 0)
+                })
+                .ToDictionaryAsync(r => r.MaChiNhanh, r => r.DoanhThu);
+
+            // 3. Create ViewModels
+            var viewModels = chiNhanhs.Select(cn => new ChiNhanhViewModel
+            {
+                ChiNhanh = cn,
+                DoanhThu = revenues.ContainsKey(cn.MaChiNhanh) ? revenues[cn.MaChiNhanh] : 0,
+                SoNhanVien = cn.NhanViens.Count,
+                SoTour = cn.Tours.Count
+            }).ToList();
+
+            return View("~/Views/admin/ChiNhanh/Index.cshtml", viewModels);
         }
 
         // GET: ChiNhanh/Create
@@ -126,9 +148,12 @@ namespace DuLich.Controllers.admin
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var chiNhanh = await _context.ChiNhanhs.FindAsync(id);
-            _context.ChiNhanhs.Remove(chiNhanh);
-            await _context.SaveChangesAsync();
-            return RedirectToAction(nameof(Index));
+            if (chiNhanh != null)
+            {
+                _context.ChiNhanhs.Remove(chiNhanh);
+                await _context.SaveChangesAsync();
+            }
+            return Redirect("/admin/ChiNhanh");
         }
 
         private bool ChiNhanhExists(int id)

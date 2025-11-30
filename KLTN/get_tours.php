@@ -1,98 +1,86 @@
 <?php
+// KLTN/get_tours.php
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
 header('Content-Type: application/json; charset=utf-8');
-require_once 'connect.php';
-require_once __DIR__ . '/auth_middleware.php'; // (THÊM)
+require_once __DIR__ . '/connect.php';
 
 try {
-    $session = require_auth(); // (THÊM - Buộc xác thực)
+    check_db_connection();
 
-    // Return tours with both branch id and branch name (join to ChiNhanh)
-    // Include BLOB image (DuLieuAnh) and MIME type (LoaiAnh) from TOUR table
-    $query = "SELECT t.MATOUR, t.TIEUDE, t.MOTA, t.NOIKHOIHANH, t.NOIDEN, t.THANHPHO, t.THOIGIAN, t.GIANGUOILON, t.GIATREEM, t.SOLUONG, t.MACHINHANH, n.TENCHINHANH, A.DuLieuAnh as DULIEUANH, NVL(A.LoaiAnh, '') as LOAIANH
+    // SQL Query: Thêm subquery DA_DAT để đếm số người đã đặt
+    $query = "SELECT t.MATOUR, t.TIEUDE, t.MOTA, t.NOIKHOIHANH, t.NOIDEN, t.THANHPHO, 
+                     TO_CHAR(t.THOIGIAN, 'YYYY-MM-DD') as THOIGIAN, 
+                     t.GIANGUOILON, t.GIATREEM, t.SOLUONG, t.MACHINHANH, 
+                     n.TENCHINHANH, 
+                     A.DuLieuAnh, NVL(A.LoaiAnh, 'image/jpeg') as LOAIANH,
+                     
+                     -- Tính tổng người lớn + trẻ em đã đặt (trừ đơn hủy)
+                     (SELECT NVL(SUM(dt.SoNguoiLon + dt.SoTreEm), 0) 
+                      FROM DATTOUR dt 
+                      WHERE dt.MaTour = t.MaTour 
+                      AND dt.TrangThaiDat != 'Đã hủy' 
+                      AND dt.TrangThaiDat != 'Cancelled') AS DA_DAT
+                     
               FROM TOUR t
               LEFT JOIN CHINHANH n ON t.MACHINHANH = n.MACHINHANH
-              LEFT JOIN ANHTOUR A ON t.MATOUR = A.MATOUR AND ROWNUM = 1";
-    
-    $stid = oci_parse($conn, $query);
-    if (!$stid) {
-        $err = oci_error($conn);
-        http_response_code(500);
-        echo json_encode(['error' => $err['message'] ?? 'Parse failed']);
-        close_conn($conn);
-        exit;
-    }
-    
-    if (!oci_execute($stid)) {
-        $err = oci_error($stid) ?: oci_error($conn);
-        http_response_code(500);
-        echo json_encode(['error' => $err['message'] ?? 'Execute failed']);
-        oci_free_statement($stid);
-        close_conn($conn);
-        exit;
-    }
-    
-    $tours = array();
+              LEFT JOIN ANHTOUR A ON t.MATOUR = A.MATOUR AND ROWNUM = 1
+              ORDER BY t.MATOUR DESC";
+
+    $stid = @oci_parse($conn, $query);
+    if (!$stid) throw new Exception(oci_error($conn)['message']);
+
+    if (!@oci_execute($stid)) throw new Exception(oci_error($stid)['message']);
+
+    $tours = [];
     while ($row = oci_fetch_assoc($stid)) {
-        // normalize and expose both id and name keys (mixed-case and upper-case)
-        $maChi = isset($row['MACHINHANH']) ? (int)$row['MACHINHANH'] : null;
-        $tenChi = isset($row['TENCHINHANH']) ? $row['TENCHINHANH'] : '';
-    
-        // Convert BLOB to base64 data URL
+        // Xử lý ảnh
         $imageUrl = '';
-        if (isset($row['DULIEUANH']) && $row['DULIEUANH'] !== null && $row['DULIEUANH'] !== '') {
-            try {
-                $blob = $row['DULIEUANH'];
-                $data = null;
-                if (is_object($blob) && method_exists($blob, 'load')) {
-                    $data = $blob->load();
-                } else if (is_resource($blob)) {
-                    $data = stream_get_contents($blob);
-                } else {
-                    $data = $blob;
-                }
-                if ($data !== null && $data !== '') {
-                    $b64 = base64_encode($data);
-                    $mime = isset($row['LOAIANH']) && $row['LOAIANH'] !== '' ? trim($row['LOAIANH']) : 'image/jpeg';
-                    $imageUrl = 'data:' . $mime . ';base64,' . $b64;
-                }
-            } catch (Exception $e) {
-                // fallback: leave imageUrl empty
+        if (!empty($row['DULIEUANH'])) {
+            $blob = $row['DULIEUANH'];
+            if (is_object($blob)) {
+                $data = $blob->load();
+                $mime = $row['LOAIANH'];
+                $imageUrl = "data:$mime;base64," . base64_encode($data);
+                $blob->free();
             }
         }
-    
+
+        // --- TÍNH SỐ CHỖ CÒN LẠI ---
+        $tongSoCho = intval($row['SOLUONG']);
+        $daDat = intval($row['DA_DAT']);
+        $conLai = $tongSoCho - $daDat;
+        if ($conLai < 0) $conLai = 0;
+
         $tours[] = [
-            'MaTour' => $row['MATOUR'] ?? null,
-            'TieuDe' => $row['TIEUDE'] ?? '',
-            'MoTa' => $row['MOTA'] ?? '',
-            'NoiKhoiHanh' => $row['NOIKHOIHANH'] ?? '',
-            'NoiDen' => $row['NOIDEN'] ?? '',
-            'ThanhPho' => $row['THANHPHO'] ?? '',
-            'ThoiGian' => $row['THOIGIAN'] ?? null,
-            'GiaNguoiLon' => $row['GIANGUOILON'] ?? null,
-            'GiaTreEm' => $row['GIATREEM'] ?? null,
-            'SoLuong' => $row['SOLUONG'] ?? null,
-            // branch id and name (both forms)
-            'MaChiNhanh' => $maChi,
-            'MACHINHANH' => $maChi,
-            'ChiNhanh' => $tenChi,
-            'CHINHANH' => $tenChi,
-            // Image (base64 data URL or empty)
-            'DuLieuAnh' => $imageUrl,
+            'MATOUR' => $row['MATOUR'],
+            'TIEUDE' => $row['TIEUDE'],
+            'MOTA' => $row['MOTA'],
+            'NOIKHOIHANH' => $row['NOIKHOIHANH'],
+            'NOIDEN' => $row['NOIDEN'],
+            'THANHPHO' => $row['THANHPHO'],
+            'THOIGIAN' => $row['THOIGIAN'],
+            'GIANGUOILON' => $row['GIANGUOILON'],
+            'GIATREEM' => $row['GIATREEM'],
+            'SOLUONG' => $row['SOLUONG'],
+            
+            // TRẢ VỀ TRƯỜNG NÀY ĐỂ MODEL FLUTTER HỨNG
+            'SOCHOCONLAI' => $conLai,
+            
+            'MACHINHANH' => $row['MACHINHANH'],
+            'TENCHINHANH' => $row['TENCHINHANH'],
             'DULIEUANH' => $imageUrl,
-            'LoaiAnh' => isset($row['LOAIANH']) ? trim($row['LOAIANH']) : 'image/jpeg',
-            'LOAIANH' => isset($row['LOAIANH']) ? trim($row['LOAIANH']) : 'image/jpeg',
+            'LOAIANH' => $row['LOAIANH']
         ];
     }
-    
+
     oci_free_statement($stid);
-    
-    echo json_encode($tours, JSON_UNESCAPED_UNICODE);
-    
-    close_conn($conn);
+    echo json_encode($tours);
 
 } catch (Exception $e) {
-    // (THÊM) Bắt lỗi 401 hoặc lỗi 500
-    // Mã 401 sẽ tự động được đặt bởi auth_middleware.php
+    http_response_code(500);
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+} finally {
+    if (!empty($conn)) @oci_close($conn);
 }
 ?>

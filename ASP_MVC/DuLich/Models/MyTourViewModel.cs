@@ -23,7 +23,6 @@ namespace DuLich.Models
         public int NumChildren { get; set; }
         public decimal TotalPrice { get; set; }
         public List<string> Images { get; set; } = new List<string>();
-        public decimal Rating { get; set; }
         public string? FullName { get; set; }
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }

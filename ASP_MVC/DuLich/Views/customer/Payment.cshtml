@@ -1,8 +1,17 @@
+@using System.Linq;
 @model DuLich.Models.InvoiceViewModel
 @{
     ViewData["Title"] = "Xác nhận thanh toán";
     Layout = "~/Views/Shared/_Layout.cshtml";
     var isPaid = string.Equals(Model.TrangThai, "Đã thanh toán", StringComparison.OrdinalIgnoreCase);
+    var paymentOptions = new[]
+    {
+        new { Value = "Thanh toán tại văn phòng", Label = "Thanh toán tại văn phòng", Description = "Thanh toán trực tiếp tại văn phòng của Du lịch." },
+        new { Value = "Thanh toán thẻ", Label = "Thanh toán thẻ", Description = "Thanh toán nhanh qua thẻ ngân hàng." },
+        new { Value = "Ví Momo", Label = "Ví Momo", Description = "Thanh toán qua ví điện tử Momo." }
+    };
+    var selectedMethod = Model.PaymentMethod ?? paymentOptions[0].Value;
+    var selectedDescription = paymentOptions.FirstOrDefault(option => option.Value == selectedMethod)?.Description ?? string.Empty;
 }
 
 <div class="container-xxl py-5">
@@ -69,33 +78,50 @@
                         </div>
                     </div>
 
-                    <div class="d-flex flex-wrap gap-3 mt-4 justify-content-center">
-                        @if (!isPaid)
-                        {
-                            <form asp-action="ConfirmPayment" asp-controller="Customer" method="post">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="bookingId" value="@ViewBag.BookingId" />
-                                <button type="submit" class="btn btn-primary rounded-pill px-4">
-                                    <i class="fa fa-credit-card me-1"></i> Thanh toán
-                                </button>
-                            </form>
-                        }
-                        else
-                        {
-                            <button type="button" class="btn btn-success rounded-pill px-4" disabled>
-                                <i class="fa fa-check-circle me-1"></i> Đã thanh toán
-                            </button>
-                        }
+                    <div class="d-flex flex-column gap-3 mt-4 align-items-center">
+                        <form asp-action="ConfirmPayment" asp-controller="Customer" method="post" class="w-100">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="bookingId" value="@ViewBag.BookingId" />
+                            <div class="mb-3 w-100" style="max-width: 560px;">
+                                <label class="form-label fw-semibold">Phương thức thanh toán</label>
+                                <select class="form-select" name="paymentMethod">
+                                    @foreach (var option in paymentOptions)
+                                    {
+                                        <option value="@option.Value" selected="@(option.Value == selectedMethod ? "selected" : null)">
+                                            @option.Label
+                                        </option>
+                                    }
+                                </select>
+                                @if (!string.IsNullOrWhiteSpace(selectedDescription))
+                                {
+                                    <small class="text-muted">@selectedDescription</small>
+                                }
+                            </div>
+                            <div class="d-flex flex-wrap gap-3 justify-content-center">
+                                @if (!isPaid)
+                                {
+                                    <button type="submit" class="btn btn-primary rounded-pill px-4">
+                                        <i class="fa fa-credit-card me-1"></i> Thanh toán
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-success rounded-pill px-4" disabled>
+                                        <i class="fa fa-check-circle me-1"></i> Đã thanh toán
+                                    </button>
+                                }
 
-                        <a class="btn btn-outline-primary rounded-pill px-4"
-                           target="_blank"
-                           href="@Url.Action("PrintInvoice", "Customer", new { hoaDonId = Model.MaHoaDon })">
-                            <i class="fa fa-print me-1"></i> In hóa đơn
-                        </a>
-                        <a class="btn btn-outline-secondary rounded-pill px-4"
-                           href="@Url.Action("DownloadInvoicePdf", "Customer", new { hoaDonId = Model.MaHoaDon })">
-                            <i class="fa fa-file-pdf me-1"></i> Tải PDF
-                        </a>
+                                <a class="btn btn-outline-primary rounded-pill px-4"
+                                   target="_blank"
+                                   href="@Url.Action("PrintInvoice", "Customer", new { hoaDonId = Model.MaHoaDon })">
+                                    <i class="fa fa-print me-1"></i> In hóa đơn
+                                </a>
+                                <a class="btn btn-outline-secondary rounded-pill px-4"
+                                   href="@Url.Action("DownloadInvoicePdf", "Customer", new { hoaDonId = Model.MaHoaDon })">
+                                    <i class="fa fa-file-pdf me-1"></i> Tải PDF
+                                </a>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>

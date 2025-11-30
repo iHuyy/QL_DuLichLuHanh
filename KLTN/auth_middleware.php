@@ -1,6 +1,5 @@
 <?php
-// auth_middleware.php
-// Provides functions to validate Bearer token stored in USER_SESSIONS
+// KLTN/auth_middleware.php
 require_once __DIR__ . '/connect.php';
 
 function get_bearer_token_from_header() {
@@ -8,7 +7,6 @@ function get_bearer_token_from_header() {
     if (function_exists('getallheaders')) {
         $headers = getallheaders();
     } else {
-        // Fallback for environments without getallheaders
         $headers = [];
         foreach ($_SERVER as $name => $value) {
             if (substr($name, 0, 5) == 'HTTP_') {
@@ -16,16 +14,8 @@ function get_bearer_token_from_header() {
             }
         }
     }
-
-    $auth = null;
-    if (isset($headers['Authorization'])) {
-        $auth = $headers['Authorization'];
-    } elseif (isset($headers['authorization'])) {
-        $auth = $headers['authorization'];
-    } elseif (isset($_SERVER['HTTP_AUTHORIZATION'])) {
-        $auth = $_SERVER['HTTP_AUTHORIZATION'];
-    }
-
+    
+    $auth = $headers['Authorization'] ?? $headers['authorization'] ?? $_SERVER['HTTP_AUTHORIZATION'] ?? null;
     if (!$auth) return null;
     if (preg_match('/Bearer\s+(.*)$/i', $auth, $matches)) {
         return trim($matches[1]);
@@ -39,56 +29,52 @@ function unauthorized_json_and_exit($message = 'Unauthorized') {
     exit;
 }
 
-/**
- * require_auth()
- * Validates Authorization: Bearer {token} against USER_SESSIONS table.
- * Returns associative array with session info on success.
- * On failure, sends 401 JSON and exits.
- */
 function require_auth() {
-    global $conn;
-    // ensure connect.php provided a global connection or create one
-    if (empty($conn) || $conn === null) {
-        $conn = connect_read();
+    global $conn; // Dùng kết nối toàn cục từ connect.php
+    
+    // Kiểm tra kết nối
+    if (!$conn) {
+        // Nếu chưa có kết nối, thử include lại (đề phòng)
+        require_once __DIR__ . '/connect.php';
     }
     if (!$conn) {
-        unauthorized_json_and_exit('DB connection failed');
+        unauthorized_json_and_exit('Lỗi kết nối Database (Auth Middleware)');
     }
 
     $token = get_bearer_token_from_header();
+    // Hỗ trợ lấy token từ POST/GET để test dễ hơn
+    if (!$token) $token = $_REQUEST['token'] ?? null;
+
     if (!$token) {
-        // Also accept token via POST/GET for convenience if client cannot set header
-        if (!empty($_POST['token'])) $token = $_POST['token'];
-        if (!$token && !empty($_GET['token'])) $token = $_GET['token'];
-    }
-    if (!$token) {
-        unauthorized_json_and_exit('Missing token');
+        unauthorized_json_and_exit('Thiếu Token xác thực');
     }
 
-    $sql = "SELECT SESSION_ID, USER_ID, USER_TYPE, DEVICE_TYPE, DEVICE_INFO, LOGIN_TIME, IS_ACTIVE FROM USER_SESSIONS WHERE SESSION_ID = :session_id";
+    $sql = "SELECT SESSION_ID, USER_ID, USER_TYPE, DEVICE_TYPE, DEVICE_INFO, LOGIN_TIME, IS_ACTIVE 
+            FROM USER_SESSIONS WHERE SESSION_ID = :session_id";
+    
     $stmt = @oci_parse($conn, $sql);
-    if (!$stmt) {
-        unauthorized_json_and_exit('Failed to prepare auth query');
-    }
+    if (!$stmt) unauthorized_json_and_exit('Lỗi chuẩn bị truy vấn xác thực');
+    
     oci_bind_by_name($stmt, ':session_id', $token);
+    
     if (!@oci_execute($stmt)) {
         oci_free_statement($stmt);
-        unauthorized_json_and_exit('Auth query failed');
+        unauthorized_json_and_exit('Lỗi thực thi truy vấn xác thực');
     }
+    
     $row = oci_fetch_assoc($stmt);
     oci_free_statement($stmt);
 
     if (!$row) {
-        unauthorized_json_and_exit('Invalid token');
+        unauthorized_json_and_exit('Token không hợp lệ hoặc không tìm thấy phiên');
     }
 
-    // Check IS_ACTIVE
     $isActive = strtoupper(trim($row['IS_ACTIVE'] ?? 'N')) === 'Y';
     if (!$isActive) {
-        unauthorized_json_and_exit('Session inactive');
+        unauthorized_json_and_exit('Phiên đăng nhập đã hết hạn hoặc bị hủy');
     }
 
-    // Success: return session info
+    // Trả về thông tin session
     return [
         'session_id' => $row['SESSION_ID'],
         'user_id' => $row['USER_ID'],
@@ -98,5 +84,4 @@ function require_auth() {
         'login_time' => $row['LOGIN_TIME'],
     ];
 }
-
 ?>

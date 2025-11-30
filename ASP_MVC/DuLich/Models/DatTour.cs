@@ -30,9 +30,6 @@ namespace DuLich.Models
         [Column("TONGTIEN")]
         public decimal? TongTien { get; set; }
 
-        [Column("TRANGTHAITHANHTOAN")]
-        public string? TrangThaiThanhToan { get; set; }
-
         [Column("TRANGTHAIDAT")]
         public string? TrangThaiDat { get; set; }
 

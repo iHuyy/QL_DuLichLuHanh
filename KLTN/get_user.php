@@ -1,54 +1,46 @@
 <?php
-// Không in warnings/HTML lỗi ra client
-ini_set('display_errors', 0);
-error_reporting(E_ALL);
+// KLTN/get_user.php
+header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/connect.php';
+require_once __DIR__ . '/auth_middleware.php';
 
-header("Content-Type: application/json");
-session_start();
+try {
+    $session = require_auth();
+    $userId = $session['user_id'];
 
-$data = json_decode(file_get_contents("php://input"), true);
+    check_db_connection();
 
-// Lấy credentials/role ưu tiên: request -> session -> default (không đủ -> lỗi)
-$reqDbUser = isset($data['dbUser']) ? trim($data['dbUser']) : null;
-$reqDbPass = isset($data['dbPass']) ? trim($data['dbPass']) : null;
-$reqRole   = isset($data['role']) ? strtoupper(trim($data['role'])) : null;
+    // SỬA LỖI: Đổi :uid thành :param_uid
+    $sql = "SELECT MaKhachHang, HoTen, Email, SoDienThoai, DiaChi, Oracle_Username 
+            FROM KhachHang WHERE MaKhachHang = :param_uid";
+    
+    $stmt = @oci_parse($conn, $sql);
+    oci_bind_by_name($stmt, ':param_uid', $userId); // Bind tên mới
+    
+    if (!@oci_execute($stmt)) throw new Exception("Lỗi truy vấn user: " . oci_error($stmt)['message']);
 
-$sessionUser = !empty($_SESSION['sys_user']) ? $_SESSION['sys_user'] : null;
-$sessionPass = !empty($_SESSION['sys_pass']) ? $_SESSION['sys_pass'] : null;
-$sessionIsSys = !empty($_SESSION['is_sysdba']) && $_SESSION['is_sysdba'] === true;
+    $user = oci_fetch_assoc($stmt);
+    oci_free_statement($stmt);
 
-$dbUser = $reqDbUser ?? $sessionUser;
-$dbPass = $reqDbPass ?? $sessionPass;
-$role   = $reqRole ?? ($sessionIsSys ? 'SYSDBA' : 'DEFAULT');
+    if ($user) {
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'userID' => $user['MAKHACHHANG'],
+                'username' => $user['ORACLE_USERNAME'],
+                'fullName' => $user['HOTEN'],
+                'email' => $user['EMAIL'],
+                'phone' => $user['SODIENTHOAI'],
+                'address' => $user['DIACHI']
+            ]
+        ]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'User not found']);
+    }
 
-if (!$dbUser || !$dbPass) {
-    echo json_encode(["success" => false, "message" => "Missing DB credentials"]);
-    exit;
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+} finally {
+    if ($conn) oci_close($conn);
 }
-
-$conn_str = "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=100.91.47.90)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=ORCLPDB1)))";
-
-// Thử kết nối (SYSDBA nếu được yêu cầu)
-if ($role === 'SYSDBA') {
-    $conn = @oci_connect($dbUser, $dbPass, $conn_str, "AL32UTF8", OCI_SYSDBA);
-} else {
-    $conn = @oci_connect($dbUser, $dbPass, $conn_str, "AL32UTF8");
-}
-
-if (!$conn) {
-    $e = oci_error();
-    $msg = isset($e['message']) ? $e['message'] : 'Connection failed';
-    echo json_encode(["success" => false, "message" => $msg, "role" => $role]);
-    exit;
-}
-
-// Nếu kết nối thành công, chỉ trả tên tài khoản và role (không trả mật khẩu)
-echo json_encode([
-    "success" => true,
-    "username" => $dbUser,
-    "role" => $role
-]);
-
-oci_close($conn);
-exit;
 ?>

@@ -58,9 +58,13 @@
                                     <td>
                                         <form asp-controller="TourManagement" asp-action="ChangeStatus" method="post">
                                             <input type="hidden" name="id" value="@tour.Id" />
-                                            <select name="status" class="form-control form-control-sm" onchange="this.form.submit()">
-                                                <option value="Hoạt động" selected="@(tour.TrangThai == "Hoạt động")">Hoạt động</option>
-                                                <option value="Không hoạt động" selected="@(tour.TrangThai == "Không hoạt động")">Không hoạt động</option>
+                                            <select name="status" class="form-control form-control-sm"
+                                                onchange="this.form.submit()">
+                                                <option value="Hoạt động" selected="@(tour.TrangThai == "Hoạt động")">Hoạt
+                                                    động</option>
+                                                <option value="Không hoạt động"
+                                                    selected="@(tour.TrangThai == "Không hoạt động")">Không hoạt động
+                                                </option>
                                             </select>
                                         </form>
                                     </td>
@@ -68,22 +72,21 @@
                                         @if (!string.IsNullOrEmpty(tour.QR))
                                         {
                                             <button class="btn btn-info btn-sm" onclick="showQR('@tour.QR')">
-                                                <i class="fas fa-qrcode"></i>
+                                                <i class="fas fa-qrcode">QR</i>
                                             </button>
                                         }
                                     </td>
                                     <td>
-                                        <div class="d-flex">
-                                            <a href="@Url.Action("TourDetails", "Admin", new { id = tour.Id })" class="btn btn-info shadow btn-xs sharp mr-1" title="Xem chi tiết"><i class="fa fa-eye"></i></a>
+                                        <div class="d-flex gap-2">
                                             <a href="@Url.Action("EditTour", "Admin", new { id = tour.Id })"
-                                                class="btn btn-primary shadow btn-xs sharp mr-1">
-                                                <i class="fa fa-pencil"></i>
+                                                class="btn btn-sm btn-primary text-white">
+                                                Sửa
                                             </a>
-                                            <form action="/Admin/DeleteTour/@tour.Id" method="post" style="display:inline-block;">
+                                            <form action="/Admin/DeleteTour/@tour.Id" method="post" class="mb-0">
                                                 @Html.AntiForgeryToken()
-                                                <button type="submit" class="btn btn-danger shadow btn-xs sharp"
+                                                <button type="submit" class="btn btn-sm btn-danger"
                                                     onclick="return confirm('Bạn có chắc muốn xóa tour này?');">
-                                                    <i class="fa fa-trash"></i>
+                                                    Xóa
                                                 </button>
                                             </form>
                                         </div>

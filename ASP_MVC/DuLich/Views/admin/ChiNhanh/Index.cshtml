@@ -1,4 +1,4 @@
-@model IEnumerable<DuLich.Models.ChiNhanh>
+@model IEnumerable<DuLich.Models.ChiNhanhViewModel>
 
 @{ 
     ViewData["Title"] = "Quản lý Chi nhánh";
@@ -19,7 +19,7 @@
             <div class="card">
                 <div class="card-header">
                     <h4 class="card-title">Danh sách Chi nhánh</h4>
-                    <a asp-action="Create" class="btn btn-primary">Thêm mới</a>
+                    <a asp-controller="ChiNhanh" asp-action="Create" class="btn btn-primary">Thêm mới</a>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -31,6 +31,7 @@
                                     <th>Số điện thoại</th>
                                     <th>Số nhân viên</th>
                                     <th>Số tour</th>
+                                    <th>Doanh thu</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -38,15 +39,16 @@
                                 @foreach (var item in Model)
                                 {
                                     <tr>
-                                        <td>@item.TenChiNhanh</td>
-                                        <td>@item.DiaChi</td>
-                                        <td>@item.SoDienThoai</td>
-                                        <td>@item.NhanViens.Count()</td>
-                                        <td>@item.Tours.Count()</td>
+                                        <td>@item.ChiNhanh.TenChiNhanh</td>
+                                        <td>@item.ChiNhanh.DiaChi</td>
+                                        <td>@item.ChiNhanh.SoDienThoai</td>
+                                        <td>@item.SoNhanVien</td>
+                                        <td>@item.SoTour</td>
+                                        <td>@item.DoanhThu.ToString("N0") VNĐ</td>
                                         <td>
                                             <div class="d-flex">
-                                                <a asp-action="Edit" asp-route-id="@item.MaChiNhanh" class="btn btn-primary shadow btn-xs sharp me-1"><i class="fas fa-pencil-alt"></i></a>
-                                                <a asp-action="Delete" asp-route-id="@item.MaChiNhanh" class="btn btn-danger shadow btn-xs sharp"><i class="fa fa-trash"></i></a>
+                                                <a asp-controller="ChiNhanh" asp-action="Edit" asp-route-id="@item.ChiNhanh.MaChiNhanh" class="btn btn-primary shadow btn-xs sharp me-1">Sửa<i class="fas fa-pencil-alt"></i></a>
+                                                <a asp-controller="ChiNhanh" asp-action="Delete" asp-route-id="@item.ChiNhanh.MaChiNhanh" class="btn btn-danger shadow btn-xs sharp">Xóa<i class="fa fa-trash"></i></a>
                                             </div>
                                         </td>
                                     </tr>

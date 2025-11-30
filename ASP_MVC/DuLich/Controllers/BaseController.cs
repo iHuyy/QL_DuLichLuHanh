@@ -1,3 +1,4 @@
+using DuLich.Models;
 using DuLich.Models.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -5,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Data;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using System;
+using System.Linq;
 
 namespace DuLich.Controllers
 {
@@ -21,6 +24,34 @@ namespace DuLich.Controllers
         {
             await SetUserContext();
             await next();
+        }
+
+        /// <summary>
+        /// Mark bookings whose tours have finished as completed (based on tour status).
+        /// </summary>
+        protected async Task<int> UpdateDepartedBookingsToCompletedAsync()
+        {
+            var bookingsToComplete = await _context.DatTours
+                .Include(d => d.Tour)
+                .Where(d => d.TrangThaiDat != "Đã hủy"
+                            && d.TrangThaiDat != "Hoàn thành"
+                            && d.Tour != null
+                            && d.Tour.TrangThai == "Hoàn thành")
+                .ToListAsync();
+
+            if (!bookingsToComplete.Any())
+            {
+                return 0;
+            }
+
+            foreach (var booking in bookingsToComplete)
+            {
+                booking.TrangThaiDat = "Hoàn thành";
+            }
+
+            _context.DatTours.UpdateRange(bookingsToComplete);
+            await _context.SaveChangesAsync();
+            return bookingsToComplete.Count;
         }
 
         private async Task SetUserContext()

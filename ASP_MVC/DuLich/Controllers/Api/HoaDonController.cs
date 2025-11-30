@@ -4,12 +4,6 @@ using DuLich.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using iText.Kernel.Pdf;
-using iText.Kernel.Pdf.Canvas.Parser;
-using iText.Kernel.Pdf.Canvas.Parser.Listener;
-using System.Text.RegularExpressions;
-using System.Globalization;
-using System.IO;
 
 namespace DuLich.Controllers.Api
 {
@@ -89,8 +83,10 @@ namespace DuLich.Controllers.Api
             }
 
             // Cập nhật trạng thái
-            booking.TrangThaiDat = "Đã thanh toán";
-            booking.TrangThaiThanhToan = "Đã thanh toán";
+            if (booking.TrangThaiDat != "Đã xác nhận" && booking.TrangThaiDat != "Hoàn thành" && booking.TrangThaiDat != "Đã hủy")
+            {
+                booking.TrangThaiDat = "Chờ xác nhận";
+            }
             booking.HoaDon.TrangThai = "Đã thanh toán"; // Đồng bộ trạng thái
 
             // Ký lại hóa đơn (để xác nhận trạng thái mới nếu cần) hoặc giữ nguyên chữ ký cũ
@@ -134,231 +130,86 @@ namespace DuLich.Controllers.Api
             // SỬA LỖI: Ép kiểu hoặc dùng ! để khẳng định không null (vì đã check ở trên)
             var htmlContent = GenerateInvoiceHtml(booking.HoaDon!, booking, booking.Tour!, customer, signerName);
 
-            return Content(htmlContent, "text/html; charset=utf-8", System.Text.Encoding.UTF8);
+            return Content(htmlContent, "text/html");
         }
 
         // Hàm Helper sinh HTML (Copy logic từ CustomerController sang đây)
         private string GenerateInvoiceHtml(HoaDon hoaDon, DatTour booking, Tour tour, KhachHang customer, string signerName)
         {
+            // Tính toán hash để hiển thị (giống logic Verify)
+            var signatureData = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
+            string hashHex = "";
+            string authCode = "";
+
+            try
+            {
+                byte[] hashBytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(signatureData));
+                hashHex = BitConverter.ToString(hashBytes).Replace("-", "");
+                authCode = hashHex.Length >= 12 ? hashHex.Substring(0, 12) : hashHex;
+            }
+            catch { }
+
             var total = hoaDon.SoTien ?? 0m;
-            var ngayXuat = hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss") ?? "";
-            var paymentMethod = (!string.IsNullOrEmpty(hoaDon.TrangThai) && (hoaDon.TrangThai.Contains("Thanh toán") || hoaDon.TrangThai.Contains("Paid")))
-                                ? "Chuyển khoản / Online" : "Chưa thanh toán";
+            var ngayXuat = hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss") ?? "N/A";
+            var ngayDi = tour.ThoiGian?.ToString("dd/MM/yyyy") ?? "N/A";
 
-            // Tính toán Subtotal
-            decimal priceAdult = tour.GiaNguoiLon ?? 0;
-            decimal subAdult = (booking.SoNguoiLon ?? 0) * priceAdult;
-
-            decimal priceChild = tour.GiaTreEm ?? 0;
-            decimal subChild = (booking.SoTreEm ?? 0) * priceChild;
-
-            // Tạo HTML
+            // Trả về chuỗi HTML
             return $@"
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset='UTF-8'>
-                <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-                <style>
-                    /* Cập nhật font-family để hỗ trợ tốt nhất trên Mobile */
-                    body {{ 
-                        font-family: 'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif; 
-                        margin: 20px; 
-                        font-size: 14px; 
-                        line-height: 1.4; 
-                        color: #000; 
-                    }}
-            .header {{ text-align: center; margin-bottom: 10px; }}
-            .header h2 {{ text-transform: uppercase; margin: 0; font-size: 22px; font-weight: bold; }}
-            .divider {{ border-bottom: 2px solid #000; margin-bottom: 20px; }}
-            
-            /* Bảng thông tin 2 cột */
-            .info-grid {{ display: flex; justify-content: space-between; margin-bottom: 5px; }}
-            .info-col {{ width: 48%; }}
-            .info-row {{ margin-bottom: 5px; }}
-            .label {{ font-weight: bold; }}
-
-            /* Bảng sản phẩm */
-            table.items {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            table.items th, table.items td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }}
-            table.items th {{ background-color: #f0f0f0; font-weight: bold; text-align: center; }}
-            .text-right {{ text-align: right !important; }}
-            .text-center {{ text-align: center !important; }}
-            
-            /* Tổng tiền */
-            .total-row td {{ border: none; border-top: 2px solid #000; font-weight: bold; padding-top: 10px; font-size: 16px; }}
-            
-            /* Footer */
-            .footer {{ margin-top: 40px; text-align: right; }}
-            .signer-title {{ font-weight: bold; margin-bottom: 50px; }}
-            .signer-name {{ font-weight: bold; text-transform: uppercase; }}
-            .timestamp {{ font-size: 12px; color: #555; }}
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset='UTF-8'>
+        <style>
+            body {{ font-family: DejaVu Sans, Arial, sans-serif; margin: 20px; font-size: 14px; line-height: 1.5; }}
+            .header {{ text-align: center; margin-bottom: 30px; border-bottom: 2px solid #007AFF; padding-bottom: 10px; }}
+            .header h1 {{ color: #007AFF; margin: 0; }}
+            .section-title {{ color: #007AFF; font-weight: bold; margin-top: 20px; border-bottom: 1px solid #ddd; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+            td {{ padding: 8px; vertical-align: top; }}
+            .label {{ font-weight: bold; color: #555; width: 140px; }}
+            .total-box {{ text-align: right; margin-top: 20px; font-size: 18px; font-weight: bold; color: #d32f2f; }}
+            .signature-box {{ margin-top: 40px; background: #f9f9f9; padding: 15px; border-radius: 8px; font-size: 11px; word-break: break-all; }}
+            .footer {{ margin-top: 50px; text-align: center; font-size: 12px; color: #888; }}
         </style>
     </head>
     <body>
         <div class='header'>
-            <h2>HÓA ĐƠN / INVOICE</h2>
-        </div>
-        <div class='divider'></div>
-
-        <div class='info-grid'>
-            <div class='info-col'>
-                <div class='info-row'><span class='label'>Mã đơn hàng / Order ID:</span> {hoaDon.MaHoaDon}</div>
-                <div class='info-row'><span class='label'>Khách hàng / Customer:</span> {customer.HoTen}</div>
-            </div>
-            <div class='info-col'>
-                <div class='info-row'><span class='label'>Ngày / Date:</span> {ngayXuat}</div>
-                <div class='info-row'><span class='label'>Thanh toán / Payment:</span> {paymentMethod}</div>
-            </div>
-        </div>
-        
-        <div style='margin-bottom: 20px;'>
-            <span class='label'>Địa chỉ / Address:</span> {customer.DiaChi} - <span class='label'>SĐT:</span> {customer.SoDienThoai}
+            <h1>HÓA ĐƠN ĐIỆN TỬ</h1>
+            <p>Mã hóa đơn: #{hoaDon.MaHoaDon} | Ngày xuất: {ngayXuat}</p>
         </div>
 
-        <table class='items'>
-            <thead>
-                <tr>
-                    <th style='width: 45%'>Sản phẩm / Product</th>
-                    <th style='width: 10%'>SL / Qty</th>
-                    <th style='width: 20%'>Đơn giá / Price</th>
-                    <th style='width: 25%'>Thành tiền / Subtotal</th>
-                </tr>
-            </thead>
-            <tbody>
-                {(booking.SoNguoiLon > 0 ? $@"
-                <tr>
-                    <td>Vé người lớn - {tour.TieuDe}</td>
-                    <td class='text-center'>{booking.SoNguoiLon}</td>
-                    <td class='text-right'>{priceAdult:N0}</td>
-                    <td class='text-right'>{subAdult:N0}</td>
-                </tr>" : "")}
-                
-                {(booking.SoTreEm > 0 ? $@"
-                <tr>
-                    <td>Vé trẻ em - {tour.TieuDe}</td>
-                    <td class='text-center'>{booking.SoTreEm}</td>
-                    <td class='text-right'>{priceChild:N0}</td>
-                    <td class='text-right'>{subChild:N0}</td>
-                </tr>" : "")}
-
-                <tr class='total-row'>
-                    <td colspan='3' class='text-right'>Tổng cộng / Total</td>
-                    <td class='text-right'>{total:N0} VNĐ</td>
-                </tr>
-            </tbody>
+        <div class='section-title'>THÔNG TIN KHÁCH HÀNG</div>
+        <table>
+            <tr><td class='label'>Họ tên:</td><td>{customer.HoTen}</td></tr>
+            <tr><td class='label'>Email:</td><td>{customer.Email}</td></tr>
+            <tr><td class='label'>Số điện thoại:</td><td>{customer.SoDienThoai}</td></tr>
+            <tr><td class='label'>Địa chỉ:</td><td>{customer.DiaChi}</td></tr>
         </table>
 
+        <div class='section-title'>CHI TIẾT DỊCH VỤ</div>
+        <table>
+            <tr><td class='label'>Tên Tour:</td><td><strong>{tour.TieuDe}</strong></td></tr>
+            <tr><td class='label'>Khởi hành:</td><td>{ngayDi} tại {tour.NoiKhoiHanh}</td></tr>
+            <tr><td class='label'>Số lượng:</td><td>{booking.SoNguoiLon} Người lớn, {booking.SoTreEm} Trẻ em</td></tr>
+            <tr><td class='label'>Trạng thái:</td><td>{hoaDon.TrangThai}</td></tr>
+        </table>
+
+        <div class='total-box'>
+            TỔNG THANH TOÁN: {total:N0} VNĐ
+        </div>
+
+        <div class='signature-box'>
+            <strong>THÔNG TIN XÁC THỰC (DIGITAL SIGNATURE)</strong><br/>
+            <p>Chữ ký số hệ thống:<br/>{hoaDon.ChuKySo}</p>
+            <p>Mã kiểm tra (Auth Code): <b>{authCode}</b></p>
+            <p><i>Hóa đơn này được ký số bảo mật bởi hệ thống DuLich. Mọi chỉnh sửa sẽ làm mất hiệu lực của chữ ký.</i></p>
+        </div>
+
         <div class='footer'>
-            <div class='signer-title'>Người ký / Signed by:</div>
-            <div class='signer-name'>{signerName}</div>
-            <div class='timestamp'>{DateTime.Now:yyyy-MM-dd HH:mm:ss K}</div>
+            Cảm ơn quý khách đã sử dụng dịch vụ của chúng tôi!
         </div>
     </body>
     </html>";
-        }
-
-        [HttpPost("verify")]
-        [Authorize(Policy = "MobileUser")] // Yêu cầu Token từ Mobile
-        public async Task<IActionResult> VerifyInvoice(IFormFile? invoiceFile)
-        {
-            try
-            {
-                if (invoiceFile == null || invoiceFile.Length == 0)
-                {
-                    return Ok(new { success = false, message = "Vui lòng chọn file PDF." });
-                }
-
-                // 1. Đọc nội dung text từ file PDF
-                string pdfText = string.Empty;
-                try 
-                {
-                    using (var reader = new PdfReader(invoiceFile.OpenReadStream()))
-                    using (var pdfDoc = new PdfDocument(reader))
-                    {
-                        var strategy = new LocationTextExtractionStrategy();
-                        pdfText = PdfTextExtractor.GetTextFromPage(pdfDoc.GetPage(1), strategy);
-                    }
-                }
-                catch
-                {
-                    return Ok(new { success = false, message = "File lỗi hoặc không đọc được nội dung PDF." });
-                }
-
-                // 2. Trích xuất thông tin từ text PDF bằng Regex
-                var matchId = Regex.Match(pdfText, @"Order ID:\s*(\d+)");
-                var matchDate = Regex.Match(pdfText, @"Date:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})"); 
-                var matchTotal = Regex.Match(pdfText, @"Total\s*([\d,.]+)\s*VNĐ");
-
-                if (!matchId.Success)
-                {
-                    return Ok(new { success = false, message = "Không tìm thấy Mã hóa đơn trên file PDF." });
-                }
-
-                string pdfMaHoaDon = matchId.Groups[1].Value;
-                // Nếu không bắt được ngày hoặc tiền thì gán mặc định để tránh lỗi null, nhưng verify sẽ fail
-                string pdfNgayXuat = matchDate.Success ? matchDate.Groups[1].Value : "";
-                string pdfSoTienRaw = matchTotal.Success ? matchTotal.Groups[1].Value.Replace(",", "").Replace(".", "") : "0";
-
-                // Format tiền về dạng chuẩn (ví dụ "35000")
-                if (decimal.TryParse(pdfSoTienRaw, out decimal parsedMoney))
-                {
-                    pdfSoTienRaw = parsedMoney.ToString("0.##", CultureInfo.InvariantCulture);
-                }
-
-                // 3. Tái tạo Payload
-                string reconstructedPayload = $"MaHoaDon={pdfMaHoaDon}|SoTien={pdfSoTienRaw}|NgayXuat={pdfNgayXuat}";
-
-                // 4. Lấy Chữ ký số từ Database
-                if (!int.TryParse(pdfMaHoaDon, out int id)) 
-                     return Ok(new { success = false, message = "Mã hóa đơn không hợp lệ." });
-
-                var hoaDonDB = await _dbContext.HoaDons.AsNoTracking().FirstOrDefaultAsync(h => h.MaHoaDon == id);
-
-                if (hoaDonDB == null)
-                {
-                    return Ok(new { success = false, message = $"Hóa đơn #{id} không tồn tại trên hệ thống." });
-                }
-                
-                if (string.IsNullOrEmpty(hoaDonDB.ChuKySo))
-                {
-                    // Trả về data để hiển thị dù lỗi
-                    return Ok(new { 
-                        success = true, 
-                        isValid = false, 
-                        data = new { maHoaDon = pdfMaHoaDon, ngayXuat = pdfNgayXuat, trangThai = hoaDonDB.TrangThai },
-                        message = "Hóa đơn gốc trên hệ thống chưa được ký số." 
-                    });
-                }
-
-                // 5. Xác thực: Hash(Payload tái tạo) vs Decrypt(Chữ ký DB)
-                bool isValid = _rsaService.Verify(reconstructedPayload, hoaDonDB.ChuKySo);
-
-                if (isValid)
-                {
-                    return Ok(new
-                    {
-                        success = true,
-                        isValid = true,
-                        data = new { maHoaDon = pdfMaHoaDon, ngayXuat = pdfNgayXuat, trangThai = hoaDonDB.TrangThai },
-                        message = "Hóa đơn HỢP LỆ. Thông tin trên file PDF khớp hoàn toàn với hệ thống."
-                    });
-                }
-                else
-                {
-                    return Ok(new
-                    {
-                        success = true,
-                        isValid = false,
-                        data = new { maHoaDon = pdfMaHoaDon, ngayXuat = pdfNgayXuat, trangThai = hoaDonDB.TrangThai },
-                        message = "CẢNH BÁO: Nội dung file PDF không khớp với chữ ký số! Có thể số tiền hoặc ngày tháng đã bị sửa đổi."
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                return Ok(new { success = false, message = "Lỗi hệ thống: " + ex.Message });
-            }
         }
     }
 }

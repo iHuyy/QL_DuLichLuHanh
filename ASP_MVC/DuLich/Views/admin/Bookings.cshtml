@@ -39,7 +39,8 @@
 </div>
 
 <!-- Modal hiển thị hóa đơn -->
-<div class="modal fade" id="invoiceModal" tabindex="-1" role="dialog" aria-labelledby="invoiceModalLabel" aria-hidden="true">
+<div class="modal fade" id="invoiceModal" tabindex="-1" role="dialog" aria-labelledby="invoiceModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-xl" role="document" style="max-width: 90%;">
         <div class="modal-content">
             <div class="modal-header">
@@ -100,7 +101,6 @@
                         orderable: false,
                         render: function (data) {
                             const actions = [];
-                            actions.push(`<a href="/Admin/TourDetail/${data.maTour}" class="btn btn-primary btn-sm mr-1">Xem tour</a>`);
                             const hasInvoice = !!data.maHoaDon;
                             if (hasInvoice) {
                                 actions.push(`<button class="btn btn-success btn-sm mr-1" onclick="showInvoice(${data.maHoaDon})">Xem hóa đơn</button>`);

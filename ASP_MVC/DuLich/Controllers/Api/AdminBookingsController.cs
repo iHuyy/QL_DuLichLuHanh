@@ -25,10 +25,30 @@ namespace DuLich.Controllers.Api
         }
 
         [HttpGet("bookings")]
-        [HttpGet("/staff/api/bookings")]
         public async Task<IActionResult> GetBookings()
         {
-            var data = await _db.DatTours
+            var query = _db.DatTours.AsQueryable();
+
+            // If user is staff, filter by their branch. Admin sees all.
+            if (User.IsInRole("ROLE_STAFF"))
+            {
+                var username = User.Identity?.Name;
+                if (!string.IsNullOrEmpty(username))
+                {
+                    var staff = await _db.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+                    if (staff != null && staff.MaChiNhanh.HasValue)
+                    {
+                        query = query.Where(d => d.Tour != null && d.Tour.MaChiNhanh == staff.MaChiNhanh);
+                    }
+                    else
+                    {
+                        // Staff not found or no branch, return empty list
+                        return Ok(new { data = new List<object>() });
+                    }
+                }
+            }
+
+            var data = await query
                 .AsNoTracking()
                 .Include(d => d.HoaDon)
                 .Include(d => d.Tour)
@@ -55,7 +75,6 @@ namespace DuLich.Controllers.Api
         }
 
         [HttpPost("bookings/confirm")]
-        [HttpPost("/staff/api/bookings/confirm")]
         public async Task<IActionResult> ConfirmBooking([FromForm] int bookingId)
         {
             var booking = await _db.DatTours
@@ -68,7 +87,6 @@ namespace DuLich.Controllers.Api
                 return NotFound(new { message = "Không tìm thấy đặt tour." });
 
             booking.TrangThaiDat = "Đã xác nhận";
-            booking.TrangThaiThanhToan = booking.TrangThaiThanhToan ?? "Chưa thanh toán";
 
             // Tạo hóa đơn nếu chưa có, đồng thời ký số
             if (booking.HoaDon == null)
@@ -99,16 +117,27 @@ namespace DuLich.Controllers.Api
         }
 
         [HttpPost("bookings/cancel")]
-        [HttpPost("/staff/api/bookings/cancel")]
         public async Task<IActionResult> CancelBooking([FromForm] int bookingId, [FromForm] string reason)
         {
-            var booking = await _db.DatTours.FirstOrDefaultAsync(d => d.MaDatTour == bookingId);
+            var booking = await _db.DatTours
+                .Include(b => b.Tour) // Include tour to update its slots
+                .FirstOrDefaultAsync(d => d.MaDatTour == bookingId);
+
             if (booking == null)
                 return NotFound(new { message = "Không tìm thấy đặt tour." });
 
+            // Refund slots if the booking was taking up space
+            if (booking.TrangThaiDat == "Chờ xác nhận" || booking.TrangThaiDat == "Đã xác nhận")
+            {
+                if (booking.Tour != null && booking.Tour.SoLuong.HasValue)
+                {
+                    var totalGuests = (booking.SoNguoiLon ?? 0) + (booking.SoTreEm ?? 0);
+                    booking.Tour.SoLuong += totalGuests;
+                }
+            }
+
             booking.TrangThaiDat = "Đã hủy";
-            booking.TrangThaiThanhToan = "Đã hủy";
-            _db.DatTours.Update(booking);
+            
             await _db.SaveChangesAsync();
 
             return Ok(new { message = "Đã hủy đặt tour." });

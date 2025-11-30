@@ -113,7 +113,33 @@ class InvoicesPageState extends State<InvoicesPage> {
             separatorBuilder: (ctx, i) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final inv = invoices[index];
-              final isPaid = inv.status.toLowerCase().contains('đã') || inv.status.toLowerCase().contains('paid');
+              final statusLower = inv.status.toLowerCase();
+
+              // --- LOGIC KIỂM TRA MỚI ---
+              // 1. Kiểm tra hủy trước
+              final isCancelled = statusLower.contains('hủy') || statusLower.contains('cancel');
+              
+              // 2. Kiểm tra thanh toán (chỉ đúng nếu không hủy VÀ có từ khóa thanh toán/paid)
+              final isPaid = !isCancelled && (statusLower.contains('thanh toán') || statusLower.contains('paid'));
+
+              // 3. Xác định màu và text
+              Color statusColor;
+              String statusText;
+              IconData statusIcon;
+
+              if (isCancelled) {
+                statusColor = Colors.red;
+                statusText = 'ĐÃ HỦY';
+                statusIcon = Icons.cancel_outlined;
+              } else if (isPaid) {
+                statusColor = primaryGreen;
+                statusText = 'ĐÃ THANH TOÁN';
+                statusIcon = Icons.check_circle_outline;
+              } else {
+                statusColor = Colors.orange;
+                statusText = 'CHƯA THANH TOÁN';
+                statusIcon = Icons.receipt_outlined;
+              }
 
               return InkWell(
                 borderRadius: BorderRadius.circular(12),
@@ -140,12 +166,12 @@ class InvoicesPageState extends State<InvoicesPage> {
                         width: 48,
                         height: 48,
                         decoration: BoxDecoration(
-                          color: isPaid ? primaryGreen.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                          color: statusColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          Icons.receipt_outlined,
-                          color: isPaid ? primaryGreen : Colors.orange,
+                          statusIcon,
+                          color: statusColor,
                           size: 24,
                         ),
                       ),
@@ -189,11 +215,11 @@ class InvoicesPageState extends State<InvoicesPage> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: isPaid ? primaryGreen : Colors.orange,
+                              color: statusColor,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              isPaid ? 'ĐÃ THANH TOÁN' : 'CHƯA THANH TOÁN',
+                              statusText,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 9,

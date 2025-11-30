@@ -56,33 +56,44 @@
                                     <td>@tour.Gia.ToString("N0") VNĐ</td>
                                     <td>@tour.SoChoConLai / @tour.SoLuong</td>
                                     <td>
-                                        <select class="form-control form-control-sm" onchange="updateTourStatus(this, @tour.Id)">
-                                            <option value="Hoạt động" selected="@(tour.TrangThai == "Hoạt động" ? "selected" : (string?)null)">Hoạt động</option>
-                                            <option value="Tạm ngưng" selected="@(tour.TrangThai == "Tạm ngưng" ? "selected" : (string?)null)">Tạm ngưng</option>
-                                            <option value="Đã hủy" selected="@(tour.TrangThai == "Đã hủy" ? "selected" : (string?)null)">Đã hủy</option>
-                                            <option value="Đã kết thúc" selected="@(tour.TrangThai == "Đã kết thúc" ? "selected" : (string?)null)">Đã kết thúc</option>
-                                            <option value="Ẩn" selected="@(tour.TrangThai == "Ẩn" ? "selected" : (string?)null)">Ẩn</option>
+                                        <select class="form-control form-control-sm"
+                                            onchange="updateTourStatus(this, @tour.Id)">
+                                            <option value="Hoạt động"
+                                                selected="@(tour.TrangThai == "Hoạt động" ? "selected" : (string?)null)">
+                                                Hoạt động</option>
+                                            <option value="Tạm ngưng"
+                                                selected="@(tour.TrangThai == "Tạm ngưng" ? "selected" : (string?)null)">Tạm
+                                                ngưng</option>
+                                            <option value="Đã hủy"
+                                                selected="@(tour.TrangThai == "Đã hủy" ? "selected" : (string?)null)">Đã hủy
+                                            </option>
+                                            <option value="Đã kết thúc"
+                                                selected="@(tour.TrangThai == "Đã kết thúc" ? "selected" : (string?)null)">
+                                                Đã kết thúc</option>
+                                            <option value="Ẩn"
+                                                selected="@(tour.TrangThai == "Ẩn" ? "selected" : (string?)null)">Ẩn
+                                            </option>
                                         </select>
                                     </td>
                                     <td>
                                         @if (!string.IsNullOrEmpty(tour.QR))
                                         {
                                             <button class="btn btn-info btn-sm" onclick="showQR('@tour.QR')">
-                                                <i class="fas fa-qrcode"></i>
+                                                <i class="fas fa-qrcode">QR</i>
                                             </button>
                                         }
                                     </td>
                                     <td>
-                                        <div class="d-flex">
+                                        <div class="d-flex gap-2">
                                             <a href="@Url.Action("TourDetails", "Staff", new { id = tour.Id })"
-                                               class="btn btn-info shadow btn-xs sharp mr-1">
-                                                <i class="fa fa-eye"></i>
+                                                class="btn btn-sm btn-primary">
+                                                Sửa
                                             </a>
                                             <form asp-controller="Staff" asp-action="DeleteTour" asp-route-id="@tour.Id"
-                                                  method="post" style="display:inline-block;">
-                                                <button type="submit" class="btn btn-danger shadow btn-xs sharp"
-                                                        onclick="return confirm('Bạn có chắc muốn xóa tour này?');">
-                                                    <i class="fa fa-trash"></i>
+                                                method="post" class="mb-0">
+                                                <button type="submit" class="btn btn-sm btn-danger"
+                                                    onclick="return confirm('Bạn có chắc muốn xóa tour này?');">
+                                                    Xóa
                                                 </button>
                                             </form>
                                         </div>
@@ -114,7 +125,7 @@
 
 @section Scripts {
     <script>
-        $(document).ready(function() {
+        $(document).ready(function () {
             $('#example').DataTable({
                 language: {
                     url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Vietnamese.json'
@@ -136,7 +147,7 @@
             }
 
             $.post('@Url.Action("UpdateTourStatus", "Staff")', { tourId: tourId, newStatus: newStatus })
-                .done(function(response) {
+                .done(function (response) {
                     if (response.success) {
                         location.reload();
                     } else {
@@ -144,7 +155,7 @@
                         location.reload();
                     }
                 })
-                .fail(function() {
+                .fail(function () {
                     alert('Không thể kết nối đến máy chủ để cập nhật trạng thái.');
                     location.reload();
                 });

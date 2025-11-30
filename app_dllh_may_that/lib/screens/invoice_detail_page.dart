@@ -41,7 +41,6 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       );
       final body = resp.body;
 
-      // Xử lý trường hợp server trả về HTML lỗi
       if (body.trim().startsWith('<')) {
         _showError('Lỗi server (HTML response)');
         return;
@@ -67,21 +66,14 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     setState(() => _paying = true);
 
     try {
-      // 1. Lấy ID hóa đơn
       final invoiceId = _invoice!['MAHOADON'] ?? widget.invoiceId;
-
-      // 2. Gọi PHP
       final resp = await _api.postJson(
         'pay_invoice.php',
         body: {'maHoaDon': invoiceId},
       );
 
-      // 3. Kiểm tra nội dung phản hồi trước khi decode
       final body = resp.body.trim();
-      print(">>> Pay response: $body"); // Log ra để xem lỗi là gì
-
       if (resp.statusCode == 200) {
-        // Nếu server trả về HTML (lỗi), báo lỗi rõ ràng
         if (body.startsWith('<') || !body.startsWith('{')) {
           _showError('Lỗi máy chủ: Phản hồi không đúng định dạng JSON.');
           return;
@@ -91,13 +83,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
           final decoded = jsonDecode(body);
           if (decoded['success'] == true) {
             _showSuccess(decoded['message'] ?? 'Thanh toán thành công!');
-
-            // Cập nhật UI ngay lập tức
             setState(() {
               _invoice!['TRANGTHAI'] = 'Đã thanh toán';
             });
-
-            // Tải lại dữ liệu & Xuất PDF
             await _load();
             await _exportInvoicePdf();
           } else {
@@ -156,15 +144,17 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final status = _invoice?['TRANGTHAI'] ?? '';
-    final isPaid =
-        status.toString().toLowerCase().contains('đã') ||
-        status.toString().toLowerCase() == 'paid';
+    final statusRaw = _invoice?['TRANGTHAI'] ?? '';
+    final statusLower = statusRaw.toString().toLowerCase();
 
-    final currencyFormatter = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: '₫',
-    );
+    // --- LOGIC ĐÃ SỬA ---
+    final isCancelled = statusLower.contains('hủy') || statusLower.contains('cancel');
+    
+    // Chỉ "Đã thanh toán" mới là true. "Chưa thanh toán" sẽ là false.
+    final isPaid = !isCancelled && (statusLower.contains('đã thanh toán') || statusLower == 'paid');
+    // --------------------
+
+    final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
 
     return Scaffold(
       backgroundColor: scaffoldBg,
@@ -182,14 +172,10 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: primaryDark),
         actions: [
-          if (_invoice != null && isPaid)
+          if (_invoice != null && isPaid && !isCancelled)
             IconButton(
               icon: _exporting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.print_outlined),
               onPressed: _exporting ? null : _exportInvoicePdf,
               tooltip: 'In hóa đơn',
@@ -204,9 +190,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 children: [
-                  _buildInfoCard(isPaid, currencyFormatter),
+                  _buildInfoCard(isPaid, isCancelled, currencyFormatter, statusRaw),
                   const SizedBox(height: 24),
-                  _buildActionButtons(isPaid),
+                  _buildActionButtons(isPaid, isCancelled),
                 ],
               ),
             ),
@@ -226,30 +212,37 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     );
   }
 
-  Widget _buildInfoCard(bool isPaid, NumberFormat currencyFormatter) {
+  Widget _buildInfoCard(bool isPaid, bool isCancelled, NumberFormat currencyFormatter, String statusText) {
+    Color statusColor;
+    String displayStatus;
+
+    if (isCancelled) {
+      statusColor = Colors.red;
+      displayStatus = "ĐÃ HỦY";
+    } else if (isPaid) {
+      statusColor = primaryGreen;
+      displayStatus = "ĐÃ THANH TOÁN";
+    } else {
+      statusColor = Colors.orange;
+      displayStatus = "CHƯA THANH TOÁN";
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8), // Bo góc nhẹ giống web
+        borderRadius: BorderRadius.circular(8),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Card
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: primaryDark.withOpacity(0.03),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(8),
-              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -257,132 +250,65 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'HÓA ĐƠN',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        letterSpacing: 1,
-                      ),
-                    ),
+                    Text('HÓA ĐƠN', style: TextStyle(fontSize: 12, color: Colors.grey[600], letterSpacing: 1)),
                     const SizedBox(height: 4),
-                    Text(
-                      '#${_invoice!['MAHOADON'] ?? widget.invoiceId}',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: primaryDark,
-                      ),
-                    ),
+                    Text('#${_invoice!['MAHOADON'] ?? widget.invoiceId}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: primaryDark)),
                   ],
                 ),
-                // Badge Trạng thái
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: isPaid ? primaryGreen : Colors.orange,
+                    color: statusColor,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    isPaid ? 'ĐÃ THANH TOÁN' : 'CHƯA THANH TOÁN',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                      letterSpacing: 0.5,
-                    ),
+                    displayStatus,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5),
                   ),
                 ),
               ],
             ),
           ),
           const Divider(height: 1),
-
-          // Body Card
           Padding(
             padding: const EdgeInsets.all(20.0),
             child: Column(
               children: [
-                // Tổng tiền nổi bật
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text(
-                      'Tổng thanh toán',
-                      style: TextStyle(color: Colors.grey),
-                    ),
+                    const Text('Tổng thanh toán', style: TextStyle(color: Colors.grey)),
                     const Spacer(),
                     Text(
-                      currencyFormatter.format(
-                        double.tryParse(_invoice!['SOTIEN'].toString()) ?? 0,
-                      ),
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: primaryGreen, // Tiền màu xanh lá
-                      ),
+                      currencyFormatter.format(double.tryParse(_invoice!['SOTIEN'].toString()) ?? 0),
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isCancelled ? Colors.grey : primaryGreen),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // Chi tiết
-                _buildDetailRow(
-                  Icons.calendar_today,
-                  'Ngày tạo',
-                  _invoice!['NGAYXUAT'] ?? '---',
-                ),
+                _buildDetailRow(Icons.calendar_today, 'Ngày tạo', _invoice!['NGAYXUAT'] ?? '---'),
                 const SizedBox(height: 16),
-                _buildDetailRow(
-                  Icons.confirmation_number_outlined,
-                  'Mã đặt tour',
-                  '#${_invoice!['MADATTOUR'] ?? '---'}',
-                ),
+                _buildDetailRow(Icons.confirmation_number_outlined, 'Mã đặt tour', '#${_invoice!['MADATTOUR'] ?? '---'}'),
                 const SizedBox(height: 16),
-
-                // Chữ ký số
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color:
-                        (_invoice!['CHUKYSO'] != null &&
-                            _invoice!['CHUKYSO'].toString().isNotEmpty)
-                        ? Colors.green.withOpacity(0.05)
-                        : Colors.grey.withOpacity(0.05),
+                    color: (_invoice!['CHUKYSO'] != null && _invoice!['CHUKYSO'].toString().isNotEmpty) ? Colors.green.withOpacity(0.05) : Colors.grey.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color:
-                          (_invoice!['CHUKYSO'] != null &&
-                              _invoice!['CHUKYSO'].toString().isNotEmpty)
-                          ? Colors.green.withOpacity(0.2)
-                          : Colors.grey.withOpacity(0.2),
-                    ),
+                    border: Border.all(color: (_invoice!['CHUKYSO'] != null && _invoice!['CHUKYSO'].toString().isNotEmpty) ? Colors.green.withOpacity(0.2) : Colors.grey.withOpacity(0.2)),
                   ),
                   child: Row(
                     children: [
                       Icon(
                         Icons.verified_user_outlined,
                         size: 20,
-                        color:
-                            (_invoice!['CHUKYSO'] != null &&
-                                _invoice!['CHUKYSO'].toString().isNotEmpty)
-                            ? Colors.green
-                            : Colors.grey,
+                        color: (_invoice!['CHUKYSO'] != null && _invoice!['CHUKYSO'].toString().isNotEmpty) ? Colors.green : Colors.grey,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          (_invoice!['CHUKYSO'] != null &&
-                                  _invoice!['CHUKYSO'].toString().isNotEmpty)
-                              ? 'Hóa đơn đã được ký số bảo mật.'
-                              : 'Hóa đơn chưa có chữ ký số.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[700],
-                          ),
+                          (_invoice!['CHUKYSO'] != null && _invoice!['CHUKYSO'].toString().isNotEmpty) ? 'Hóa đơn đã được ký số bảo mật.' : 'Hóa đơn chưa có chữ ký số.',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                         ),
                       ),
                     ],
@@ -401,10 +327,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.grey[100],
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: Colors.grey[100], shape: BoxShape.circle),
           child: Icon(icon, size: 18, color: primaryDark),
         ),
         const SizedBox(width: 16),
@@ -412,19 +335,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
+              Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
               const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: darkTextColor,
-                ),
-              ),
+              Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: darkTextColor)),
             ],
           ),
         ),
@@ -432,7 +345,25 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     );
   }
 
-  Widget _buildActionButtons(bool isPaid) {
+  Widget _buildActionButtons(bool isPaid, bool isCancelled) {
+    if (isCancelled) {
+      return SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton.icon(
+          onPressed: null,
+          icon: const Icon(Icons.block),
+          label: const Text('HÓA ĐƠN ĐÃ HỦY'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.grey,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          ),
+        ),
+      );
+    }
+
     if (isPaid) {
       return SizedBox(
         width: double.infinity,
@@ -440,83 +371,48 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
         child: ElevatedButton.icon(
           onPressed: _exporting ? null : _exportInvoicePdf,
           icon: _exporting
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
               : const Icon(Icons.download_rounded),
           label: Text(_exporting ? 'Đang tải...' : 'TẢI HÓA ĐƠN PDF'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: primaryDark, // Nút tải màu Xanh đen
+            backgroundColor: primaryDark,
             foregroundColor: Colors.white,
             elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
           ),
         ),
       );
-    } else {
-      return Column(
-        children: [
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: ElevatedButton(
-              onPressed: _paying ? null : _pay,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryGreen, // Nút thanh toán màu Xanh lá
-                foregroundColor: Colors.white,
-                elevation: 4,
-                shadowColor: primaryGreen.withOpacity(0.4),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              child: _paying
-                  ? const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Text(
-                          'ĐANG XỬ LÝ...',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    )
-                  : const Text(
-                      'THANH TOÁN NGAY',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1,
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Nhấn thanh toán để xác nhận và nhận hóa đơn điện tử.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
-          ),
-        ],
-      );
     }
+
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: ElevatedButton(
+            onPressed: _paying ? null : _pay,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryGreen,
+              foregroundColor: Colors.white,
+              elevation: 4,
+              shadowColor: primaryGreen.withOpacity(0.4),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+            ),
+            child: _paying
+                ? const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                      SizedBox(width: 12),
+                      Text('ĐANG XỬ LÝ...', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    ],
+                  )
+                : const Text('THANH TOÁN NGAY', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 1)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text('Nhấn thanh toán để xác nhận và nhận hóa đơn điện tử.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+      ],
+    );
   }
 }

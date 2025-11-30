@@ -1,85 +1,112 @@
 <?php
+// KLTN/get_tour.php
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/connect.php';
 
-// Lấy param (POST JSON hoặc GET maTour)
-$data = json_decode(file_get_contents("php://input"), true);
-$maTour = null;
-if (!empty($data['maTour'])) $maTour = trim($data['maTour']);
-if (!$maTour && isset($_GET['maTour'])) $maTour = trim($_GET['maTour']);
-
-if (!$maTour) {
-    http_response_code(400);
-    echo json_encode(["success" => false, "message" => "Missing maTour"]);
+$id = $_GET['id'] ?? null;
+if (!$id) {
+    echo json_encode(['success' => false, 'message' => 'Missing ID']);
     exit;
 }
 
-// ensure we have connection
-if (empty($conn) || $conn === null) {
-    $conn = connect_read();
-}
-if (!$conn) {
-    http_response_code(500);
-    echo json_encode(["success" => false, "message" => "DB connection failed"]);
-    exit;
-}
+check_db_connection();
 
-$sql = "SELECT MaTour, TieuDe, MoTa, NoiKhoiHanh, NoiDen, ThanhPho, ThoiGian, GiaNguoiLon, GiaTreEm, SoLuong, ChiNhanh, DuLieuAnh, LoaiAnh FROM Tour WHERE MaTour = :id";
-$stid = @oci_parse($conn, $sql);
-if (!$stid) {
-    $e = oci_error($conn);
-    http_response_code(500);
-    echo json_encode(["success" => false, "message" => $e['message'] ?? 'Parse error']);
-    close_conn($conn);
-    exit;
-}
+// 1. Lấy thông tin chi tiết Tour
+$sql = "SELECT t.MATOUR, t.TIEUDE, t.MOTA, t.NOIKHOIHANH, t.NOIDEN, t.THANHPHO, 
+               TO_CHAR(t.THOIGIAN, 'DD/MM/YYYY') AS THOIGIAN_DEP, 
+               t.GIANGUOILON, t.GIATREEM, t.SOLUONG, 
+               c.TENCHINHANH,
+               
+               (SELECT NVL(SUM(dt.SoNguoiLon + dt.SoTreEm), 0) 
+                FROM DATTOUR dt 
+                WHERE dt.MaTour = t.MaTour 
+                AND dt.TrangThaiDat != 'Đã hủy' 
+                AND dt.TrangThaiDat != 'Cancelled') AS DA_DAT
 
-oci_bind_by_name($stid, ":id", $maTour);
-$ok = @oci_execute($stid);
-if (!$ok) {
-    $e = oci_error($stid) ?: oci_error($conn);
-    http_response_code(500);
-    echo json_encode(["success" => false, "message" => $e['message'] ?? 'Execute error']);
-    oci_free_statement($stid);
-    close_conn($conn);
-    exit;
-}
+        FROM Tour t 
+        LEFT JOIN ChiNhanh c ON t.MaChiNhanh = c.MaChiNhanh 
+        WHERE t.MaTour = :param_tour_id";
 
-$row = oci_fetch_assoc($stid);
-if (!$row) {
-    echo json_encode(["success" => false, "message" => "Tour not found"]);
-    oci_free_statement($stid);
-    close_conn($conn);
-    exit;
-}
+$stmt = oci_parse($conn, $sql);
+oci_bind_by_name($stmt, ':param_tour_id', $id);
 
-// Normalize keys to uppercase for client
-$row = array_change_key_case($row, CASE_UPPER);
+if (oci_execute($stmt)) {
+    $tour = oci_fetch_assoc($stmt);
+    
+    if ($tour) {
+        // 2. Lấy danh sách ảnh
+        $sqlImg = "SELECT DuLieuAnh, LoaiAnh FROM AnhTour WHERE MaTour = :p_tour_id_img";
+        $stmtImg = oci_parse($conn, $sqlImg);
+        oci_bind_by_name($stmtImg, ':p_tour_id_img', $id);
+        oci_execute($stmtImg);
+        
+        $images = [];
+        $firstImage = ''; // Biến lưu ảnh đại diện
+        $firstMime = '';
 
-// Convert BLOB to base64 data URL
-if (isset($row['DULIEUANH']) && $row['DULIEUANH'] !== null && $row['DULIEUANH'] !== '') {
-    try {
-        $blob = $row['DULIEUANH'];
-        $data = null;
-        if (is_object($blob) && method_exists($blob, 'load')) {
-            $data = $blob->load();
-        } else if (is_resource($blob)) {
-            $data = stream_get_contents($blob);
-        } else {
-            $data = $blob;
+        while ($rowImg = oci_fetch_assoc($stmtImg)) {
+            if (isset($rowImg['DULIEUANH']) && $rowImg['DULIEUANH'] !== null) {
+                $blob = $rowImg['DULIEUANH'];
+                $data = null;
+                if (is_object($blob) && method_exists($blob, 'load')) {
+                    $data = $blob->load();
+                } else {
+                    $data = (string)$blob;
+                }
+
+                if ($data) {
+                    $mime = $rowImg['LOAIANH'] ?: 'image/jpeg';
+                    $b64 = "data:$mime;base64," . base64_encode($data);
+                    $images[] = $b64;
+                    
+                    // Lưu ảnh đầu tiên làm ảnh đại diện
+                    if (empty($firstImage)) {
+                        $firstImage = $b64;
+                        $firstMime = $mime;
+                    }
+                }
+            }
         }
-        if ($data !== null && $data !== '') {
-            $b64 = base64_encode($data);
-            $mime = isset($row['LOAIANH']) && $row['LOAIANH'] !== '' ? trim($row['LOAIANH']) : 'image/jpeg';
-            $row['DULIEUANH'] = 'data:' . $mime . ';base64,' . $b64;
-        }
-    } catch (Exception $e) {
-        // on error, leave as-is
+        oci_free_statement($stmtImg);
+
+        // Tính số chỗ còn lại
+        $tongSoCho = intval($tour['SOLUONG']);
+        $daDat = intval($tour['DA_DAT']);
+        $conLai = $tongSoCho - $daDat;
+        if ($conLai < 0) $conLai = 0;
+
+        $response = [
+            'maTour' => $tour['MATOUR'],
+            'tieuDe' => $tour['TIEUDE'],
+            'moTa' => $tour['MOTA'],
+            'noiKhoiHanh' => $tour['NOIKHOIHANH'],
+            'noiDen' => $tour['NOIDEN'],
+            'thoiGian' => $tour['THOIGIAN_DEP'],
+            'giaNguoiLon' => $tour['GIANGUOILON'],
+            'giaTreEm' => $tour['GIATREEM'],
+            'soLuong' => $tour['SOLUONG'],
+            
+            'soChoConLai' => $conLai,
+            'chiNhanh' => $tour['TENCHINHANH'] ?? 'Trụ sở chính', 
+            
+            'images' => $images,
+            
+            // QUAN TRỌNG: Trả về key này để Flutter không bị mất ảnh khi reload
+            'HINHANH' => $firstImage,
+            'DULIEUANH' => $firstImage,
+            'LOAIANH' => $firstMime
+        ];
+        
+        echo json_encode(['success' => true, 'data' => $response]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Tour not found']);
     }
+} else {
+    echo json_encode(['success' => false, 'message' => 'Query failed']);
 }
 
-echo json_encode(["success" => true, "tour" => $row]);
-
-oci_free_statement($stid);
-close_conn($conn);
+oci_free_statement($stmt);
+if ($conn) oci_close($conn);
 ?>

@@ -43,6 +43,32 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         // Make cookie policy developer-friendly: when running on HTTP (local dev), avoid SameSite=None without Secure
         options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
         options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
+        // For AJAX/API calls we should return 401/403 instead of redirecting to the login page
+        options.Events = new CookieAuthenticationEvents
+        {
+            OnRedirectToLogin = ctx =>
+            {
+                var path = ctx.Request.Path.Value ?? string.Empty;
+                if (path.StartsWith("/staff/api", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                }
+                ctx.Response.Redirect(ctx.RedirectUri);
+                return Task.CompletedTask;
+            },
+            OnRedirectToAccessDenied = ctx =>
+            {
+                var path = ctx.Request.Path.Value ?? string.Empty;
+                if (path.StartsWith("/staff/api", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                }
+                ctx.Response.Redirect(ctx.RedirectUri);
+                return Task.CompletedTask;
+            }
+        };
     })
     // *** BẮT ĐẦU THÊM MỚI (JWT) ***
     .AddJwtBearer(options => // Thêm cấu hình JWT Bearer cho API (Mobile app)
@@ -94,18 +120,18 @@ builder.Services.AddScoped<OracleSessionInterceptor>();
 
 builder.Services.AddSingleton<RestoreStateService>();
 
+builder.Services.AddTransient<DuLich.Services.EmailService>();
+// Đảm bảo MemoryCache đã được thêm (thường mặc định có trong MVC, nếu chưa thì thêm:)
+builder.Services.AddMemoryCache();
+
 // Đăng ký DbContext với interceptor
 builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
 {
     var interceptor = sp.GetRequiredService<OracleSessionInterceptor>();
     // Dùng connectionString đã khai báo ở trên
-    options.UseOracle(connectionString)
+    options.UseOracle(connectionString, o => o.CommandTimeout(5))
            .AddInterceptors(interceptor);
 });
-
-builder.Services.AddTransient<DuLich.Services.EmailService>();
-
-builder.Services.AddMemoryCache();
 
 // Đăng ký OracleAuthService
 builder.Services.AddScoped<OracleAuthService>();
@@ -161,6 +187,9 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
 
 builder.Services.AddHostedService<QueuedHostedService>();
+
+// Add the new service to automatically update expired tours
+builder.Services.AddHostedService<TourStatusUpdaterService>();
 
 // *** KẾT THÚC THÊM MỚI (SIGNALR & BACKGROUND TASKS) ***
 

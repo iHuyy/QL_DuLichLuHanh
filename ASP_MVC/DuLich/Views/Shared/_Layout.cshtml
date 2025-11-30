@@ -13,11 +13,10 @@
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600&family=Nunito:wght@600;700;800&display=swap"
         rel="stylesheet">
 
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css"
-        integrity="sha512-8P1nVHtVHCnRvWmvMRGsiE9zraFMvx6bMpiKFFitvolG/G5hgbf+5Q5e0siJmq9hw3rroWAtxE6C0RTw8JrZmw=="
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
 
+    <link rel="icon" type="image/x-icon" href="~/favicon.ico" asp-append-version="true" />
     <link rel="stylesheet" href="~/customer/travel-agency/lib/animate/animate.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/customer/travel-agency/lib/owlcarousel/assets/owl.carousel.min.css"
         asp-append-version="true" />
@@ -36,11 +35,21 @@
             <span class="sr-only">Loading...</span>
         </div>
     </div>
+    <script>
+        // Fallback: hide spinner after load even if main JS fails to run
+        window.addEventListener('load', function () {
+            const spinner = document.getElementById('spinner');
+            if (spinner) {
+                setTimeout(() => spinner.classList.remove('show'), 300);
+            }
+        });
+    </script>
 
     <div class="container-fluid position-relative p-0">
         <nav class="navbar navbar-expand-lg navbar-light px-4 px-lg-5 py-3 py-lg-0">
             <a asp-controller="Customer" asp-action="Index" class="navbar-brand p-0">
-                <h1 class="text-primary m-0"><i class="fa fa-map-marker-alt me-2"></i>DuLich</h1>
+                <img src="~/images/logo.jpg" asp-append-version="true" alt="DuLich" class="img-fluid"
+                    style="height: 48px;" loading="lazy" />
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
                 <span class="fa fa-bars"></span>
@@ -51,7 +60,8 @@
                         class="nav-item nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : string.Empty)">Trang
                         chủ</a>
                     <a asp-controller="Customer" asp-action="About"
-                        class="nav-item nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "About" ? "active" : string.Empty)">Giới thiệu</a>
+                        class="nav-item nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "About" ? "active" : string.Empty)">Giới
+                        thiệu</a>
                     @if (User?.Identity?.IsAuthenticated == true)
                     {
                         <a asp-controller="Customer" asp-action="MyTour"
@@ -114,7 +124,7 @@
         <div class="container py-5">
             <div class="row g-5">
                 <div class="col-lg-4 col-md-6">
-                    <h4 class="text-white mb-3">DuLich Travel</h4>
+                    <h4 class="text-white mb-3">TravelHa</h4>
                     <p>Đồng hành cùng bạn trong mọi hành trình khám phá với các tour được thiết kế riêng cho gia đình,
                         bạn bè và doanh nghiệp.</p>
                     <div class="d-flex pt-2">

@@ -1,7 +1,6 @@
 <?php
-// register.php
+// KLTN/register.php
 require_once __DIR__ . '/connect.php';
-header("Content-Type: application/json; charset=utf-8");
 
 // Nhận dữ liệu từ Flutter
 $data = json_decode(file_get_contents("php://input"), true);
@@ -12,154 +11,115 @@ $email = trim($data["email"] ?? '');
 $soDienThoai = trim($data["soDienThoai"] ?? '');
 $diaChi = trim($data["diaChi"] ?? '');
 
-// Kiểm tra đầu vào cơ bản
+// Validate dữ liệu
 if ($newUser === '' || $newPass === '' || $hoTen === '' || $email === '') {
-    echo json_encode(["success" => false, "message" => "Vui lòng nhập đầy đủ Tên đăng nhập, Mật khẩu, Họ tên và Email."]);
+    echo json_encode(["success" => false, "message" => "Vui lòng nhập đầy đủ thông tin bắt buộc."]);
     exit;
 }
 if (!preg_match('/^[A-Za-z][A-Za-z0-9_]{1,29}$/', $newUser)) {
-    echo json_encode(["success" => false, "message" => "Tên đăng nhập không hợp lệ (chỉ chữ, số, '_' và bắt đầu bằng chữ)"]);
+    echo json_encode(["success" => false, "message" => "Username không hợp lệ (Bắt đầu bằng chữ, chỉ chứa chữ, số, _ )"]);
     exit;
 }
 if (strlen($newPass) < 6) {
-    echo json_encode(["success" => false, "message" => "Mật khẩu phải ít nhất 6 ký tự"]);
-    exit;
-}
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    echo json_encode(["success" => false, "message" => "Email không hợp lệ."]);
+    echo json_encode(["success" => false, "message" => "Mật khẩu phải từ 6 ký tự trở lên"]);
     exit;
 }
 
-// Kết nối bằng admin (từ connect.php)
-$conn = connect_admin();
-if (!$conn) {
-    echo json_encode(["success" => false, "message" => "Không thể kết nối tới Oracle bằng account admin."]);
-    exit;
-}
+// Kiểm tra kết nối (Hàm này nằm trong connect.php)
+check_db_connection(); 
 
-// Tạo user Oracle
+// 1. Tạo User Oracle
 $oracleUser = strtoupper($newUser);
-$escapedPass = str_replace('"', '""', $newPass);
+$escapedPass = str_replace('"', '""', $newPass); // Escape dấu ngoặc kép
 
 $sql_create_user = "
-    CREATE USER $oracleUser IDENTIFIED BY \"$escapedPass\"
+    CREATE USER \"$oracleUser\" IDENTIFIED BY \"$escapedPass\"
     PROFILE cus_profile
     DEFAULT TABLESPACE USERS
     TEMPORARY TABLESPACE TEMP
 ";
-$stmt_create = oci_parse($conn, $sql_create_user);
-$ok1 = @oci_execute($stmt_create, OCI_NO_AUTO_COMMIT);
-oci_free_statement($stmt_create);
-if (!$ok1) {
-    $err = oci_error($conn);
-    close_conn($conn);
-    echo json_encode(["success" => false, "message" => "Tạo User Oracle thất bại: " . ($err['message'] ?? 'unknown')]);
+
+$stmt_create = @oci_parse($conn, $sql_create_user);
+if (!@oci_execute($stmt_create, OCI_NO_AUTO_COMMIT)) {
+    $err = oci_error($stmt_create);
+    echo json_encode(["success" => false, "message" => "Không thể tạo User Oracle: " . ($err['message'] ?? 'Unknown error')]);
     exit;
 }
+oci_free_statement($stmt_create);
 
-// Grant role and unlimited tablespace
+// 2. Cấp quyền
 $grants = [
-    "GRANT ROLE_CUSTOMER TO $oracleUser",
-    "GRANT UNLIMITED TABLESPACE TO $oracleUser"
+    "GRANT ROLE_CUSTOMER TO \"$oracleUser\"",
+    "GRANT UNLIMITED TABLESPACE TO \"$oracleUser\""
 ];
 
 foreach ($grants as $g) {
-    $s = oci_parse($conn, $g);
-    $ok = @oci_execute($s, OCI_NO_AUTO_COMMIT);
-    oci_free_statement($s);
-    if (!$ok) {
-        $err = oci_error($conn);
-        // rollback and drop user to avoid orphan user
-        @oci_rollback($conn);
-        @oci_execute(oci_parse($conn, "DROP USER $oracleUser CASCADE"), OCI_COMMIT_ON_SUCCESS);
-        close_conn($conn);
-        echo json_encode(["success" => false, "message" => "Cấp quyền thất bại: " . ($err['message'] ?? 'unknown')]);
+    $s = @oci_parse($conn, $g);
+    if (!@oci_execute($s, OCI_NO_AUTO_COMMIT)) {
+        $err = oci_error($s);
+        // Rollback: Xóa user vừa tạo nếu lỗi quyền
+        @oci_execute(oci_parse($conn, "DROP USER \"$oracleUser\" CASCADE"));
+        echo json_encode(["success" => false, "message" => "Lỗi cấp quyền: " . $err['message']]);
         exit;
     }
+    oci_free_statement($s);
 }
 
-// Xác định schema owner đang kết nối (để insert vào đúng bảng)
-$owner = null;
-$stmt_owner = oci_parse($conn, "SELECT USER FROM DUAL");
-if ($stmt_owner && oci_execute($stmt_owner)) {
+// 3. Insert vào bảng KhachHang
+// Xác định Schema Owner (thường là TADMIN)
+$owner = 'TADMIN'; // Mặc định
+$stmt_owner = @oci_parse($conn, "SELECT USER FROM DUAL");
+if (@oci_execute($stmt_owner)) {
     $row = oci_fetch_row($stmt_owner);
-    if ($row && isset($row[0])) $owner = strtoupper(trim($row[0]));
+    if ($row) $owner = strtoupper($row[0]);
 }
-if ($stmt_owner) oci_free_statement($stmt_owner);
+oci_free_statement($stmt_owner);
 
-if (!$owner) {
-    // fallback: dùng TADMIN nếu không lấy được
-    $owner = 'TADMIN';
-}
-
-// Chuẩn bị INSERT vào bảng KhachHang với schema-qualified name
 $tableName = $owner . ".KhachHang";
-
-$sql_insert_kh = "
+$sql_insert = "
     INSERT INTO $tableName (HoTen, Email, SoDienThoai, DiaChi, VaiTro, ORACLE_USERNAME)
-    VALUES (:hoTen_bv, :email_bv, :sdt_bv, :diaChi_bv, 'KhachHang', :oracleUser_bv)
+    VALUES (:hoTen, :email, :sdt, :diaChi, 'KhachHang', :oracleUser)
     RETURNING MaKhachHang INTO :new_id
 ";
 
-$stmt_insert = oci_parse($conn, $sql_insert_kh);
-if (!$stmt_insert) {
-    $err = oci_error($conn);
-    // rollback and drop user
-    @oci_rollback($conn);
-    @oci_execute(oci_parse($conn, "DROP USER $oracleUser CASCADE"), OCI_COMMIT_ON_SUCCESS);
-    close_conn($conn);
-    echo json_encode(["success" => false, "message" => "Lỗi chuẩn bị INSERT: " . ($err['message'] ?? 'unknown')]);
-    exit;
-}
+$stmt_insert = @oci_parse($conn, $sql_insert);
+oci_bind_by_name($stmt_insert, ':hoTen', $hoTen);
+oci_bind_by_name($stmt_insert, ':email', $email);
+oci_bind_by_name($stmt_insert, ':sdt', $soDienThoai);
+oci_bind_by_name($stmt_insert, ':diaChi', $diaChi);
+oci_bind_by_name($stmt_insert, ':oracleUser', $oracleUser);
+oci_bind_by_name($stmt_insert, ':new_id', $newId, 32);
 
-oci_bind_by_name($stmt_insert, ':hoTen_bv', $hoTen);
-oci_bind_by_name($stmt_insert, ':email_bv', $email);
-oci_bind_by_name($stmt_insert, ':sdt_bv', $soDienThoai);
-oci_bind_by_name($stmt_insert, ':diaChi_bv', $diaChi);
-oci_bind_by_name($stmt_insert, ':oracleUser_bv', $oracleUser);
-oci_bind_by_name($stmt_insert, ':new_id', $newId, 32); // MaKhachHang trả về
-
-$ok4 = @oci_execute($stmt_insert, OCI_NO_AUTO_COMMIT);
-if (!$ok4) {
-    $err = oci_error($stmt_insert) ?: oci_error($conn);
-    @oci_free_statement($stmt_insert);
-    // rollback and drop user to avoid orphan user
-    @oci_rollback($conn);
-    @oci_execute(oci_parse($conn, "DROP USER $oracleUser CASCADE"), OCI_COMMIT_ON_SUCCESS);
-    close_conn($conn);
-
-    $errMsg = $err['message'] ?? 'unknown';
-    if (strpos($errMsg, 'ORA-00001') !== false) {
-        $errMsg = "Email đã tồn tại hoặc trùng lặp dữ liệu Khách hàng.";
+if (!@oci_execute($stmt_insert, OCI_NO_AUTO_COMMIT)) {
+    $err = oci_error($stmt_insert);
+    // Rollback toàn bộ
+    @oci_execute(oci_parse($conn, "DROP USER \"$oracleUser\" CASCADE"));
+    
+    $msg = $err['message'];
+    if (strpos($msg, 'ORA-00001') !== false) {
+        $msg = "Email này đã được sử dụng.";
     }
-    echo json_encode(["success" => false, "message" => "Thêm thông tin Khách hàng thất bại: " . $errMsg]);
+    echo json_encode(["success" => false, "message" => "Lỗi lưu thông tin: " . $msg]);
     exit;
 }
 
-// Commit tất cả (DDL/DML)
-$committed = @oci_commit($conn);
-if (!$committed) {
+// 4. Commit Transaction
+if (!@oci_commit($conn)) {
     $err = oci_error($conn);
-    // rollback and drop user
-    @oci_rollback($conn);
-    @oci_execute(oci_parse($conn, "DROP USER $oracleUser CASCADE"), OCI_COMMIT_ON_SUCCESS);
-    @oci_free_statement($stmt_insert);
-    close_conn($conn);
-    echo json_encode(["success" => false, "message" => "Lỗi Commit Transaction: " . ($err['message'] ?? 'unknown')]);
+    @oci_execute(oci_parse($conn, "DROP USER \"$oracleUser\" CASCADE"));
+    echo json_encode(["success" => false, "message" => "Lỗi Commit: " . $err['message']]);
     exit;
 }
 
 oci_free_statement($stmt_insert);
-close_conn($conn);
+oci_close($conn);
 
-// Trả kết quả thành công, kèm MaKhachHang nếu có
 echo json_encode([
     "success" => true,
-    "message" => "Tài khoản khách hàng $newUser được tạo thành công! Đã cấp ROLE_CUSTOMER và PROFILE cus_profile.",
+    "message" => "Đăng ký thành công!",
     "data" => [
-        "MaKhachHang" => isset($newId) ? intval($newId) : null,
+        "MaKhachHang" => (int)$newId,
         "OracleUsername" => $oracleUser
     ]
 ]);
-exit;
 ?>

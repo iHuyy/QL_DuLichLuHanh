@@ -1,3 +1,4 @@
+import 'package:app_dllh/screens/forgot_password_flow.dart';
 import 'package:app_dllh/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'home_page.dart';
@@ -9,7 +10,7 @@ const Color primaryBlue = Color(0xFF007AFF);
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
-  
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -31,7 +32,7 @@ class _LoginPageState extends State<LoginPage> {
   // =========================================================
   // LOGIC CHỨC NĂNG
   // =========================================================
-  
+
   Future<void> _login() async {
     setState(() {
       _isLoading = true;
@@ -54,7 +55,7 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final result = await _authService.login(username, password);
-      
+
       setState(() => _isLoading = false);
 
       if (result['success'] == true) {
@@ -64,10 +65,7 @@ class _LoginPageState extends State<LoginPage> {
         final returnedRole = result['role']?.toString() ?? 'DEFAULT';
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => HomePage(
-              userID: returnedId,
-              role: returnedRole,
-            ),
+            builder: (_) => HomePage(userID: returnedId, role: returnedRole),
           ),
         );
       } else {
@@ -105,12 +103,10 @@ class _LoginPageState extends State<LoginPage> {
   // Hàm mô phỏng điều hướng đến màn hình Đăng nhập bằng QR
   void _navigateToQRLogin() {
     // Trong môi trường thực tế, bạn sẽ Navigator.push đến một trang Scanner QR
-     // Navigate to QRLoginScannerPage
-     Navigator.of(context).push(
-       MaterialPageRoute(
-         builder: (context) => const QRLoginScannerPage(),
-       ),
-     );
+    // Navigate to QRLoginScannerPage
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => const QRLoginScannerPage()));
   }
 
   // =========================================================
@@ -133,29 +129,31 @@ class _LoginPageState extends State<LoginPage> {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-         obscureText: isPassword ? !_isPasswordVisible : false, // Ẩn văn bản nếu là mật khẩu và chưa được toggle
+        obscureText: isPassword
+            ? !_isPasswordVisible
+            : false, // Ẩn văn bản nếu là mật khẩu và chưa được toggle
         decoration: InputDecoration(
           hintText: hintText,
-          border: InputBorder.none, 
+          border: InputBorder.none,
           // Icon ở bên phải (chỉ hiện thị cho trường mật khẩu)
-          suffixIcon: isPassword 
+          suffixIcon: isPassword
               ? IconButton(
                   icon: Icon(
-                    _isPasswordVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined, 
+                    _isPasswordVisible
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
                     color: Colors.grey[600],
                   ),
                   onPressed: () {
                     setState(() {
-                      _isPasswordVisible = !_isPasswordVisible; // Toggle hiển thị mật khẩu
+                      _isPasswordVisible =
+                          !_isPasswordVisible; // Toggle hiển thị mật khẩu
                     });
                   },
                 )
               : null,
           contentPadding: const EdgeInsets.symmetric(vertical: 18),
-          hintStyle: TextStyle(
-            color: Colors.grey[600],
-            fontSize: 16,
-          ),
+          hintStyle: TextStyle(color: Colors.grey[600], fontSize: 16),
         ),
         style: const TextStyle(fontSize: 16, color: Colors.black87),
       ),
@@ -165,8 +163,8 @@ class _LoginPageState extends State<LoginPage> {
   // Widget riêng để xây dựng nút Đăng nhập
   Widget _buildSignInButton() {
     return SizedBox(
-      width: double.infinity, 
-      height: 56, 
+      width: double.infinity,
+      height: 56,
       child: ElevatedButton(
         onPressed: _isLoading ? null : _login, // Gọi hàm _login
         style: ElevatedButton.styleFrom(
@@ -176,12 +174,9 @@ class _LoginPageState extends State<LoginPage> {
             borderRadius: BorderRadius.circular(10),
           ),
           elevation: 0,
-          textStyle: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        child: _isLoading 
+        child: _isLoading
             ? const SizedBox(
                 width: 24,
                 height: 24,
@@ -194,22 +189,22 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
-  
+
   // Widget mới: Nút Đăng nhập bằng QR
   Widget _buildQRLoginButton() {
     return SizedBox(
-      width: double.infinity, 
-      height: 56, 
+      width: double.infinity,
+      height: 56,
       child: OutlinedButton.icon(
         onPressed: _navigateToQRLogin,
         icon: const Icon(Icons.qr_code_scanner, color: primaryBlue),
         label: const Text(
-          'Đăng nhập bằng QR', 
+          'Đăng nhập bằng QR',
           style: TextStyle(
-            fontSize: 18, 
-            fontWeight: FontWeight.bold, 
-            color: primaryBlue
-          )
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: primaryBlue,
+          ),
         ),
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: primaryBlue, width: 2),
@@ -224,11 +219,11 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    
+
     return Scaffold(
       backgroundColor: Colors.white,
       // Bỏ FloatingActionButton
-      // floatingActionButton: _buildQRButton(), 
+      // floatingActionButton: _buildQRButton(),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 32.0),
@@ -244,12 +239,20 @@ class _LoginPageState extends State<LoginPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.flight_takeoff, size: 80, color: primaryBlue), // Icon minh họa
+                        Icon(
+                          Icons.flight_takeoff,
+                          size: 80,
+                          color: primaryBlue,
+                        ), // Icon minh họa
                         const SizedBox(height: 10),
                         const Text(
                           'Tour & Travel App',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: primaryBlue),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: primaryBlue,
+                          ),
                         ),
                       ],
                     ),
@@ -293,7 +296,6 @@ class _LoginPageState extends State<LoginPage> {
               _buildSignInButton(),
 
               const SizedBox(height: 16), // Khoảng cách giữa Sign In và QR
-
               // 2. Nút Đăng nhập bằng QR (Vị trí mới)
               _buildQRLoginButton(),
 
@@ -313,14 +315,16 @@ class _LoginPageState extends State<LoginPage> {
               // 3. Quên mật khẩu (Vị trí mới: sau QR)
               TextButton(
                 onPressed: () {
-                  _showSnackBar("Tính năng Quên mật khẩu chưa khả dụng", Colors.blueGrey);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ForgotPasswordFlow(),
+                    ),
+                  );
                 },
                 child: const Text(
                   'Forget Password?',
-                  style: TextStyle(
-                    color: Colors.black54,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(color: Colors.black54, fontSize: 16),
                 ),
               ),
 
@@ -333,13 +337,11 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   const Text(
                     "Don't have an Account?",
-                    style: TextStyle(
-                      color: Colors.black54,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: Colors.black54, fontSize: 16),
                   ),
                   TextButton(
-                    onPressed: _navigateToSignUp, // Gọi hàm chuyển màn hình đăng ký
+                    onPressed:
+                        _navigateToSignUp, // Gọi hàm chuyển màn hình đăng ký
                     child: const Text(
                       'Sign Up',
                       style: TextStyle(
@@ -351,7 +353,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 20),
             ],
           ),

@@ -14,13 +14,15 @@
         <div class="container py-5">
             <div class="row justify-content-center">
                 <div class="col-lg-9 text-center">
-                    <h1 class="display-4 text-white mb-3 animated slideInDown">Tận hưởng kỳ nghỉ tuyệt vời cùng DuLich</h1>
+                    <h1 class="display-4 text-white mb-3 animated slideInDown">Tận hưởng kỳ nghỉ tuyệt vời cùng TravelHa
+                    </h1>
                     <p class="fs-5 text-white mb-4 animated slideInDown">Khám phá hàng trăm tour trong và ngoài nước, linh
                         hoạt theo sở thích của bạn.</p>
                     <form asp-controller="Customer" asp-action="Index" method="get"
                         class="row g-2 bg-white rounded-pill px-3 py-2 mx-auto animated slideInDown">
                         <div class="col-md-3">
-                            <input type="text" name="keyword" class="form-control border-0" placeholder="Từ khóa"
+                            <input type="text" name="keyword" class="form-control border-0"
+                                placeholder="Tìm nhanh: tên tour, điểm đến, mã tour..." autocomplete="off"
                                 value="@keyword" />
                         </div>
                         <div class="col-md-3">
@@ -39,6 +41,15 @@
                     </form>
                 </div>
             </div>
+        </div>
+    </div>
+}
+
+@if (ViewBag.LoadError != null)
+{
+    <div class="container mt-3">
+        <div class="alert alert-warning text-center mb-4">
+            @ViewBag.LoadError
         </div>
     </div>
 }
@@ -65,10 +76,8 @@
                     <div class="d-flex border-bottom">
                         <small class="flex-fill text-center border-end py-2"><i
                                 class="fa fa-map-marker-alt text-primary me-2"></i>@tour.Destination</small>
-                        <small class="flex-fill text-center border-end py-2"><i
-                                class="fa fa-calendar-alt text-primary me-2"></i>@tour.Time</small>
                         <small class="flex-fill text-center py-2"><i
-                                class="fa fa-star text-primary me-2"></i>@tour.Rating.ToString("0.0")</small>
+                                class="fa fa-calendar-alt text-primary me-2"></i>@tour.Time</small>
                     </div>
                     <div class="p-4 d-flex flex-column flex-grow-1">
                         <h5 class="mb-3 text-center">@tour.Title</h5>

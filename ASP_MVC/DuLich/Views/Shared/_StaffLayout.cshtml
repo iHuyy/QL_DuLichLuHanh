@@ -6,7 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Staff Dashboard</title>
-    <link rel="icon" type="image/png" sizes="16x16" href="~/admin/images/favicon.png">
+    <link rel="icon" type="image/x-icon" href="~/favicon.ico" asp-append-version="true">
     <link href="~/admin/vendor/jqvmap/css/jqvmap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="~/admin/vendor/chartist/css/chartist.min.css">
     <link href="~/vendor/summernote/summernote.css" rel="stylesheet">
@@ -51,7 +51,8 @@
                                     <span class="ml-2">@User.Identity?.Name</span>
                                 </a>
                                 <div class="dropdown-menu dropdown-menu-right">
-                                    <a asp-area="Staff" asp-controller="Staff" asp-action="Profile" class="dropdown-item ai-icon">
+                                    <a asp-area="Staff" asp-controller="Staff" asp-action="Profile"
+                                        class="dropdown-item ai-icon">
                                         <i class="fa fa-user"></i>
                                         <span class="ml-2">Thông tin cá nhân</span>
                                     </a>
@@ -89,28 +90,10 @@
                             <span class="nav-text">Quản lý booking</span>
                         </a>
                     </li>
-                    <li class="@(controller == "Staff" && action == "Invoices" ? "mm-active" : "")">
-                        <a asp-controller="Staff" asp-action="Invoices" class="ai-icon">
-                            <i class="fa fa-file-invoice"></i>
-                            <span class="nav-text">Hóa đơn số</span>
-                        </a>
-                    </li>
                     <li class="@(controller == "Staff" && action == "Tours" ? "mm-active" : "")">
                         <a asp-controller="Staff" asp-action="Tours" class="ai-icon">
                             <i class="fa fa-plane"></i>
                             <span class="nav-text">Quản lý tour</span>
-                        </a>
-                    </li>
-                    <li class="@(controller == "Staff" && action == "Customers" ? "mm-active" : "")">
-                        <a asp-controller="Staff" asp-action="Customers" class="ai-icon">
-                            <i class="fa fa-users"></i>
-                            <span class="nav-text">Khách hàng</span>
-                        </a>
-                    </li>
-                    <li class="@(controller == "Staff" && action == "Reports" ? "mm-active" : "")">
-                        <a asp-controller="Staff" asp-action="Reports" class="ai-icon">
-                            <i class="fa fa-chart-bar"></i>
-                            <span class="nav-text">Báo cáo</span>
                         </a>
                     </li>
                 </ul>

@@ -365,4 +365,47 @@ class AuthService {
       return false;
     }
   }
+
+  Future<Map<String, dynamic>> forgotPassword(String username) async {
+    try {
+      // Gọi về API C# (ApiAuthController)
+      final response = await _apiClient.postJson(
+        "api/ApiAuth/forgot-password",
+        body: {"username": username},
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {"success": false, "message": "Lỗi kết nối: $e"};
+    }
+  }
+
+  // Bước 2: Xác thực OTP
+  Future<Map<String, dynamic>> verifyOtp(String username, String otp) async {
+    try {
+      final response = await _apiClient.postJson(
+        "api/ApiAuth/verify-otp",
+        body: {"username": username, "otp": otp},
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {"success": false, "message": "Lỗi kết nối: $e"};
+    }
+  }
+
+  // Bước 3: Đặt lại mật khẩu
+  Future<Map<String, dynamic>> resetPassword(String username, String otp, String newPassword) async {
+    try {
+      final response = await _apiClient.postJson(
+        "api/ApiAuth/reset-password",
+        body: {
+          "username": username,
+          "otp": otp,
+          "newPassword": newPassword
+        },
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {"success": false, "message": "Lỗi kết nối: $e"};
+    }
+  }
 }

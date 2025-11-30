@@ -15,9 +15,7 @@
                     <h1 class="display-5 text-white mb-3">@Model.TenTour</h1>
                     <p class="text-white-50 mb-0"><i class="fa fa-map-marker-alt me-2"></i>@Model.DiemDen</p>
                 </div>
-                <div class="col-lg-4 text-center text-lg-end">
-                    <span class="badge bg-light text-primary px-3 py-2 fs-6"><i class="fa fa-star me-1 text-warning"></i>@rating.ToString("0.0")</span>
-                </div>
+
             </div>
         </div>
     </div>
@@ -33,7 +31,8 @@
                     foreach (var id in imageIds.Take(5))
                     {
                         <div class="carousel-item @(index == 0 ? "active" : string.Empty)">
-                            <img src="/api/image/@id" class="d-block w-100" alt="Ảnh tour @index" style="height: 420px; object-fit: cover;">
+                            <img src="/api/image/@id" class="d-block w-100" alt="Ảnh tour @index"
+                                style="height: 420px; object-fit: cover;">
                         </div>
                         index++;
                     }
@@ -41,7 +40,8 @@
                 else
                 {
                     <div class="carousel-item active">
-                        <img src="~/customer/travel-agency/img/carousel-1.jpg" class="d-block w-100" style="height:420px; object-fit:cover;" alt="Default image" />
+                        <img src="~/customer/travel-agency/img/carousel-1.jpg" class="d-block w-100"
+                            style="height:420px; object-fit:cover;" alt="Default image" />
                     </div>
                 }
             </div>
@@ -70,13 +70,17 @@
             <div class="card-body">
                 <h4 class="text-primary mb-3">@Model.Gia.ToString("N0") VNĐ</h4>
                 <ul class="list-unstyled mb-4">
-                    <li class="mb-2"><i class="fa fa-calendar-alt text-primary me-2"></i>Khởi hành: @Model.NgayKhoiHanh.ToString("dd/MM/yyyy")</li>
-                    <li class="mb-2"><i class="fa fa-calendar-day text-primary me-2"></i>Kết thúc: @Model.NgayKetThuc.ToString("dd/MM/yyyy")</li>
-                    <li class="mb-2"><i class="fa fa-map-marker-alt text-primary me-2"></i>Nơi khởi hành: @Model.DiemKhoiHanh</li>
+                    <li class="mb-2"><i class="fa fa-calendar-alt text-primary me-2"></i>Khởi hành:
+                        @Model.NgayKhoiHanh.ToString("dd/MM/yyyy")</li>
+                    <li class="mb-2"><i class="fa fa-calendar-day text-primary me-2"></i>Kết thúc:
+                        @Model.NgayKetThuc.ToString("dd/MM/yyyy")</li>
+                    <li class="mb-2"><i class="fa fa-map-marker-alt text-primary me-2"></i>Nơi khởi hành:
+                        @Model.DiemKhoiHanh</li>
                     <li class="mb-2"><i class="fa fa-users text-primary me-2"></i>Số chỗ còn lại: @Model.SoLuong</li>
                 </ul>
                 <div class="d-grid">
-                    <a asp-controller="Customer" asp-action="Booking" asp-route-id="@Model.MaTour" class="btn btn-primary rounded-pill py-3">Đặt tour ngay</a>
+                    <a asp-controller="Customer" asp-action="Booking" asp-route-id="@Model.MaTour"
+                        class="btn btn-primary rounded-pill py-3">Đặt tour ngay</a>
                 </div>
             </div>
         </div>
@@ -91,9 +95,11 @@
                         <div class="d-flex align-items-center mb-3">
                             <div>
                                 <h6 class="mb-1">@item.TenTour</h6>
-                                <small class="text-muted"><i class="fa fa-map-marker-alt me-1 text-primary"></i>@item.DiemDen</small>
+                                <small class="text-muted"><i
+                                        class="fa fa-map-marker-alt me-1 text-primary"></i>@item.DiemDen</small>
                             </div>
-                            <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@item.MaTour" class="btn btn-sm btn-outline-primary rounded-pill ms-auto">Xem</a>
+                            <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@item.MaTour"
+                                class="btn btn-sm btn-outline-primary rounded-pill ms-auto">Xem</a>
                         </div>
                     }
                 </div>

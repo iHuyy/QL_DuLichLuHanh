@@ -190,11 +190,14 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
           final status = _getString(m, ['TRANGTHAIDAT', 'TrangThaiDat']);
           final paymentStatus = _getString(m, ['TRANGTHAITHANHTOAN', 'TrangThaiThanhToan']);
 
-          // Logic kiểm tra xem có được phép hủy hay không
-          // Cho phép hủy nếu trạng thái KHÔNG chứa "hủy", "hoàn thành", "kết thúc"
+          // --- LOGIC MỚI: KIỂM TRA ĐIỀU KIỆN HỦY ---
+          // Cho phép hủy nếu:
+          // 1. Trạng thái KHÔNG chứa "hủy", "hoàn thành", "kết thúc"
+          // 2. VÀ Trạng thái thanh toán KHÔNG chứa "đã thanh toán"
           final bool canCancel = !status.toLowerCase().contains('hủy') && 
                                  !status.toLowerCase().contains('hoàn thành') &&
-                                 !status.toLowerCase().contains('kết thúc');
+                                 !status.toLowerCase().contains('kết thúc') &&
+                                 !paymentStatus.toLowerCase().contains('đã thanh toán');
 
           return Column(
             children: [
@@ -203,6 +206,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // 1. Hình ảnh & Tiêu đề
                       Container(
                         color: Colors.white,
                         padding: const EdgeInsets.only(bottom: 20),
@@ -238,6 +242,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
 
                       const SizedBox(height: 12),
 
+                      // 2. Thông tin Tour
                       _buildCard(
                         title: 'THÔNG TIN HÀNH TRÌNH',
                         icon: Icons.map_outlined,
@@ -252,6 +257,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
 
                       const SizedBox(height: 12),
 
+                      // 3. Chi tiết Booking
                       _buildCard(
                         title: 'CHI TIẾT ĐẶT CHỖ #$bookingId',
                         icon: Icons.confirmation_number_outlined,
@@ -275,6 +281,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
 
                       const SizedBox(height: 12),
 
+                      // 4. Thông tin thêm
                       if (description.isNotEmpty || specialRequest.isNotEmpty)
                         _buildCard(
                           title: 'THÔNG TIN THÊM',
@@ -312,7 +319,8 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                 ),
               ),
               
-              // --- THANH BOTTOM BAR: Nút Hủy & Xem Hóa Đơn ---
+              // 5. BOTTOM BAR: Nút Hủy & Xem Hóa Đơn
+              // Hiển thị Bottom Bar nếu có invoice HOẶC có thể hủy
               if (invoiceId > 0 || canCancel) 
                 Container(
                   padding: const EdgeInsets.all(16),

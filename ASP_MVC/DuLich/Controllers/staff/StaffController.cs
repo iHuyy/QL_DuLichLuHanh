@@ -18,6 +18,8 @@ using Oracle.ManagedDataAccess.Types;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using System.Security.Claims;
+using DuLich.Services;
 
 #nullable enable
 
@@ -28,36 +30,218 @@ namespace DuLich.Controllers.staff
     {
         private readonly ILogger<StaffController> _logger;
         private readonly IWebHostEnvironment _env;
+        private readonly OracleAuthService _authService;
 
-        public StaffController(ApplicationDbContext context, ILogger<StaffController> logger, IWebHostEnvironment env) : base(context)
+        public StaffController(ApplicationDbContext context, ILogger<StaffController> logger, IWebHostEnvironment env, OracleAuthService authService) : base(context)
         {
             _logger = logger;
             _env = env;
+            _authService = authService;
+        }
+
+        // Helper: best-effort log of current Oracle session VPD and OLS label
+        private async Task LogOracleSessionStateAsync(DbConnection conn)
+        {
+            try
+            {
+                if (conn.State != ConnectionState.Open)
+                    await conn.OpenAsync();
+
+                try
+                {
+                    using var vcmd = conn.CreateCommand();
+                    vcmd.CommandText = "SELECT SYS_CONTEXT('tour_management_ctx','role') AS role, SYS_CONTEXT('tour_management_ctx','branch_id') AS branch FROM DUAL";
+                    using var rdr = await vcmd.ExecuteReaderAsync(CommandBehavior.SingleRow);
+                    if (await rdr.ReadAsync())
+                    {
+                        var ctxRole = rdr.IsDBNull(0) ? null : rdr.GetString(0);
+                        var ctxBranch = rdr.IsDBNull(1) ? null : rdr.GetValue(1)?.ToString();
+                        _logger?.LogInformation("[Verify] Oracle session VPD context: role={Role}, branch={Branch}", ctxRole, ctxBranch);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "[Verify] Failed to query SYS_CONTEXT for VPD");
+                }
+
+                try
+                {
+                    using var lcmd = conn.CreateCommand();
+                    lcmd.CommandText = "SELECT SA_LABEL_ADMIN.LABEL_TO_CHAR('DULICH_OLS', SA_SESSION.GET_LABEL('DULICH_OLS')) FROM DUAL";
+                    var labelObj = await lcmd.ExecuteScalarAsync();
+                    if (labelObj != null && labelObj != DBNull.Value)
+                    {
+                        _logger?.LogInformation("[Verify] Oracle session OLS label for DULICH_OLS: {Label}", labelObj.ToString());
+                    }
+                    else
+                    {
+                        _logger?.LogInformation("[Verify] Oracle session OLS label for DULICH_OLS: <null>");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "[Verify] Could not read OLS session label (GET_LABEL may be unavailable or lack privileges)");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "[Verify] Error while verifying Oracle session state");
+            }
         }
 
         private static string GetStatusClass(string status)
         {
-            return status?.ToLower() switch
+            var normalized = status?.Trim().ToLowerInvariant();
+            return normalized switch
             {
-                "chờ xử lý" => "warning",
-                "đã xác nhận" => "success",
-                "đã hủy" => "danger",
-                "hoàn thành" => "info",
+                "chờ xác nhận" or "cho xac nhan" => "warning",
+                "đã xác nhận" or "da xac nhan" => "success",
+                "đã hủy" or "da huy" => "danger",
+                "hoàn thành" or "hoan thanh" => "info",
                 _ => "secondary"
             };
         }
 
         private static string GetTourStatusClass(string status)
         {
-            return status?.ToLower() switch
+            var normalized = status?.Trim().ToLowerInvariant();
+            return normalized switch
             {
                 "hoạt động" => "success",
+                "đang diễn ra" => "primary",
+                "hoàn thành" or "đã kết thúc" => "info",
                 "tạm ngưng" => "warning",
-                "đã kết thúc" => "info",
                 "đã hủy" => "danger",
                 "ẩn" => "secondary",
                 _ => "secondary"
             };
+        }
+
+        private async Task SetUserContextForBranchAsync(string? role, int? branchId)
+        {
+            if (string.IsNullOrWhiteSpace(role) || !branchId.HasValue)
+            {
+                return;
+            }
+
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open)
+            {
+                await conn.OpenAsync();
+            }
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "BEGIN TADMIN.pkg_tour_management.set_user_context(:role_name, :branch_id); END;";
+
+            var roleParam = new OracleParameter("role_name", OracleDbType.Varchar2) { Value = (object?)role ?? DBNull.Value };
+            var branchParam = new OracleParameter("branch_id", OracleDbType.Int32) { Value = branchId.Value };
+            cmd.Parameters.Add(roleParam);
+            cmd.Parameters.Add(branchParam);
+
+            await cmd.ExecuteNonQueryAsync();
+
+            // Verify context was applied on this session — useful to debug ORA-28115 (VPD check option)
+            try
+            {
+                using var verifyCmd = conn.CreateCommand();
+                verifyCmd.CommandText = "SELECT SYS_CONTEXT('tour_management_ctx','role') AS role, SYS_CONTEXT('tour_management_ctx','branch_id') AS branch_id FROM DUAL";
+                using var reader = await verifyCmd.ExecuteReaderAsync(CommandBehavior.SingleRow);
+                if (await reader.ReadAsync())
+                {
+                    var setRole = reader.IsDBNull(0) ? null : reader.GetString(0);
+                    var setBranch = reader.IsDBNull(1) ? null : reader.GetValue(1)?.ToString();
+                    _logger?.LogInformation("DB context after set_user_context: role={Role}, branch_id={Branch}", setRole, setBranch);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Unable to verify DB context after calling set_user_context");
+            }
+        }
+
+        /// <summary>
+        /// Ensure the Oracle session has both VPD context (role + branch) and OLS label set on the current connection.
+        /// This avoids ORA-28115 when VPD/OLS check-control validates INSERT/UPDATE.
+        /// </summary>
+        private async Task EnsureOracleSecurityContextAsync(DbConnection conn, string? role, int branchId)
+        {
+            var effectiveRole = string.IsNullOrWhiteSpace(role) ? "ROLE_STAFF" : role.Trim().ToUpperInvariant();
+
+            if (conn.State != ConnectionState.Open)
+            {
+                await conn.OpenAsync();
+            }
+
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN
+  TADMIN.pkg_tour_management.set_user_context(:role_name, :branch_id);
+  SA_SESSION.SET_LABEL('DULICH_OLS', :p_label);
+END;";
+
+                if (cmd is OracleCommand ocmd)
+                {
+                    ocmd.BindByName = true;
+                    ocmd.Parameters.Add(new OracleParameter("role_name", OracleDbType.Varchar2) { Value = (object?)effectiveRole ?? DBNull.Value });
+                    ocmd.Parameters.Add(new OracleParameter("branch_id", OracleDbType.Int32) { Value = branchId });
+                    var label = (effectiveRole == "ROLE_ADMIN" || effectiveRole == "ROLE_STAFF") ? "INT" : "PUB";
+                    ocmd.Parameters.Add(new OracleParameter("p_label", OracleDbType.Varchar2) { Value = label });
+                }
+                else
+                {
+                    var pRole = cmd.CreateParameter();
+                    pRole.ParameterName = "role_name";
+                    pRole.Value = (object?)effectiveRole ?? DBNull.Value;
+                    cmd.Parameters.Add(pRole);
+
+                    var pBranch = cmd.CreateParameter();
+                    pBranch.ParameterName = "branch_id";
+                    pBranch.Value = branchId;
+                    cmd.Parameters.Add(pBranch);
+
+                    var pLabel = cmd.CreateParameter();
+                    pLabel.ParameterName = "p_label";
+                    pLabel.Value = (effectiveRole == "ROLE_ADMIN" || effectiveRole == "ROLE_STAFF") ? "INT" : "PUB";
+                    cmd.Parameters.Add(pLabel);
+                }
+
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            // log what the DB session sees for VPD context (helps diagnose ORA-28115)
+            try
+            {
+                using var verifyCmd = conn.CreateCommand();
+                verifyCmd.CommandText = "SELECT SYS_CONTEXT('tour_management_ctx','role'), SYS_CONTEXT('tour_management_ctx','branch_id') FROM DUAL";
+                using var reader = await verifyCmd.ExecuteReaderAsync(CommandBehavior.SingleRow);
+                if (await reader.ReadAsync())
+                {
+                    var ctxRole = reader.IsDBNull(0) ? null : reader.GetString(0);
+                    var ctxBranch = reader.IsDBNull(1) ? null : reader.GetValue(1)?.ToString();
+                    _logger?.LogInformation("Oracle session context set: role={Role}, branch_id={Branch}", ctxRole, ctxBranch);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Could not verify Oracle session context after setting VPD/OLS");
+            }
+
+            // Best-effort: attempt to read the OLS session label for 'DULICH_OLS' and log it.
+            try
+            {
+                using var lblCmd = conn.CreateCommand();
+                lblCmd.CommandText = "SELECT SA_LABEL_ADMIN.LABEL_TO_CHAR('DULICH_OLS', SA_SESSION.GET_LABEL('DULICH_OLS')) FROM DUAL";
+                var lblObj = await lblCmd.ExecuteScalarAsync();
+                if (lblObj != null && lblObj != DBNull.Value)
+                {
+                    _logger?.LogInformation("Oracle session OLS label for policy DULICH_OLS: {Label}", lblObj.ToString());
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Could not read OLS session label (SA_SESSION.GET_LABEL may be unavailable)");
+            }
         }
 
         private async Task<int> InsertImageBlobRawAsync(int tourId, byte[] data, string mimeType, string? description)
@@ -146,8 +330,10 @@ RETURNING MAANH INTO :id";
             if (booking == null || booking.Tour == null)
                 return false;
 
-            if (booking.TrangThaiDat?.ToLower() == "đã hủy" ||
-                booking.TrangThaiDat?.ToLower() == "hoàn thành")
+            var status = booking.TrangThaiDat?.Trim().ToLowerInvariant();
+
+            if (status == "đã hủy" || status == "da huy" ||
+                status == "hoàn thành" || status == "hoan thanh")
                 return false;
 
             return booking.Tour.ThoiGian != null &&
@@ -160,25 +346,27 @@ RETURNING MAANH INTO :id";
             return View();
         }
 
+
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CreateTour([Bind("TieuDe,NoiDen,NoiKhoiHanh,ThoiGian,SoLuong,GiaNguoiLon,GiaTreEm,MoTa")] Tour tour, List<IFormFile>? TourImages)
         {
             _logger.LogInformation("CreateTour POST invoked by {User}", User?.Identity?.Name ?? "anonymous");
 
-                    try
+            try
+            {
+                _logger.LogInformation("Request Method: {Method}, Content-Length: {Len}, HasForm: {HasForm}", Request?.Method, Request?.ContentLength, Request?.HasFormContentType);
+                if (Request?.HasFormContentType == true)
+                {
+                    _logger.LogInformation("Form keys: {Keys}", string.Join(",", Request.Form.Keys));
+                    _logger.LogInformation("Uploaded files count: {Count}", Request.Form?.Files?.Count ?? 0);
+                    foreach (var f in Request.Form?.Files ?? Enumerable.Empty<IFormFile>())
                     {
-                        _logger.LogInformation("Request Method: {Method}, Content-Length: {Len}, HasForm: {HasForm}", Request?.Method, Request?.ContentLength, Request?.HasFormContentType);
-                        if (Request?.HasFormContentType == true)
-                        {
-                            _logger.LogInformation("Form keys: {Keys}", string.Join(",", Request.Form.Keys));
-                            _logger.LogInformation("Uploaded files count: {Count}", Request.Form?.Files?.Count ?? 0);
-                            foreach (var f in Request.Form?.Files ?? Enumerable.Empty<IFormFile>())
-                            {
-                                _logger.LogInformation("File: {Name}, FileName: {FileName}, Length: {Len}", f.Name, f.FileName, f.Length);
-                            }
-                        }
+                        _logger.LogInformation("File: {Name}, FileName: {FileName}, Length: {Len}", f.Name, f.FileName, f.Length);
                     }
+                }
+            }
             catch (Exception logEx)
             {
                 _logger.LogWarning(logEx, "Failed reading request form info");
@@ -186,115 +374,211 @@ RETURNING MAANH INTO :id";
 
             if (!ModelState.IsValid)
             {
-                // Log ModelState errors to help debugging
                 var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
                 if (errors.Any())
                 {
                     _logger.LogWarning("CreateTour ModelState invalid: {Errors}", string.Join("; ", errors));
-                    TempData["Error"] = "Vui lòng kiểm tra lại thông tin nhập vào: " + string.Join("; ", errors);
+                    TempData["Error"] = "Vui long kiem tra loi thong tin nhap vao: " + string.Join("; ", errors);
                 }
                 else
                 {
-                    TempData["Error"] = "Vui lòng kiểm tra lại thông tin nhập vào!";
+                    TempData["Error"] = "Vui long kiem tra loi thong tin nhap vao!";
                 }
                 return View(tour);
             }
 
-            using (var transaction = await _context.Database.BeginTransactionAsync())
+            var username = User?.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(username))
             {
+                TempData["Error"] = "Khong xac dinh duoc tai khoan nhan vien. Vui long dang nhap lai.";
+                return View(tour);
+            }
+
+            var upperUser = username.ToUpper();
+            var staff = await _context.NhanViens.FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == upperUser);
+            if (staff == null || !staff.MaChiNhanh.HasValue)
+            {
+                TempData["Error"] = "Khong xac dinh duoc chi nhanh cua nhan vien. Vui long dang nhap lai hoac lien he quan tri.";
+                return View(tour);
+            }
+            var branch = await _context.ChiNhanhs.FirstOrDefaultAsync(c => c.MaChiNhanh == staff.MaChiNhanh.Value);
+            if (branch == null)
+            {
+                TempData["Error"] = "Khong tim thay thong tin chi nhanh. Vui long lien he quan tri.";
+                return View(tour);
+            }
+
+            // Force role for staff flow to avoid missing/invalid claim causing VPD=1=0
+            var role = "ROLE_STAFF";
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            var result = await strategy.ExecuteAsync(async () =>
+            {
+                var conn = _context.Database.GetDbConnection();
+                var openedConnectionHere = false;
                 try
                 {
-                    tour.TrangThai = "Hoạt động";
-                    _context.Tours.Add(tour);
-                    await _context.SaveChangesAsync();
-
-                    // Generate QR code and persist it immediately to avoid batching UPDATE + large BLOB INSERT
-                    var scheme = Request?.Scheme ?? "http";
-                    var tourUrl = Url.Action("TourDetails", "Customer", new { id = tour.MaTour }, scheme) ?? $"/Customer/TourDetails/{tour.MaTour}";
-                    var qrCodeFileName = $"tour_{tour.MaTour}_{DateTime.Now:yyyyMMddHHmmss}.png";
-                    var qrCodeDirectory = Path.Combine(_env.WebRootPath, "images", "qrcode");
-                    Directory.CreateDirectory(qrCodeDirectory);
-
-                    using (var qrGenerator = new QRCoder.QRCodeGenerator())
+                    if (conn.State != ConnectionState.Open)
                     {
-                        var qrCodeData = qrGenerator.CreateQrCode(tourUrl, QRCoder.QRCodeGenerator.ECCLevel.Q);
-                        using var qrCode = new QRCoder.PngByteQRCode(qrCodeData);
-                        var qrCodeImage = qrCode.GetGraphic(10);
-                        var qrCodePath = Path.Combine(qrCodeDirectory, qrCodeFileName);
-                        await System.IO.File.WriteAllBytesAsync(qrCodePath, qrCodeImage);
-                        tour.QR = $"/images/qrcode/{qrCodeFileName}";
+                        await _context.Database.OpenConnectionAsync();
+                        openedConnectionHere = true;
                     }
 
-                    // Save the QR update separately before inserting BLOB images
-                    _logger.LogInformation("Saving QR for tour {TourId} before inserting images", tour.MaTour);
-                    await _context.SaveChangesAsync();
+                    // Ensure VPD/OLS context is applied to this exact connection (required by policy CHECK_CONTROL)
+                    await EnsureOracleSecurityContextAsync(conn, role, staff.MaChiNhanh.Value);
 
-                    // Lưu ảnh dưới dạng BLOB (ghi log chi tiết để debug lỗi DB)
-                    if (TourImages?.Any() == true)
+                    // Verify context matches the tour branch to avoid ORA-28115 before hitting DB
+                    try
                     {
-                        var validImages = TourImages.Where(f => f != null && f.Length > 0).ToList();
-                        _logger.LogInformation("Preparing to save {Count} image(s) for tour {TourId}", validImages.Count, tour.MaTour);
-
-                        // Use Oracle-specific BLOB write to avoid ORA-01460 issues with EF batching
-                        foreach (var imageFile in validImages)
+                        using var verifyCmd = conn.CreateCommand();
+                        verifyCmd.CommandText = "SELECT SYS_CONTEXT('tour_management_ctx','role'), SYS_CONTEXT('tour_management_ctx','branch_id') FROM DUAL";
+                        using var reader = await verifyCmd.ExecuteReaderAsync(CommandBehavior.SingleRow);
+                        if (await reader.ReadAsync())
                         {
-                            using (var ms = new MemoryStream())
+                            var ctxRole = reader.IsDBNull(0) ? null : reader.GetString(0);
+                            var ctxBranch = reader.IsDBNull(1) ? null : reader.GetValue(1)?.ToString();
+                            _logger.LogInformation("Context before SaveChanges: role={Role}, branch_id={Branch}, tour.MaChiNhanh={TourBranch}", ctxRole, ctxBranch, staff.MaChiNhanh);
+                            if (ctxBranch == null || ctxBranch != staff.MaChiNhanh.Value.ToString())
                             {
-                                await imageFile.CopyToAsync(ms);
-                                var imageData = ms.ToArray();
-
-                                string Truncate(string? input, int max)
-                                {
-                                    if (string.IsNullOrEmpty(input)) return string.Empty;
-                                    return input.Length <= max ? input : input.Substring(0, max);
-                                }
-
-                                try
-                                {
-                                    // Insert the BLOB using a raw Oracle command (EMPTY_BLOB + SELECT ... FOR UPDATE)
-                                    var newImageId = await InsertImageBlobRawAsync(tour.MaTour, imageData, Truncate(imageFile.ContentType, 50), Truncate(imageFile.FileName, 300));
-                                    _logger.LogInformation("Inserted image id {ImageId} for tour {TourId}", newImageId, tour.MaTour);
-                                }
-                                catch (Exception imgEx)
-                                {
-                                    _logger.LogError(imgEx, "Failed saving image for tour {TourId}. Rolling back.", tour.MaTour);
-                                    await transaction.RollbackAsync();
-                                    TempData["Error"] = "Lỗi khi lưu ảnh: " + (imgEx.Message ?? "Không rõ");
-                                    return View(tour);
-                                }
+                                TempData["Error"] = "Chi nhanh trong session DB khong khop. Vui long dang nhap lai.";
+                                return (IActionResult)View(tour);
                             }
                         }
                     }
-
-                    try
+                    catch (Exception ex)
                     {
-                        _logger.LogInformation("Saving tour and images to database for tour {TourId}", tour.MaTour);
-                        await _context.SaveChangesAsync();
-                        await transaction.CommitAsync();
-                    }
-                    catch (DbUpdateException dbEx)
-                    {
-                        // Log inner exception details (Oracle exception info typically in InnerException)
-                        var inner = dbEx.InnerException;
-                        _logger.LogError(dbEx, "DbUpdateException while saving tour {TourId}. Inner: {Inner}", tour.MaTour, inner?.ToString());
-                        await transaction.RollbackAsync();
-                        var innerMsg = inner?.Message ?? dbEx.Message;
-                        TempData["Error"] = "Đã xảy ra lỗi khi lưu dữ liệu: " + innerMsg;
-                        return View(tour);
+                        _logger.LogWarning(ex, "Could not verify context before SaveChanges");
                     }
 
-                    TempData["Success"] = "Thêm tour mới thành công!";
-                    return RedirectToAction(nameof(Tours));
+                    using (var transaction = await _context.Database.BeginTransactionAsync())
+                    {
+                        try
+                        {
+                            // Set status to a value that satisfies TOUR_TRANGTHAI_CHK
+                            tour.TrangThai = "Hoạt động";
+                            tour.MaChiNhanh = staff.MaChiNhanh;
+
+                            _context.Tours.Add(tour);
+                            try
+                            {
+                                _logger.LogInformation("About to SaveChanges for tour with MaChiNhanh={Branch}", tour.MaChiNhanh);
+                                // Ensure security context is applied on this connection immediately before insert
+                                try { await EnsureOracleSecurityContextAsync(conn, role, staff.MaChiNhanh.Value); } catch (Exception ex) { _logger?.LogWarning(ex, "Failed to reapply Oracle security context before SaveChanges"); }
+                                // Verify session state just before insert
+                                try { await LogOracleSessionStateAsync(conn); } catch { }
+                                await _context.SaveChangesAsync();
+                            }
+                            catch (DbUpdateException dbEx)
+                            {
+                                var inner = dbEx.InnerException;
+                                _logger.LogError(dbEx, "CreateTour SaveChanges failed for tour {TourId}. Inner: {Inner}", tour.MaTour, inner?.ToString());
+                                await transaction.RollbackAsync();
+                                TempData["Error"] = "Khong the tao tour (luu Tour that bai): " + (inner?.Message ?? dbEx.Message);
+                                return View(tour);
+                            }
+
+                            // Generate QR code and persist it immediately to avoid batching UPDATE + large BLOB INSERT
+                            var scheme = Request?.Scheme ?? "http";
+                            var tourUrl = Url.Action("TourDetails", "Customer", new { id = tour.MaTour }, scheme) ?? $"/Customer/TourDetails/{tour.MaTour}";
+                            var qrCodeFileName = $"tour_{tour.MaTour}_{DateTime.Now:yyyyMMddHHmmss}.png";
+                            var qrCodeDirectory = Path.Combine(_env.WebRootPath, "images", "qrcode");
+                            Directory.CreateDirectory(qrCodeDirectory);
+
+                            using (var qrGenerator = new QRCoder.QRCodeGenerator())
+                            {
+                                var qrCodeData = qrGenerator.CreateQrCode(tourUrl, QRCoder.QRCodeGenerator.ECCLevel.Q);
+                                using var qrCode = new QRCoder.PngByteQRCode(qrCodeData);
+                                var qrCodeImage = qrCode.GetGraphic(10);
+                                var qrCodePath = Path.Combine(qrCodeDirectory, qrCodeFileName);
+                                await System.IO.File.WriteAllBytesAsync(qrCodePath, qrCodeImage);
+                                tour.QR = $"/images/qrcode/{qrCodeFileName}";
+                            }
+
+                            _logger.LogInformation("Saving QR for tour {TourId} before inserting images", tour.MaTour);
+                            // Ensure security context before saving QR
+                            try { await EnsureOracleSecurityContextAsync(conn, role, staff.MaChiNhanh.Value); } catch (Exception ex) { _logger?.LogWarning(ex, "Failed to reapply Oracle security context before SaveChanges (QR)"); }
+                            // Verify session state before saving QR
+                            try { await LogOracleSessionStateAsync(conn); } catch { }
+                            await _context.SaveChangesAsync();
+
+                            if (TourImages?.Any() == true)
+                            {
+                                var validImages = TourImages.Where(f => f != null && f.Length > 0).ToList();
+                                _logger.LogInformation("Preparing to save {Count} image(s) for tour {TourId}", validImages.Count, tour.MaTour);
+
+                                // Use Oracle-specific BLOB write to avoid ORA-01460 issues with EF batching
+                                foreach (var imageFile in validImages)
+                                {
+                                    using (var ms = new MemoryStream())
+                                    {
+                                        await imageFile.CopyToAsync(ms);
+                                        var imageData = ms.ToArray();
+
+                                        string Truncate(string? input, int max)
+                                        {
+                                            if (string.IsNullOrEmpty(input)) return string.Empty;
+                                            return input.Length <= max ? input : input.Substring(0, max);
+                                        }
+
+                                        try
+                                        {
+                                            // Insert the BLOB using a raw Oracle command (EMPTY_BLOB + SELECT ... FOR UPDATE)
+                                            var newImageId = await InsertImageBlobRawAsync(tour.MaTour, imageData, Truncate(imageFile.ContentType, 50), Truncate(imageFile.FileName, 300));
+                                            _logger.LogInformation("Inserted image id {ImageId} for tour {TourId}", newImageId, tour.MaTour);
+                                        }
+                                        catch (Exception imgEx)
+                                        {
+                                            _logger.LogError(imgEx, "Failed saving image for tour {TourId}. Rolling back.", tour.MaTour);
+                                            await transaction.RollbackAsync();
+                                            TempData["Error"] = "Loi khi luu anh: " + (imgEx.Message ?? "Khong ro");
+                                            return (IActionResult)View(tour);
+                                        }
+                                    }
+                                }
+                            }
+
+                            try
+                            {
+                                _logger.LogInformation("Saving tour and images to database for tour {TourId}", tour.MaTour);
+                                // Ensure security context before final save/commit
+                                try { await EnsureOracleSecurityContextAsync(conn, role, staff.MaChiNhanh.Value); } catch (Exception ex) { _logger?.LogWarning(ex, "Failed to reapply Oracle security context before final SaveChanges"); }
+                                // Verify session state before final save/commit
+                                try { await LogOracleSessionStateAsync(conn); } catch { }
+                                await _context.SaveChangesAsync();
+                                await transaction.CommitAsync();
+                            }
+                            catch (DbUpdateException dbEx)
+                            {
+                                var inner = dbEx.InnerException;
+                                _logger.LogError(dbEx, "DbUpdateException while saving tour {TourId}. Inner: {Inner}", tour.MaTour, inner?.ToString());
+                                await transaction.RollbackAsync();
+                                var innerMsg = inner?.Message ?? dbEx.Message;
+                                TempData["Error"] = "Da xay ra loi khi luu du lieu: " + innerMsg;
+                                return (IActionResult)View(tour);
+                            }
+
+                            TempData["Success"] = "Them tour moi thanh cong!";
+                            return (IActionResult)RedirectToAction(nameof(Tours));
+                        }
+                        catch (Exception ex)
+                        {
+                            await transaction.RollbackAsync();
+                            _logger.LogError(ex, "Error creating tour. Transaction rolled back.");
+                            TempData["Error"] = "Co loi xay ra, khong the tao tour: " + ex.Message;
+                            return (IActionResult)View(tour);
+                        }
+                    }
                 }
-                catch (Exception ex)
+                finally
                 {
-                    await transaction.RollbackAsync();
-                    _logger.LogError(ex, "Error creating tour. Transaction rolled back.");
-                    // Surface the error message for easier debugging during development
-                    TempData["Error"] = "Có lỗi xảy ra, không thể tạo tour: " + ex.Message;
-                    return View(tour);
+                    if (openedConnectionHere)
+                    {
+                        try { await _context.Database.CloseConnectionAsync(); } catch { }
+                    }
                 }
-            }
+            });
+
+            return result;
         }
 
         [HttpGet]
@@ -391,31 +675,24 @@ RETURNING MAANH INTO :id";
             return RedirectToAction(nameof(Tours));
         }
 
-        public async Task<IActionResult> Tours()
-        {
-            var tours = await _context.Tours.AsNoTracking().OrderByDescending(t => t.MaTour).ToListAsync();
-            
-            var tourViewModels = tours.Select(t => new TourViewModel
-            {
-                Id = t.MaTour,
-                MaTour = t.MaTour.ToString(),
-                TenTour = t.TieuDe ?? "Chưa đặt tên",
-                DiemDen = t.NoiDen ?? "Chưa xác định",
-                NgayKhoiHanh = t.ThoiGian ?? DateTime.Now,
-                Gia = t.GiaNguoiLon ?? 0,
-                SoLuong = t.SoLuong ?? 0,
-                TrangThai = t.TrangThai ?? "Chưa xác định",
-                QR = t.QR ?? "",
-                StatusClass = GetTourStatusClass(t.TrangThai ?? "")
-            }).ToList();
-
-            return View(tourViewModels);
-        }
-
+        // Trang tổng quan mặc định
+        [HttpGet]
         public IActionResult Index() => View();
 
+        // Trang Dashboard (alias nếu vào /Staff/Dashboard)
+        [HttpGet]
+        public IActionResult Dashboard() => View("Dashboard");
+
+        // Alias nếu người dùng gõ /staff/booking (số ít)
+        [HttpGet("Staff/Booking")]
+        public Task<IActionResult> Booking() => Bookings();
+
+        // Danh sách booking của nhân viên
+        [HttpGet]
         public async Task<IActionResult> Bookings()
         {
+            await UpdateDepartedBookingsToCompletedAsync();
+
             var bookings = await _context.DatTours
                 .AsNoTracking()
                 .Include(d => d.Tour)
@@ -439,15 +716,55 @@ RETURNING MAANH INTO :id";
             return View(bookings);
         }
 
+        public async Task<IActionResult> Tours()
+        {
+            var tours = await _context.Tours.AsNoTracking().OrderByDescending(t => t.MaTour).ToListAsync();
+
+            var bookedByTour = await _context.DatTours
+                .Where(d => d.TrangThaiDat != null && d.TrangThaiDat.ToLower().Contains("xac nhan"))
+                .GroupBy(d => d.MaTour)
+                .Select(g => new
+                {
+                    MaTour = g.Key,
+                    SoNguoi = g.Sum(d => (d.SoNguoiLon ?? 0) + (d.SoTreEm ?? 0))
+                })
+                .ToDictionaryAsync(x => x.MaTour.GetValueOrDefault(), x => x.SoNguoi);
+
+            var tourViewModels = tours.Select(t =>
+            {
+                var used = bookedByTour.TryGetValue(t.MaTour, out var soNguoi) ? soNguoi : 0;
+                var tongCho = t.SoLuong ?? 0;
+                var soConLai = Math.Max(0, tongCho - used);
+
+                return new TourViewModel
+                {
+                    Id = t.MaTour,
+                    MaTour = t.MaTour.ToString(),
+                    TenTour = t.TieuDe ?? "Chua dat ten",
+                    DiemDen = t.NoiDen ?? "Chua xac dinh",
+                    NgayKhoiHanh = t.ThoiGian ?? DateTime.Now,
+                    Gia = t.GiaNguoiLon ?? 0,
+                    SoLuong = tongCho,
+                    SoChoConLai = soConLai,
+                    TrangThai = t.TrangThai ?? "Chua xac dinh",
+                    QR = t.QR ?? "",
+                    StatusClass = GetTourStatusClass(t.TrangThai ?? "")
+                };
+            }).ToList();
+
+            return View(tourViewModels);
+        }
+
+
         [HttpGet]
         public IActionResult Invoices() => View();
 
         public async Task<IActionResult> TourDetails(int id)
         {
-             var tour = await _context.Tours
-                .Include(t => t.AnhTours)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(m => m.MaTour == id);
+            var tour = await _context.Tours
+               .Include(t => t.AnhTours)
+               .AsNoTracking()
+               .FirstOrDefaultAsync(m => m.MaTour == id);
 
             if (tour == null)
             {
@@ -532,21 +849,108 @@ RETURNING MAANH INTO :id";
 
         public async Task<IActionResult> Profile()
         {
-            var username = User.Identity?.Name;
-            if (string.IsNullOrEmpty(username))
+            var model = await BuildStaffProfileViewModelAsync();
+            if (model == null)
             {
                 return RedirectToAction("Login", "Admin");
             }
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateProfile(StaffProfileViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                var existing = await BuildStaffProfileViewModelAsync();
+                if (existing == null)
+                {
+                    return RedirectToAction("Login", "Admin");
+                }
+                existing.HoTen = model.HoTen;
+                existing.Email = model.Email;
+                existing.SoDienThoai = model.SoDienThoai;
+                return View("Profile", existing);
+            }
 
             var staff = await _context.NhanViens
-                .FirstOrDefaultAsync(k => k.ORACLE_USERNAME == username);
+                .FirstOrDefaultAsync(n => n.MaNhanVien == model.MaNhanVien);
 
             if (staff == null)
             {
                 return NotFound();
             }
 
-            return View(staff);
+            staff.HoTen = model.HoTen;
+            staff.Email = model.Email;
+            staff.SoDienThoai = model.SoDienThoai;
+            _context.NhanViens.Update(staff);
+            await _context.SaveChangesAsync();
+
+            TempData["SuccessProfile"] = "Thông tin cá nhân đã được cập nhật.";
+            return RedirectToAction(nameof(Profile));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                var viewModel = await BuildStaffProfileViewModelAsync(model);
+                if (viewModel == null)
+                {
+                    return RedirectToAction("Login", "Admin");
+                }
+                return View("Profile", viewModel);
+            }
+
+            var username = User.Identity?.Name;
+            if (string.IsNullOrEmpty(username))
+            {
+                return RedirectToAction("Login", "Admin");
+            }
+
+            var (success, message) = await _authService.ChangePasswordAsync(username, model.NewPassword);
+            if (success)
+            {
+                TempData["SuccessPassword"] = "Mật khẩu đã được đổi thành công.";
+            }
+            else
+            {
+                TempData["ErrorPassword"] = message ?? "Không thể đổi mật khẩu lúc này.";
+            }
+
+            return RedirectToAction(nameof(Profile));
+        }
+
+        private async Task<StaffProfileViewModel?> BuildStaffProfileViewModelAsync(ChangePasswordViewModel? changePassword = null)
+        {
+            var username = User.Identity?.Name;
+            if (string.IsNullOrEmpty(username))
+            {
+                return null;
+            }
+
+            var staff = await _context.NhanViens
+                .Include(n => n.ChiNhanh)
+                .FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+
+            if (staff == null)
+            {
+                return null;
+            }
+
+            return new StaffProfileViewModel
+            {
+                MaNhanVien = staff.MaNhanVien,
+                HoTen = staff.HoTen,
+                Email = staff.Email,
+                SoDienThoai = staff.SoDienThoai,
+                BranchName = staff.ChiNhanh?.TenChiNhanh,
+                ChangePassword = changePassword ?? new ChangePasswordViewModel()
+            };
         }
 
         [HttpPost]

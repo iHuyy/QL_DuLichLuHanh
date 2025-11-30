@@ -27,6 +27,9 @@ namespace DuLich.Models
         [Column("CHUKYSO")]
         public string? ChuKySo { get; set; }
         
+        [Column("PHUONGTHUCTHANHTOAN")]
+        public string? PhuongThucThanhToan { get; set; }
+        
         [Column("PAYLOAD")] 
         public string? Payload { get; set; }
 

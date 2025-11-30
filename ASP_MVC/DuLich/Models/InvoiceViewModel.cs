@@ -9,6 +9,7 @@ namespace DuLich.Models
         public decimal? SoTien { get; set; }
         public string? TrangThai { get; set; }
         public bool IsSignatureValid { get; set; }
+        public string? PaymentMethod { get; set; }
 
         // Thông tin tour
         public string? TenTour { get; set; }

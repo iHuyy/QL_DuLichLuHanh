@@ -1,169 +1,129 @@
 <?php
-/**
- * File: get_user_bookings.php
- * Lấy danh sách các phiếu đặt tour của khách hàng
- * Kết nối DatTour, Tour, và HoaDon để lấy thông tin đầy đủ
- */
+// KLTN/get_user_bookings.php
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/connect.php';
-require_once __DIR__ . '/auth_middleware.php'; // (THÊM)
+require_once __DIR__ . '/auth_middleware.php';
 
 try {
-    // (THÊM) Buộc xác thực và lấy user ID từ token
-    $session = require_auth();
-    $maKhachHang = intval($session['user_id']);
+    $userId = null;
 
-    // (XÓA) Khối kiểm tra $_GET['makhachhang'] cũ
+    // 1. Kiểm tra tham số
+    if (isset($_GET['makhachhang']) && !empty($_GET['makhachhang'])) {
+        $userId = intval($_GET['makhachhang']);
+    } else {
+        $session = require_auth(); 
+        $userId = $session['user_id'];
+    }
 
-    // Kiểm tra MaKhachHang phải > 0
-    if ($maKhachHang <= 0) {
-        echo json_encode([
-            'success' => false,
-            'error' => 'Invalid user ID in token',
-            'user_id_received' => $session['user_id'],
-        ]);
+    check_db_connection();
+
+    if (!$userId) {
+        echo json_encode(['success' => false, 'message' => 'Không xác định được khách hàng']);
         exit;
     }
 
-    // Sử dụng connection từ connect.php
-    if (!$conn) {
-        $conn = connect_admin();
-    }
+    // 2. Truy vấn
+    // Lấy đầy đủ các trường để khớp với Model Flutter
+    $sql = "SELECT 
+                dt.MaDatTour, 
+                dt.MaTour, 
+                dt.NgayDat, 
+                dt.SoNguoiLon, 
+                dt.SoTreEm, 
+                dt.TongTien, 
+                dt.TrangThaiDat, 
+                dt.TrangThaiThanhToan,
+                dt.YeuCauDacBiet,
+                t.TieuDe,
+                t.MoTa,
+                t.NoiKhoiHanh,
+                t.NoiDen,
+                t.ThanhPho,
+                t.ThoiGian,
+                t.GiaNguoiLon,
+                t.GiaTreEm,
+                hd.MaHoaDon,
+                hd.SoTien AS HoaDonSoTien,
+                hd.TrangThai AS TrangThaiHoaDon,
+                (SELECT DuLieuAnh FROM AnhTour WHERE MaTour = t.MaTour AND ROWNUM = 1) AS AnhThumb,
+                (SELECT LoaiAnh FROM AnhTour WHERE MaTour = t.MaTour AND ROWNUM = 1) AS MimeThumb
+            FROM DatTour dt
+            JOIN Tour t ON dt.MaTour = t.MaTour
+            LEFT JOIN HoaDon hd ON dt.MaDatTour = hd.MaDatTour
+            WHERE dt.MaKhachHang = :param_kh_id
+            ORDER BY dt.NgayDat DESC";
 
-    if (!$conn) {
-        $error = oci_error();
-        echo json_encode([
-            'success' => false,
-            'error' => 'Connection failed',
-            'details' => $error['message'] ?? 'Unknown error',
-        ]);
-        exit;
-    }
+    $stmt = @oci_parse($conn, $sql);
+    if (!$stmt) throw new Exception("Lỗi Parse SQL: " . (oci_error($conn)['message'] ?? 'Unknown'));
 
-    try {
-        // Query: Lấy danh sách booking kèm thông tin tour
-        $query = "
-            SELECT 
-                DT.MaDatTour,
-                DT.MaKhachHang,
-                DT.MaTour,
-                DT.NgayDat,
-                DT.SoNguoiLon,
-                DT.SoTreEm,
-                DT.TongTien,
-                DT.TrangThaiDat,
-                DT.TrangThaiThanhToan,
-                DT.YeuCauDacBiet,
-                T.TieuDe,
-                T.MoTa,
-                T.NoiKhoiHanh,
-                T.NoiDen,
-                T.ThanhPho,
-                T.ThoiGian,
-                T.GiaNguoiLon,
-                T.GiaTreEm,
-                -- Image BLOB and MIME from ANHTOUR (one image per tour)
-                A.DuLieuAnh as DULIEUANH,
-                NVL(A.LoaiAnh, '') as LOAIANH,
-                NVL(HD.MaHoaDon, NULL) as MaHoaDon,
-                NVL(HD.SoTien, 0) as HoaDonSoTien,
-                NVL(HD.TrangThai, '') as HoaDonTrangThai
-            FROM DatTour DT
-            LEFT JOIN Tour T ON DT.MaTour = T.MaTour
-            LEFT JOIN AnhTour A ON T.MaTour = A.MaTour AND ROWNUM = 1
-            LEFT JOIN HoaDon HD ON DT.MaDatTour = HD.MaDatTour
-            WHERE DT.MaKhachHang = :makhachhang
-            ORDER BY DT.NgayDat DESC
-        ";
+    oci_bind_by_name($stmt, ':param_kh_id', $userId);
 
-        $stmt = oci_parse($conn, $query);
-        oci_bind_by_name($stmt, ':makhachhang', $maKhachHang);
+    if (!@oci_execute($stmt)) throw new Exception("Lỗi Thực thi SQL: " . (oci_error($stmt)['message'] ?? 'Unknown'));
 
-        if (!oci_execute($stmt)) {
-            $error = oci_error($stmt);
-            echo json_encode([
-                'success' => false,
-                'error' => 'Query execution failed',
-                'oracle_error' => $error['message'],
-                'query' => $query,
-            ]);
-            exit;
-        }
-
-        // Fetch dữ liệu
-        $bookings = [];
-        while ($row = oci_fetch_assoc($stmt)) {
-            // Debug: print array keys để kiểm tra (only for first row)
-            if (empty($bookings)) {
-                error_log('Row keys: ' . json_encode(array_keys($row)));
-            }
-
-            // Convert BLOB to base64 data URL if present
-            $imageUrl = '';
-            if (isset($row['DULIEUANH']) && $row['DULIEUANH'] !== null && $row['DULIEUANH'] !== '') {
+    $bookings = [];
+    while ($row = oci_fetch_assoc($stmt)) {
+        // Xử lý ảnh (như cũ)
+        $imgUrl = '';
+        if (isset($row['ANHTHUMB']) && $row['ANHTHUMB'] !== null) {
+            $blob = $row['ANHTHUMB'];
+            $data = null;
+            if (is_object($blob) && method_exists($blob, 'load')) {
                 try {
-                    $blob = $row['DULIEUANH'];
-                    if (is_object($blob) && method_exists($blob, 'load')) {
-                        $data = $blob->load();
-                    } else if (is_resource($blob)) {
-                        $data = stream_get_contents($blob);
-                    } else {
-                        $data = $blob;
-                    }
-                    if ($data !== null && $data !== '') {
-                        $b64 = base64_encode($data);
-                        $mime = isset($row['LOAIANH']) && $row['LOAIANH'] !== '' ? trim($row['LOAIANH']) : 'image/jpeg';
-                        $imageUrl = 'data:' . $mime . ';base64,' . $b64;
-                    }
-                } catch (Exception $e) {
-                    // ignore and leave imageUrl empty
-                }
+                    $data = $blob->load();
+                    $blob->free();
+                } catch (Exception $e) {}
+            } else if (is_resource($blob)) {
+                $data = stream_get_contents($blob);
+            } else {
+                $data = $blob;
             }
 
-            $bookings[] = [
-                'maDatTour' => intval($row['MADATTOUR'] ?? 0),
-                'maTour' => intval($row['MATOUR'] ?? 0),
-                'ngayDat' => $row['NGAYDAT'] ?? '',
-                'soNguoiLon' => intval($row['SONGUOILON'] ?? 0),
-                'soTreEm' => intval($row['SOTREEM'] ?? 0),
-                'tongTien' => floatval($row['TONGTIEN'] ?? 0),
-                'trangThaiDat' => trim($row['TRANGTHAIDAD'] ?? ''),
-                'trangThaiThanhToan' => trim($row['TRANGTHAITHANHH'] ?? ''),
-                'yeuCauDacBiet' => trim($row['YEUCAUDACBIET'] ?? ''),
-                'tieuDe' => trim($row['TIEUDE'] ?? ''),
-                'moTa' => trim($row['MOTA'] ?? ''),
-                'noiKhoiHanh' => trim($row['NOIKHOIHANH'] ?? ''),
-                'noiDen' => trim($row['NOIDEN'] ?? ''),
-                'thanhPho' => trim($row['THANHPHO'] ?? ''),
-                'thoiGian' => $row['THOIGIAN'] ?? '',
-                'giaNguoiLon' => floatval($row['GIANGUOILON'] ?? 0),
-                'giaTreEm' => floatval($row['GIATREEEМ'] ?? 0),
-                'hinhAnh' => $imageUrl,
-                'maHoaDon' => !is_null($row['MAHOADON']) ? intval($row['MAHOADON']) : null,
-                'hoaDonSoTien' => floatval($row['HOADONSOTIEN'] ?? 0),
-                'hoaDonTrangThai' => trim($row['HOADONTRANGTHAI'] ?? ''),
-            ];
+            if ($data) {
+                $mime = !empty($row['MIMETHUMB']) ? $row['MIMETHUMB'] : 'image/jpeg';
+                $imgUrl = "data:$mime;base64," . base64_encode($data);
+            }
         }
 
-        oci_free_statement($stmt);
-        close_conn($conn);
-
-        echo json_encode([
-            'success' => true,
-            'bookings' => $bookings,
-            'count' => count($bookings),
-        ]);
-
-    } catch (Exception $e) {
-        close_conn($conn);
-        echo json_encode([
-            'success' => false,
-            'error' => $e->getMessage(),
-        ]);
+        // *** MAPPING CHÍNH XÁC VỚI MODEL FLUTTER ***
+        // Lưu ý: Các trường số (int/double) nên được cast về đúng kiểu hoặc để string tùy logic decode
+        // Nhưng ở đây ta trả về giá trị thô, json_encode sẽ biến số thành số (nếu PHP nhận diện đc) hoặc chuỗi
+        $bookings[] = [
+            'maDatTour' => (int)$row['MADATTOUR'],
+            'maTour' => (int)$row['MATOUR'],
+            'ngayDat' => $row['NGAYDAT'], // String date
+            'soNguoiLon' => (int)$row['SONGUOILON'],
+            'soTreEm' => (int)$row['SOTREEM'],
+            'tongTien' => (double)$row['TONGTIEN'],
+            'trangThaiDat' => $row['TRANGTHAIDAT'],
+            'trangThaiThanhToan' => $row['TRANGTHAITHANHTOAN'],
+            'yeuCauDacBiet' => $row['YEUCAUDACBIET'] ?? '',
+            'tieuDe' => $row['TIEUDE'],
+            'moTa' => $row['MOTA'] ?? '',
+            'noiKhoiHanh' => $row['NOIKHOIHANH'],
+            'noiDen' => $row['NOIDEN'],
+            'thanhPho' => $row['THANHPHO'] ?? '',
+            'thoiGian' => $row['THOIGIAN'], // String date
+            'giaNguoiLon' => (double)($row['GIANGUOILON'] ?? 0),
+            'giaTreEm' => (double)($row['GIATREEM'] ?? 0),
+            'hinhAnh' => $imgUrl, // Key khớp với model
+            'maHoaDon' => isset($row['MAHOADON']) ? (int)$row['MAHOADON'] : null,
+            'hoaDonSoTien' => (double)($row['HOADONSOTIEN'] ?? 0),
+            'hoaDonTrangThai' => $row['TRANGTHAIHOADON'] ?? ''
+        ];
     }
-} catch (Exception $auth_e) {
-    // (THÊM) Bắt lỗi 401 từ require_auth()
-    // Mã 401 sẽ tự động được đặt bởi auth_middleware.php
-    echo json_encode(['success' => false, 'message' => $auth_e->getMessage()]);
+
+    oci_free_statement($stmt);
+    
+    // Trả về key 'data' để khớp với Flutter
+    echo json_encode(['success' => true, 'data' => $bookings]);
+
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Server Error: ' . $e->getMessage()]);
+} finally {
+    if (!empty($conn)) @oci_close($conn);
 }
 ?>

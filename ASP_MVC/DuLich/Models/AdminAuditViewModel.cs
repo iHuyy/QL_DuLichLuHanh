@@ -16,6 +16,7 @@ namespace DuLich.Models
         public int TourTotal { get; set; }
         public int StaffTotal { get; set; }
         public int DatabaseTotal { get; set; }
+        public List<BackupHistory> BackupHistories { get; set; } = new();
     }
 
     public class AuditRecord

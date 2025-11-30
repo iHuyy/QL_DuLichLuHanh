@@ -12,10 +12,10 @@
             <div class="card-body">
                 <div class="media">
                     <span class="mr-3">
-                        <i class="fa fa-plane text-white fa-3x"></i>
+                        <h3 class="text-center" id="totalTours">0</h3>
                     </span>
                     <div class="media-body">
-                        <h3 class="text-white" id="totalTours">0</h3>
+
                         <h5 class="mb-1 text-white">Tổng số Tours</h5>
                     </div>
                 </div>
@@ -27,10 +27,10 @@
             <div class="card-body">
                 <div class="media">
                     <span class="mr-3">
-                        <i class="fa fa-users text-white fa-3x"></i>
+                        <h3 class="text-center" id="totalUsers">0</h3>
                     </span>
                     <div class="media-body">
-                        <h3 class="text-white" id="totalUsers">0</h3>
+
                         <h5 class="mb-1 text-white">Tổng số người dùng</h5>
                     </div>
                 </div>
@@ -42,11 +42,11 @@
             <div class="card-body">
                 <div class="media">
                     <span class="mr-3">
-                        <i class="fa fa-calendar-check text-white fa-3x"></i>
+                        <h3 class="text-center" id="todayBookings">0</h3>
                     </span>
                     <div class="media-body">
-                        <h3 class="text-white" id="todayBookings">0</h3>
-                        <h5 class="mb-1 text-white">Số chi nhánh</h5>
+
+                        <h5 class="mb-1 text-white">Đặt tour hôm nay</h5>
                     </div>
                 </div>
             </div>
@@ -103,27 +103,6 @@
 
         </div>
     </div>
-
-    <div class="col-xl-6 col-xxl-6 col-sm-6">
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Số lượng đặt tour theo tháng</h3>
-            </div>
-            <div class="card-body">
-                <canvas id="monthlyBookingsChart"></canvas>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-6 col-xxl-6 col-sm-6">
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Phân bố tour theo loại</h3>
-            </div>
-            <div class="card-body">
-                <div id="tourTypeDistribution" class="ct-chart ct-golden-section"></div>
-            </div>
-        </div>
-    </div>
     <div class="col-xl-12 col-xxl-12 col-sm-12">
         <div class="card">
             <div class="card-header">
@@ -136,7 +115,6 @@
                             <tr>
                                 <th>Tên tour</th>
                                 <th>Số lượng đặt</th>
-                                <th>Đánh giá</th>
                                 <th>Doanh thu</th>
                             </tr>
                         </thead>
