@@ -29,10 +29,10 @@ namespace DuLich.Controllers.admin
             // 2. Get all revenue grouped by branch
             var revenues = await _context.HoaDons
                 .Where(hd => hd.DatTour != null && hd.DatTour.Tour != null && hd.DatTour.Tour.MaChiNhanh != null)
-                .GroupBy(hd => hd.DatTour.Tour.MaChiNhanh)
+                .GroupBy(hd => hd.DatTour!.Tour!.MaChiNhanh)
                 .Select(g => new
                 {
-                    MaChiNhanh = g.Key.Value,
+                    MaChiNhanh = g.Key!.Value,
                     DoanhThu = g.Sum(hd => hd.SoTien ?? 0)
                 })
                 .ToDictionaryAsync(r => r.MaChiNhanh, r => r.DoanhThu);

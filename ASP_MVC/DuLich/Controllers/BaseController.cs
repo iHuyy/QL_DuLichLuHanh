@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Globalization;
 using System.Security.Claims;
+using System.Text;
 using System.Threading.Tasks;
 using System;
 using System.Linq;
@@ -55,10 +57,10 @@ namespace DuLich.Controllers
         }
 
         private async Task SetUserContext()
-        { 
+        {
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
             var chiNhanhIdStr = User.FindFirst("MaChiNhanh")?.Value;
-            int.TryParse(chiNhanhIdStr, out var chiNhanhId); // chiNhanhId will be 0 if not found or not a number
+            int.TryParse(chiNhanhIdStr, out var chiNhanhId);
 
             if (!string.IsNullOrEmpty(role))
             {
@@ -69,7 +71,7 @@ namespace DuLich.Controllers
                 }
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = "BEGIN TADMIN.pkg_tour_management.set_user_context(:role_name, :branch_id); END;";
-                
+
                 var roleParam = cmd.CreateParameter();
                 roleParam.ParameterName = "role_name";
                 roleParam.Value = role;
@@ -79,9 +81,53 @@ namespace DuLich.Controllers
                 branchParam.ParameterName = "branch_id";
                 branchParam.Value = chiNhanhId == 0 ? (object)DBNull.Value : chiNhanhId;
                 cmd.Parameters.Add(branchParam);
-                
+
                 await cmd.ExecuteNonQueryAsync();
             }
+        }
+
+        protected async Task<int> GetReservedSeatCountAsync(int tourId)
+        {
+            var bookings = await _context.DatTours
+                .AsNoTracking()
+                .Where(d => d.MaTour == tourId)
+                .Select(d => new
+                {
+                    d.TrangThaiDat,
+                    Adults = d.SoNguoiLon ?? 0,
+                    Children = d.SoTreEm ?? 0
+                })
+                .ToListAsync();
+
+            return bookings
+                .Where(b => !IsCancellationStatus(b.TrangThaiDat))
+                .Sum(b => b.Adults + b.Children);
+        }
+
+        protected static bool IsCancellationStatus(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+                return false;
+
+            var normalized = RemoveDiacritics(status).ToLowerInvariant();
+            return normalized.Contains("huy");
+        }
+
+        private static string RemoveDiacritics(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return string.Empty;
+
+            var normalized = text.Normalize(NormalizationForm.FormD);
+            var sb = new StringBuilder();
+            foreach (var c in normalized)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                {
+                    sb.Append(c);
+                }
+            }
+            return sb.ToString().Normalize(NormalizationForm.FormC);
         }
     }
 }

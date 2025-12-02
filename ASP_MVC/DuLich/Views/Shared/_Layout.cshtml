@@ -5,7 +5,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - DuLich</title>
+    <title>@ViewData["Title"]</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
 
-    <link rel="icon" type="image/x-icon" href="~/favicon.ico" asp-append-version="true" />
+    <link rel="icon" type="image/x-icon" href="~/images/logo.ico" asp-append-version="true" />
     <link rel="stylesheet" href="~/customer/travel-agency/lib/animate/animate.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/customer/travel-agency/lib/owlcarousel/assets/owl.carousel.min.css"
         asp-append-version="true" />
@@ -48,7 +48,7 @@
     <div class="container-fluid position-relative p-0">
         <nav class="navbar navbar-expand-lg navbar-light px-4 px-lg-5 py-3 py-lg-0">
             <a asp-controller="Customer" asp-action="Index" class="navbar-brand p-0">
-                <img src="~/images/logo.jpg" asp-append-version="true" alt="DuLich" class="img-fluid"
+                <img src="~/images/logo.png" asp-append-version="true" alt="DuLich" class="img-fluid logo-brand"
                     style="height: 48px;" loading="lazy" />
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
@@ -164,6 +164,112 @@
     <script src="~/customer/travel-agency/lib/tempusdominus/js/tempusdominus-bootstrap-4.min.js"
         asp-append-version="true"></script>
     <script src="~/customer/travel-agency/js/main.js" asp-append-version="true"></script>
+
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <!-- Session Timeout Modal -->
+        <div class="modal fade" id="sessionTimeoutModal" tabindex="-1" aria-labelledby="sessionTimeoutModalLabel"
+            aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="sessionTimeoutModalLabel">Phiên sắp hết hạn</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        Phiên làm việc của bạn sẽ hết hạn sau <span id="sessionTimeoutCountdown">60</span> giây. Bạn có muốn
+                        tiếp tục?
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" id="logoutButton">Đăng xuất</button>
+                        <button type="button" class="btn btn-primary" id="keepAliveButton">Tiếp tục</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            (function () {
+                const sessionMinutes = 15;
+                const warningSecondsBeforeEnd = 60;
+
+                let warningTimer;
+                let logoutTimer;
+                let countdownInterval;
+
+                const modalElement = document.getElementById('sessionTimeoutModal');
+                const modalInstance = new bootstrap.Modal(modalElement);
+                const countdownElement = document.getElementById('sessionTimeoutCountdown');
+
+                function startTimers() {
+                    clearTimeout(warningTimer);
+                    clearTimeout(logoutTimer);
+                    clearInterval(countdownInterval);
+
+                    const warningTime = (sessionMinutes * 60 - warningSecondsBeforeEnd) * 1000;
+                    const logoutTime = sessionMinutes * 60 * 1000;
+
+                    warningTimer = setTimeout(showWarning, warningTime);
+                    logoutTimer = setTimeout(logout, logoutTime);
+                }
+
+                function showWarning() {
+                    modalInstance.show();
+                    let secondsLeft = warningSecondsBeforeEnd;
+                    countdownElement.textContent = secondsLeft;
+
+                    countdownInterval = setInterval(() => {
+                        secondsLeft--;
+                        countdownElement.textContent = secondsLeft;
+                        if (secondsLeft <= 0) {
+                            clearInterval(countdownInterval);
+                        }
+                    }, 1000);
+                }
+
+                async function keepAlive() {
+                    try {
+                        const response = await fetch('/api/ApiAuth/keepalive', {
+                            method: 'GET',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        });
+                        if (response.ok) {
+                            console.log("Session extended.");
+                            modalInstance.hide();
+                            startTimers(); // Restart timers after successful keep-alive
+                        } else {
+                            logout(); // If keep-alive fails, logout
+                        }
+                    } catch (error) {
+                        logout(); // If there's a network error, logout
+                    }
+                }
+
+                function logout() {
+                    // Use the form post to ensure middleware for logout runs properly
+                    const logoutForm = document.createElement('form');
+                    logoutForm.method = 'post';
+                    logoutForm.action = '/Customer/Logout';
+                    // Add antiforgery token if your form has one
+                    document.body.appendChild(logoutForm);
+                    logoutForm.submit();
+                }
+
+                // Event Listeners
+                document.getElementById('keepAliveButton').addEventListener('click', keepAlive);
+                document.getElementById('logoutButton').addEventListener('click', logout);
+
+                // Reset timers on user activity
+                ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+                    document.addEventListener(event, startTimers, { passive: true });
+                });
+
+                // Initial start
+                startTimers();
+            })();
+        </script>
+    }
+
     @RenderSection("Scripts", required: false)
 </body>
 

@@ -95,7 +95,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             },
             OnTokenValidated = context =>
             {
-                Console.WriteLine(">>> TOKEN VALIDATED: " + context.Principal.Identity.Name);
+                Console.WriteLine(">>> TOKEN VALIDATED: " + context.Principal?.Identity?.Name);
                 return Task.CompletedTask;
             },
             OnMessageReceived = context =>

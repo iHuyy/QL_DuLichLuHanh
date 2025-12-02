@@ -1,9 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:app_dllh/services/auth_service.dart'; // Sử dụng AuthService để gọi API
+import 'package:app_dllh/services/auth_service.dart';
 
-// Màu xanh chính được định nghĩa lại để file chạy độc lập
 const Color primaryBlue = Color(0xFF007AFF);
 
 class RegisterPage extends StatefulWidget {
@@ -14,30 +12,24 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
-  // Controllers cho các trường nhập liệu MỚI (đầy đủ thông tin)
-  final TextEditingController _usernameController = TextEditingController(); // Tên đăng nhập Oracle (gửi API)
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _rePasswordController = TextEditingController();
+  final TextEditingController _fullNameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
 
-  final TextEditingController _fullNameController = TextEditingController(); // Họ và tên
-  final TextEditingController _emailController = TextEditingController(); // Email cá nhân
-  final TextEditingController _phoneController = TextEditingController(); // Số điện thoại
-  final TextEditingController _addressController = TextEditingController(); // Địa chỉ
-
-  // State quản lý
   String _message = "";
   bool _isLoading = false;
-  // Tách biến trạng thái ẩn/hiện cho từng trường mật khẩu
   bool _isPasswordVisible = false;
   bool _isRePasswordVisible = false;
 
-  // Khởi tạo AuthService instance
   final AuthService _authService = AuthService();
+  String? _serverOtpHash;
+  int? _serverOtpExpiry;
 
-  // =========================================================
-  // LOGIC ĐĂNG KÝ (Đã sửa để gọi AuthService và gửi đủ 6 trường)
-  // =========================================================
-  Future<void> _register() async {
+  Future<void> _handleRegisterButton() async {
     setState(() {
       _isLoading = true;
       _message = "";
@@ -49,161 +41,194 @@ class _RegisterPageState extends State<RegisterPage> {
     final fullName = _fullNameController.text.trim();
     final email = _emailController.text.trim();
     final phone = _phoneController.text.trim();
-    final address = _addressController.text.trim(); // Địa chỉ là tùy chọn
 
-    // 1. Kiểm tra rỗng (Kiểm tra tất cả các trường bắt buộc)
-    if (oracleUser.isEmpty || password.isEmpty || rePassword.isEmpty || 
-        fullName.isEmpty || 
-        email.isEmpty || 
-        phone.isEmpty) {
-      setState(() {
-        _isLoading = false;
-        _message = "Vui lòng nhập đầy đủ các trường bắt buộc: Tên đăng nhập, Mật khẩu, Họ tên, Email, SĐT.";
-      });
-      _showSnackBar(_message, Colors.orange);
+    if (oracleUser.isEmpty || password.isEmpty || rePassword.isEmpty ||
+        fullName.isEmpty || email.isEmpty || phone.isEmpty) {
+      _showError("Vui lòng nhập đầy đủ các trường bắt buộc.");
       return;
     }
 
-    // 2. Kiểm tra mật khẩu khớp
+    // *** Validate Số điện thoại ***
+    if (!RegExp(r'^0\d{9}$').hasMatch(phone)) {
+      _showError("Số điện thoại không hợp lệ (Phải là 10 số và bắt đầu bằng 0).");
+      return;
+    }
+
+    if (password.length < 8 ||
+        !password.contains(RegExp(r'[A-Z]')) ||
+        !password.contains(RegExp(r'[0-9]')) ||
+        !password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
+      _showError("Mật khẩu không đủ mạnh (Cần 8 ký tự, Hoa, Số, Ký tự đặc biệt).");
+      return;
+    }
+
     if (password != rePassword) {
-      setState(() {
-        _isLoading = false;
-        _message = "Mật khẩu nhập lại không khớp.";
-        _passwordController.clear();
-        _rePasswordController.clear();
-      });
-      _showSnackBar(_message, Colors.orange);
+      _showError("Mật khẩu nhập lại không khớp.");
       return;
     }
-    
-    // 3. Thực hiện gọi API đăng ký qua AuthService (Gửi đầy đủ 6 trường)
+
     try {
-      final Map<String, dynamic> result = await _authService.register(
-        username: oracleUser,
-        password: password,
-        hoTen: fullName,
-        email: email,
-        soDienThoai: phone,
-        diaChi: address,
-      );
+      final result = await _authService.sendRegisterOtp(email, oracleUser);
+      setState(() => _isLoading = false);
 
-      debugPrint("API Result: $result");
-
-      setState(() {
-        _isLoading = false;
-      });
-      
       if (result['success'] == true) {
-        _showSnackBar("Tạo user Oracle thành công! Vui lòng đăng nhập.", Colors.green);
-        // Điều hướng về màn hình đăng nhập
-        Navigator.of(context).pop(); 
+        _serverOtpHash = result['otp_hash'];
+        _serverOtpExpiry = result['otp_expiry'];
+        if (result['debug_otp'] != null) print("OTP DEBUG: ${result['debug_otp']}");
+        if (mounted) _showOtpInputDialog();
       } else {
-        setState(() {
-          _message = result['message'] ?? "Đăng ký thất bại không rõ nguyên nhân.";
-        });
-        _showSnackBar(_message, Colors.red);
+        _showError(result['message'] ?? "Không thể gửi mã xác thực.");
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _message = "Lỗi kết nối hoặc xử lý: $e";
-      });
-      _showSnackBar(_message, Colors.red);
+      _showError("Lỗi kết nối: $e");
     }
+  }
+
+  void _showOtpInputDialog() {
+    final otpController = TextEditingController();
+    bool isVerifying = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text("Xác thực Email"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text("Mã OTP đã được gửi đến:\n${_emailController.text}"),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: otpController,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    maxLength: 6,
+                    style: const TextStyle(fontSize: 24, letterSpacing: 8, fontWeight: FontWeight.bold),
+                    decoration: const InputDecoration(
+                      hintText: "######",
+                      border: OutlineInputBorder(),
+                      counterText: "",
+                    ),
+                  ),
+                  if (isVerifying)
+                    const Padding(padding: EdgeInsets.only(top: 16), child: CircularProgressIndicator()),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isVerifying ? null : () => Navigator.pop(ctx),
+                  child: const Text("Hủy"),
+                ),
+                ElevatedButton(
+                  onPressed: isVerifying ? null : () async {
+                    final otp = otpController.text.trim();
+                    if (otp.length < 6) return;
+                    setStateDialog(() => isVerifying = true);
+                    await _submitFinalRegistration(otp, ctx);
+                    if (mounted) setStateDialog(() => isVerifying = false);
+                  },
+                  child: const Text("Xác nhận"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _submitFinalRegistration(String otp, BuildContext dialogContext) async {
+    try {
+      final result = await _authService.register(
+        username: _usernameController.text.trim(),
+        password: _passwordController.text.trim(),
+        hoTen: _fullNameController.text.trim(),
+        email: _emailController.text.trim(),
+        soDienThoai: _phoneController.text.trim(),
+        diaChi: _addressController.text.trim(),
+        otp: otp,
+        otpHash: _serverOtpHash!,
+        otpExpiry: _serverOtpExpiry!,
+      );
+
+      if (mounted) Navigator.pop(dialogContext);
+
+      if (result['success'] == true) {
+        _showSnackBar("Đăng ký thành công! Vui lòng đăng nhập.", Colors.green);
+        if (mounted) Navigator.of(context).pop();
+      } else {
+        _showSnackBar(result['message'] ?? "Đăng ký thất bại.", Colors.red);
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(dialogContext);
+      _showSnackBar("Lỗi xử lý đăng ký: $e", Colors.red);
+    }
+  }
+
+  void _showError(String msg) {
+    setState(() {
+      _isLoading = false;
+      _message = msg;
+    });
+    _showSnackBar(msg, Colors.red);
   }
 
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-        duration: const Duration(seconds: 3),
-      ),
+      SnackBar(content: Text(message), backgroundColor: color, duration: const Duration(seconds: 3)),
     );
   }
 
-  // Hàm điều hướng trở lại màn hình Đăng nhập
-  void _navigateToLogin() {
-    Navigator.of(context).pop();
-  }
-
-  // =========================================================
-  // WIDGETS GIAO DIỆN MỚI (Giữ nguyên)
-  // =========================================================
-
-  // Widget riêng để xây dựng ô nhập liệu
   Widget _buildInputField({
     required String hintText,
     required TextEditingController controller,
     bool isPassword = false,
     TextInputType keyboardType = TextInputType.text,
-    bool? isVisible, // Biến trạng thái ẩn hiện (chỉ dùng cho mật khẩu)
-    VoidCallback? toggleVisibility, // Hàm xử lý khi nhấn icon
+    bool? isVisible,
+    VoidCallback? toggleVisibility,
   }) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF2F2F7), // Màu nền nhẹ cho input field
-        borderRadius: BorderRadius.circular(10), // Bo góc
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFF2F2F7), borderRadius: BorderRadius.circular(10)),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        // Dùng biến isVisible được truyền vào để kiểm soát obscureText
-        obscureText: isPassword && !(isVisible ?? false), 
+        obscureText: isPassword && !(isVisible ?? false),
         decoration: InputDecoration(
           hintText: hintText,
-          border: InputBorder.none, 
-          suffixIcon: isPassword 
+          border: InputBorder.none,
+          suffixIcon: isPassword
               ? IconButton(
-                  icon: Icon(
-                    // Sử dụng isVisible
-                    (isVisible ?? false) ? Icons.visibility_off_outlined : Icons.visibility_outlined, 
-                    color: Colors.grey[600],
-                  ),
-                  onPressed: toggleVisibility, // Gọi hàm toggle được truyền vào
+                  icon: Icon((isVisible ?? false) ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey[600]),
+                  onPressed: toggleVisibility,
                 )
               : null,
           contentPadding: const EdgeInsets.symmetric(vertical: 18),
-          hintStyle: TextStyle(
-            color: Colors.grey[600],
-            fontSize: 16,
-          ),
+          hintStyle: TextStyle(color: Colors.grey[600], fontSize: 16),
         ),
         style: const TextStyle(fontSize: 16, color: Colors.black87),
       ),
     );
   }
 
-  // Widget riêng để xây dựng nút Đăng ký
   Widget _buildRegistrationButton() {
     return SizedBox(
-      width: double.infinity, 
-      height: 56, 
+      width: double.infinity,
+      height: 56,
       child: ElevatedButton(
-        onPressed: _isLoading ? null : _register, // Gọi hàm _register
+        onPressed: _isLoading ? null : _handleRegisterButton,
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryBlue,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          elevation: 0,
-          textStyle: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        child: _isLoading 
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 3,
-                ),
-              )
-            : const Text('Registration'),
+        child: _isLoading
+            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
+            : const Text('Đăng ký'),
       ),
     );
   }
@@ -211,7 +236,6 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -220,159 +244,48 @@ class _RegisterPageState extends State<RegisterPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Vùng chứa hình ảnh minh họa
               SizedBox(
-                height: screenHeight * 0.20, // Giảm chiều cao thêm để chứa nhiều trường hơn
-                child: Center(
+                height: screenHeight * 0.20,
+                child: const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.person_add_alt_1, size: 50, color: primaryBlue),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Create Your Account',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryBlue),
-                      ),
+                      SizedBox(height: 10),
+                      Text('Tạo tài khoản của bạn', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryBlue)),
                     ],
                   ),
                 ),
               ),
-
-              const SizedBox(height: 16),
-
-              // Tiêu đề "Create Account"
-              const Text(
-                'Create Account',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-
+              const Text('Đăng Ký', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87)),
               const SizedBox(height: 32),
-
-              // --- BẮT ĐẦU CÁC Ô NHẬP LIỆU ĐẦY ĐỦ ---
-
-              // 1. Tên đăng nhập Oracle
-              _buildInputField(
-                hintText: 'Tên đăng nhập (Oracle User)',
-                controller: _usernameController,
-                keyboardType: TextInputType.text,
-              ),
-
+              _buildInputField(hintText: 'Tên đăng nhập', controller: _usernameController),
               const SizedBox(height: 16),
-              
-              // 2. Họ và tên
-              _buildInputField(
-                hintText: 'Họ và tên',
-                controller: _fullNameController,
-                keyboardType: TextInputType.name,
-              ),
-
+              _buildInputField(hintText: 'Họ và tên', controller: _fullNameController, keyboardType: TextInputType.name),
               const SizedBox(height: 16),
-
-              // 3. Email cá nhân
-              _buildInputField(
-                hintText: 'Email cá nhân',
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-              ),
-
+              _buildInputField(hintText: 'Email cá nhân', controller: _emailController, keyboardType: TextInputType.emailAddress),
               const SizedBox(height: 16),
-
-              // 4. Số điện thoại
-              _buildInputField(
-                hintText: 'Số điện thoại',
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-              ),
-
+              _buildInputField(hintText: 'Số điện thoại', controller: _phoneController, keyboardType: TextInputType.phone),
               const SizedBox(height: 16),
-
-              // 5. Địa chỉ
-              _buildInputField(
-                hintText: 'Địa chỉ (Tùy chọn)',
-                controller: _addressController,
-                keyboardType: TextInputType.streetAddress,
-              ),
-
+              _buildInputField(hintText: 'Địa chỉ (Tùy chọn)', controller: _addressController, keyboardType: TextInputType.streetAddress),
               const SizedBox(height: 16),
-
-              // 6. Mật khẩu
-              _buildInputField(
-                hintText: 'Mật khẩu',
-                controller: _passwordController,
-                isPassword: true,
-                isVisible: _isPasswordVisible,
-                toggleVisibility: () {
-                  setState(() {
-                    _isPasswordVisible = !_isPasswordVisible;
-                  });
-                },
-              ),
-              
+              _buildInputField(hintText: 'Mật khẩu', controller: _passwordController, isPassword: true, isVisible: _isPasswordVisible, toggleVisibility: () => setState(() => _isPasswordVisible = !_isPasswordVisible)),
               const SizedBox(height: 16),
-
-              // 7. Xác nhận Mật khẩu
-              _buildInputField(
-                hintText: 'Xác nhận Mật khẩu',
-                controller: _rePasswordController,
-                isPassword: true,
-                isVisible: _isRePasswordVisible,
-                toggleVisibility: () {
-                  setState(() {
-                    _isRePasswordVisible = !_isRePasswordVisible;
-                  });
-                },
-              ),
-              // --- KẾT THÚC CÁC Ô NHẬP LIỆU ĐẦY ĐỦ ---
-
+              _buildInputField(hintText: 'Xác nhận Mật khẩu', controller: _rePasswordController, isPassword: true, isVisible: _isRePasswordVisible, toggleVisibility: () => setState(() => _isRePasswordVisible = !_isRePasswordVisible)),
               const SizedBox(height: 32),
-
-              // Nút Đăng ký (Registration Button)
               _buildRegistrationButton(),
-
               const SizedBox(height: 20),
-              
-              // Hiển thị thông báo lỗi (nếu có)
-              if (_message.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: Text(
-                    _message,
-                    style: const TextStyle(color: Colors.red, fontSize: 14),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-
-
-              // Đã có tài khoản (Sign In)
+              if (_message.isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Text(_message, style: const TextStyle(color: Colors.red, fontSize: 14), textAlign: TextAlign.center)),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text(
-                    "already have an account?",
-                    style: TextStyle(
-                      color: Colors.black54,
-                      fontSize: 16,
-                    ),
-                  ),
+                  const Text("Đã có tài khoản?", style: TextStyle(color: Colors.black54, fontSize: 16)),
                   TextButton(
-                    onPressed: _navigateToLogin, // Gọi hàm chuyển màn hình đăng nhập
-                    child: const Text(
-                      'Sign In',
-                      style: TextStyle(
-                        color: primaryBlue,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Đăng nhập', style: TextStyle(color: primaryBlue, fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ],
               ),
-              
               const SizedBox(height: 20),
             ],
           ),

@@ -95,7 +95,13 @@
                 <p class="text-uppercase text-muted mt-3 mb-1">Ngày khởi hành</p>
                 <h5 class="fw-bold">@Model.StartDate?.ToString("dd/MM/yyyy")</h5>
                 <p class="text-uppercase text-muted mt-3 mb-1">Số chỗ còn lại</p>
-                <h5 class="fw-bold">@Model.AvailableSlots</h5>
+                <h5 class="fw-bold">
+                    @Model.AvailableSlots
+                    @if (Model.TotalSlots > 0)
+                    {
+                        <small class="text-muted">/ @Model.TotalSlots</small>
+                    }
+                </h5>
 
                 <hr class="my-4" />
                 <h4 class="mb-3">Tạm tính</h4>

@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "VP28J3garaI=",
+  "dgSpecHash": "BmYJTh19SqE=",
   "success": true,
-  "projectFilePath": "G:\\Study\\KLTN\\AppQLDVDLLH\\BranchHuy\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
+  "projectFilePath": "G:\\Study\\KLTN\\AppQLDVDLLH\\Working\\ASP_MVC\\DuLich\\DuLich.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Admin\\.nuget\\packages\\bouncycastle.cryptography\\2.4.0\\bouncycastle.cryptography.2.4.0.nupkg.sha512",
     "C:\\Users\\Admin\\.nuget\\packages\\itext\\8.0.4\\itext.8.0.4.nupkg.sha512",

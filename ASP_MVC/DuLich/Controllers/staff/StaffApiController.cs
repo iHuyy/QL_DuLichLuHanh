@@ -110,7 +110,7 @@ END;";
             await cmd.ExecuteNonQueryAsync();
         }
 
-                [HttpGet("stats")]
+        [HttpGet("stats")]
         public async Task<IActionResult> GetStats()
         {
             var staff = await GetCurrentStaffAsync();
@@ -144,12 +144,29 @@ END;";
             var totalBookings = await _context.DatTours
                 .CountAsync(d => d.Tour != null && d.Tour.MaChiNhanh == branchId);
 
+            var pendingBookings = await _context.DatTours
+                .CountAsync(d => d.Tour != null
+                                 && d.Tour.MaChiNhanh == branchId
+                                 && d.TrangThaiDat == "Chờ xác nhận");
+
+            var confirmedBookings = await _context.DatTours
+                .CountAsync(d => d.Tour != null
+                                 && d.Tour.MaChiNhanh == branchId
+                                 && d.TrangThaiDat == "Đã xác nhận");
+
+            var activeTours = await _context.Tours
+                .CountAsync(t => t.MaChiNhanh == branchId
+                                 && t.TrangThai == "Hoạt động");
+
             return Ok(new
             {
                 totalRevenue,
                 totalCustomers,
                 totalTours,
-                totalBookings
+                totalBookings,
+                pendingBookings,
+                confirmedBookings,
+                activeTours
             });
         }
 
@@ -160,7 +177,7 @@ END;";
             {
                 return normalized switch
                 {
-                    var s when s.Contains("ho?t") || s.Contains("hoat") => "success",
+                    var s when s.Contains("hoàn thành") || s.Contains("hoan thanh") => "success",
                     var s when s.Contains("dang") => "primary",
                     var s when s.Contains("hoàn thành") || s.Contains("hoan") => "info",
                     var s when s.Contains("hủy") || s.Contains("huy") => "danger",
@@ -170,7 +187,7 @@ END;";
 
             return normalized switch
             {
-                var s when s.Contains("đã xác") || s.Contains("da xac") => "success",
+                var s when s.Contains("đã xác nhận") || s.Contains("da xac nhan") => "success",
                 var s when s.Contains("chờ") || s.Contains("cho") => "warning",
                 var s when s.Contains("hủy") || s.Contains("huy") => "danger",
                 var s when s.Contains("hoàn thành") || s.Contains("hoan") => "info",
@@ -178,7 +195,7 @@ END;";
             };
         }
 
-        
+
         [HttpGet("recent-bookings")]
         public async Task<IActionResult> GetRecentBookings()
         {
@@ -262,7 +279,7 @@ END;";
 
             return Ok(notifications);
         }
-[HttpGet("bookings")]
+        [HttpGet("bookings")]
         public async Task<IActionResult> GetBookings()
         {
             var staff = await GetCurrentStaffAsync();
@@ -374,11 +391,17 @@ END;";
             await EnsureOracleSecurityContextAsync(staff.MaChiNhanh.Value);
             var booking = await _context.DatTours
                 .Include(d => d.Tour)
+                .Include(d => d.HoaDon)
                 .FirstOrDefaultAsync(d => d.MaDatTour == bookingId);
 
             if (booking == null || booking.Tour?.MaChiNhanh != staff.MaChiNhanh)
             {
                 return NotFound("Booking không thuộc chi nhánh của bạn.");
+            }
+
+            if (booking.HoaDon != null && IsInvoicePaid(booking.HoaDon.TrangThai))
+            {
+                return BadRequest("Không thể hủy booking đã thanh toán.");
             }
 
             if (booking.TrangThaiDat != "Đã hủy")
@@ -398,6 +421,17 @@ END;";
             }
 
             return BadRequest("Booking đã bị hủy trước đó.");
+        }
+
+        private static bool IsInvoicePaid(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+            {
+                return false;
+            }
+
+            return status.Equals("Đã thanh toán", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("Hoàn tất", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

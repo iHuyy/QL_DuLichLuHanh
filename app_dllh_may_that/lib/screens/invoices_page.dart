@@ -115,12 +115,12 @@ class InvoicesPageState extends State<InvoicesPage> {
               final inv = invoices[index];
               final statusLower = inv.status.toLowerCase();
 
-              // --- LOGIC KIỂM TRA MỚI ---
+              // --- LOGIC KIỂM TRA ĐÃ SỬA ---
               // 1. Kiểm tra hủy trước
               final isCancelled = statusLower.contains('hủy') || statusLower.contains('cancel');
               
-              // 2. Kiểm tra thanh toán (chỉ đúng nếu không hủy VÀ có từ khóa thanh toán/paid)
-              final isPaid = !isCancelled && (statusLower.contains('thanh toán') || statusLower.contains('paid'));
+              // 2. Kiểm tra thanh toán (SỬA: Phải có chữ "đã thanh toán" hoặc "paid")
+              final isPaid = !isCancelled && (statusLower.contains('đã thanh toán') || statusLower.contains('paid'));
 
               // 3. Xác định màu và text
               Color statusColor;

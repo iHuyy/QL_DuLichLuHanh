@@ -44,7 +44,6 @@ namespace DuLich.Middlewares
                 if (!string.IsNullOrEmpty(sessionId))
                 {
                     var sess = await db.UserSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
-                    
                     // 1. Nếu Session trong DB không hợp lệ -> Đăng xuất và xóa cookie
                     if (sess == null || sess.IsActive != "Y")
                     {
@@ -55,12 +54,12 @@ namespace DuLich.Middlewares
                         }
                         catch { }
                         context.Response.Cookies.Delete("USER_SESSION_ID");
-                        
+
                         // Chỉ redirect nếu không phải đang ở trang Login
                         if (!path.Contains("/Login"))
                         {
                             context.Response.Redirect("/Customer/Login");
-                            return; 
+                            return;
                         }
                     }
                     else
@@ -90,13 +89,12 @@ namespace DuLich.Middlewares
                             else if (sess.UserType == "STAFF" || sess.UserType == "ADMIN")
                             {
                                 var nv = await db.NhanViens.FindAsync(sess.UserId.Value);
-                                if (nv != null) 
+                                if (nv != null)
                                 {
                                     username = nv.ORACLE_USERNAME;
                                     role = sess.UserType == "ADMIN" ? "ROLE_ADMIN" : "ROLE_STAFF";
                                 }
                             }
-
                             if (username != "UNKNOWN")
                             {
                                 var claims = new List<Claim>
@@ -113,7 +111,7 @@ namespace DuLich.Middlewares
                                     CookieAuthenticationDefaults.AuthenticationScheme,
                                     new ClaimsPrincipal(claimsIdentity),
                                     authProperties);
-                                
+
                                 // Quan trọng: Gán user vào context ngay để request hiện tại dùng được luôn
                                 context.User = new ClaimsPrincipal(claimsIdentity);
                             }
@@ -125,7 +123,6 @@ namespace DuLich.Middlewares
             {
                 Console.WriteLine("Session validation error: " + ex.Message);
             }
-
             await _next(context);
         }
     }

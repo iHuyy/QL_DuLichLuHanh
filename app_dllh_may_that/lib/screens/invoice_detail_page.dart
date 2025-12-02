@@ -61,7 +61,54 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     }
   }
 
-  Future<void> _pay() async {
+  // HÀM MỚI: Hiển thị hộp thoại chọn phương thức
+  void _showPaymentSelection() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Chọn phương thức thanh toán',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryDark),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.attach_money, color: Colors.green),
+                title: const Text('Tiền mặt'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pay(method: 'Tiền mặt');
+                },
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                leading: const Icon(Icons.account_balance, color: Colors.blue),
+                title: const Text('Chuyển khoản'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pay(method: 'Chuyển khoản');
+                },
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // HÀM THANH TOÁN (CẬP NHẬT: Nhận thêm tham số method)
+  Future<void> _pay({required String method}) async {
     if (_invoice == null) return;
     setState(() => _paying = true);
 
@@ -69,7 +116,10 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       final invoiceId = _invoice!['MAHOADON'] ?? widget.invoiceId;
       final resp = await _api.postJson(
         'pay_invoice.php',
-        body: {'maHoaDon': invoiceId},
+        body: {
+          'maHoaDon': invoiceId,
+          'phuongThuc': method
+        },
       );
 
       final body = resp.body.trim();
@@ -115,7 +165,10 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       if (response.statusCode == 200) {
         await Printing.layoutPdf(
           onLayout: (PdfPageFormat format) async =>
-              await Printing.convertHtml(format: format, html: response.body),
+              await Printing.convertHtml(
+                  format: format, 
+                  html: utf8.decode(response.bodyBytes) // Fix lỗi font tiếng Việt
+              ),
           name: 'HoaDon_${widget.invoiceId}.pdf',
         );
       } else {
@@ -147,12 +200,16 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     final statusRaw = _invoice?['TRANGTHAI'] ?? '';
     final statusLower = statusRaw.toString().toLowerCase();
 
-    // --- LOGIC ĐÃ SỬA ---
-    final isCancelled = statusLower.contains('hủy') || statusLower.contains('cancel');
-    
-    // Chỉ "Đã thanh toán" mới là true. "Chưa thanh toán" sẽ là false.
+    // [MỚI] Lấy trạng thái Booking từ phản hồi API
+    final bookingStatus = _invoice?['TRANGTHAIDAT']?.toString().toLowerCase() ?? '';
+
+    // [CẬP NHẬT] Kiểm tra cả trạng thái hóa đơn VÀ trạng thái đặt tour
+    final isCancelled = statusLower.contains('hủy') || 
+                        statusLower.contains('cancel') ||
+                        bookingStatus.contains('hủy') || 
+                        bookingStatus.contains('cancel');
+
     final isPaid = !isCancelled && (statusLower.contains('đã thanh toán') || statusLower == 'paid');
-    // --------------------
 
     final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
 
@@ -279,9 +336,14 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                   children: [
                     const Text('Tổng thanh toán', style: TextStyle(color: Colors.grey)),
                     const Spacer(),
-                    Text(
-                      currencyFormatter.format(double.tryParse(_invoice!['SOTIEN'].toString()) ?? 0),
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isCancelled ? Colors.grey : primaryGreen),
+                    Flexible( 
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          currencyFormatter.format(double.tryParse(_invoice!['SOTIEN'].toString()) ?? 0),
+                          style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: isCancelled ? Colors.grey : primaryGreen),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -390,7 +452,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
           width: double.infinity,
           height: 54,
           child: ElevatedButton(
-            onPressed: _paying ? null : _pay,
+            onPressed: _paying ? null : _showPaymentSelection,
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryGreen,
               foregroundColor: Colors.white,

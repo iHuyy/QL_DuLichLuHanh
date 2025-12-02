@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'qr_login_scanner_page.dart';
 import 'register_page.dart';
+import 'force_change_password_page.dart';
 
 // Định nghĩa màu xanh chính được sử dụng trong giao diện.
 const Color primaryBlue = Color(0xFF007AFF);
@@ -41,8 +42,6 @@ class _LoginPageState extends State<LoginPage> {
 
     var username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
-
-    // Uppercase username để tương thích với database
     username = username.toUpperCase();
 
     if (username.isEmpty || password.isEmpty) {
@@ -58,9 +57,23 @@ class _LoginPageState extends State<LoginPage> {
 
       setState(() => _isLoading = false);
 
+      // --- [MỚI] Kiểm tra yêu cầu đổi mật khẩu ---
+      if (result['require_change_password'] == true) {
+        // Chuyển sang màn hình Force Change Password
+        // Import file force_change_password_page.dart ở đầu file
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ForceChangePasswordPage(
+              username: username,
+              oldPassword: password, // Truyền mật khẩu cũ sang để verify
+            ),
+          ),
+        );
+        return;
+      }
+      // -------------------------------------------
+
       if (result['success'] == true) {
-        // Đăng nhập thành công, điều hướng tới HomePage
-        // Sử dụng userID numeric trả về từ server nếu có
         final returnedId = result['userID']?.toString() ?? username;
         final returnedRole = result['role']?.toString() ?? 'DEFAULT';
         Navigator.of(context).pushReplacement(
@@ -122,8 +135,8 @@ class _LoginPageState extends State<LoginPage> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF2F2F7), // Màu nền nhẹ cho input field
-        borderRadius: BorderRadius.circular(10), // Bo góc
+        color: const Color(0xFFF2F2F7), 
+        borderRadius: BorderRadius.circular(10), 
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: TextField(
@@ -131,11 +144,11 @@ class _LoginPageState extends State<LoginPage> {
         keyboardType: keyboardType,
         obscureText: isPassword
             ? !_isPasswordVisible
-            : false, // Ẩn văn bản nếu là mật khẩu và chưa được toggle
+            : false, 
         decoration: InputDecoration(
           hintText: hintText,
           border: InputBorder.none,
-          // Icon ở bên phải (chỉ hiện thị cho trường mật khẩu)
+          
           suffixIcon: isPassword
               ? IconButton(
                   icon: Icon(
@@ -147,7 +160,7 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: () {
                     setState(() {
                       _isPasswordVisible =
-                          !_isPasswordVisible; // Toggle hiển thị mật khẩu
+                          !_isPasswordVisible;
                     });
                   },
                 )
@@ -166,7 +179,7 @@ class _LoginPageState extends State<LoginPage> {
       width: double.infinity,
       height: 56,
       child: ElevatedButton(
-        onPressed: _isLoading ? null : _login, // Gọi hàm _login
+        onPressed: _isLoading ? null : _login,
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryBlue,
           foregroundColor: Colors.white,
@@ -185,33 +198,7 @@ class _LoginPageState extends State<LoginPage> {
                   strokeWidth: 3,
                 ),
               )
-            : const Text('Sign In'),
-      ),
-    );
-  }
-
-  // Widget mới: Nút Đăng nhập bằng QR
-  Widget _buildQRLoginButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: OutlinedButton.icon(
-        onPressed: _navigateToQRLogin,
-        icon: const Icon(Icons.qr_code_scanner, color: primaryBlue),
-        label: const Text(
-          'Đăng nhập bằng QR',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: primaryBlue,
-          ),
-        ),
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: primaryBlue, width: 2),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
+            : const Text('Đăng nhập'),
       ),
     );
   }
@@ -264,7 +251,7 @@ class _LoginPageState extends State<LoginPage> {
 
               // Tiêu đề "Sign In"
               const Text(
-                'Sign In',
+                'Đăng nhập',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -295,11 +282,7 @@ class _LoginPageState extends State<LoginPage> {
               // 1. Nút Đăng nhập (Sign In Button)
               _buildSignInButton(),
 
-              const SizedBox(height: 16), // Khoảng cách giữa Sign In và QR
-              // 2. Nút Đăng nhập bằng QR (Vị trí mới)
-              _buildQRLoginButton(),
-
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
               // Hiển thị thông báo lỗi (nếu có)
               if (_message.isNotEmpty)
@@ -323,8 +306,8 @@ class _LoginPageState extends State<LoginPage> {
                   );
                 },
                 child: const Text(
-                  'Forget Password?',
-                  style: TextStyle(color: Colors.black54, fontSize: 16),
+                  'Quên mật khẩu?',
+                  style: TextStyle(color: primaryBlue, fontSize: 16),
                 ),
               ),
 
@@ -336,14 +319,14 @@ class _LoginPageState extends State<LoginPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Text(
-                    "Don't have an Account?",
+                    "Không có tài khoản?",
                     style: TextStyle(color: Colors.black54, fontSize: 16),
                   ),
                   TextButton(
                     onPressed:
                         _navigateToSignUp, // Gọi hàm chuyển màn hình đăng ký
                     child: const Text(
-                      'Sign Up',
+                      'Đăng ký',
                       style: TextStyle(
                         color: primaryBlue,
                         fontWeight: FontWeight.bold,

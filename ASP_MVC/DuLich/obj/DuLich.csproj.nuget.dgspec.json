@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "G:\\Study\\KLTN\\AppQLDVDLLH\\BranchHuy\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj": {}
+    "G:\\Study\\KLTN\\AppQLDVDLLH\\Working\\ASP_MVC\\DuLich\\DuLich.csproj": {}
   },
   "projects": {
-    "G:\\Study\\KLTN\\AppQLDVDLLH\\BranchHuy\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj": {
+    "G:\\Study\\KLTN\\AppQLDVDLLH\\Working\\ASP_MVC\\DuLich\\DuLich.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "G:\\Study\\KLTN\\AppQLDVDLLH\\BranchHuy\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
+        "projectUniqueName": "G:\\Study\\KLTN\\AppQLDVDLLH\\Working\\ASP_MVC\\DuLich\\DuLich.csproj",
         "projectName": "DuLich",
-        "projectPath": "G:\\Study\\KLTN\\AppQLDVDLLH\\BranchHuy\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
+        "projectPath": "G:\\Study\\KLTN\\AppQLDVDLLH\\Working\\ASP_MVC\\DuLich\\DuLich.csproj",
         "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
-        "outputPath": "G:\\Study\\KLTN\\AppQLDVDLLH\\BranchHuy\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\obj\\",
+        "outputPath": "G:\\Study\\KLTN\\AppQLDVDLLH\\Working\\ASP_MVC\\DuLich\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config",

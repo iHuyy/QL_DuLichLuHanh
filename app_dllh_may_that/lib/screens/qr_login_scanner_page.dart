@@ -57,14 +57,11 @@ class _QRLoginScannerPageState extends State<QRLoginScannerPage> {
     );
 
     try {
-      // 2. Gọi API approve-qr-login thông qua AuthService
-      // ApiClient (bên trong AuthService) sẽ tự động gửi 'jwt_token'
       bool success = await _authService.approveQrLogin(qrToken);
 
-      Navigator.of(context).pop(); // Tắt loading dialog
+      Navigator.of(context).pop();
 
       if (success) {
-        // 3. Thành công
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -72,10 +69,8 @@ class _QRLoginScannerPageState extends State<QRLoginScannerPage> {
             backgroundColor: Colors.green,
           ),
         );
-        // Đóng màn hình quét
         Navigator.of(context).pop();
       } else {
-        // 4. Thất bại (có thể là 401, 404,...)
         throw Exception('Mã QR không hợp lệ hoặc đã hết hạn');
       }
 

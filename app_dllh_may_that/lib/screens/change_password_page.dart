@@ -26,6 +26,10 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
 
+  // Regex kiểm tra mật khẩu mạnh: 8 ký tự, 1 hoa, 1 thường, 1 số, 1 đặc biệt
+  // Tham khảo các pattern phổ biến
+  final _strongPasswordRegex = RegExp(r'^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[!@#\$%^&*(),.?":{}|<>]).{8,}$');
+
   Future<void> _changePassword() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -71,17 +75,54 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
           key: _formKey,
           child: Column(
             children: [
-              _buildPasswordField('Mật khẩu hiện tại', _oldPassController, _obscureOld, (val) => setState(() => _obscureOld = val)),
-              const SizedBox(height: 16),
-              _buildPasswordField('Mật khẩu mới', _newPassController, _obscureNew, (val) => setState(() => _obscureNew = val)),
-              const SizedBox(height: 16),
-              _buildPasswordField('Xác nhận mật khẩu mới', _confirmPassController, _obscureConfirm, (val) => setState(() => _obscureConfirm = val),
+              // 1. Mật khẩu cũ
+              _buildPasswordField(
+                label: 'Mật khẩu hiện tại', 
+                controller: _oldPassController, 
+                obscure: _obscureOld, 
+                onToggle: (val) => setState(() => _obscureOld = val),
                 validator: (val) {
+                  if (val == null || val.isEmpty) return 'Vui lòng nhập mật khẩu hiện tại';
+                  return null;
+                }
+              ),
+              const SizedBox(height: 16),
+
+              // 2. Mật khẩu mới
+              _buildPasswordField(
+                label: 'Mật khẩu mới', 
+                controller: _newPassController, 
+                obscure: _obscureNew, 
+                onToggle: (val) => setState(() => _obscureNew = val),
+                validator: (val) {
+                  if (val == null || val.isEmpty) return 'Vui lòng nhập mật khẩu mới';
+                  if (val.length < 8) return 'Mật khẩu phải từ 8 ký tự trở lên';
+                  if (!_strongPasswordRegex.hasMatch(val)) {
+                    return 'Cần có chữ Hoa, thường, số và ký tự đặc biệt';
+                  }
+                  if (val == _oldPassController.text) {
+                    return 'Mật khẩu mới không được trùng mật khẩu cũ';
+                  }
+                  return null;
+                }
+              ),
+              const SizedBox(height: 16),
+
+              // 3. Xác nhận mật khẩu mới
+              _buildPasswordField(
+                label: 'Xác nhận mật khẩu mới', 
+                controller: _confirmPassController, 
+                obscure: _obscureConfirm, 
+                onToggle: (val) => setState(() => _obscureConfirm = val),
+                validator: (val) {
+                  if (val == null || val.isEmpty) return 'Vui lòng xác nhận mật khẩu';
                   if (val != _newPassController.text) return 'Mật khẩu xác nhận không khớp';
                   return null;
                 }
               ),
+              
               const SizedBox(height: 32),
+              
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -104,15 +145,18 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     );
   }
 
-  Widget _buildPasswordField(String label, TextEditingController controller, bool obscure, Function(bool) onToggle, {String? Function(String?)? validator}) {
+  Widget _buildPasswordField({
+    required String label, 
+    required TextEditingController controller, 
+    required bool obscure, 
+    required Function(bool) onToggle, 
+    required String? Function(String?) validator
+  }) {
     return TextFormField(
       controller: controller,
       obscureText: obscure,
-      validator: validator ?? (val) {
-        if (val == null || val.isEmpty) return 'Vui lòng nhập $label';
-        if (val.length < 6) return 'Mật khẩu phải có ít nhất 6 ký tự';
-        return null;
-      },
+      validator: validator,
+      autovalidateMode: AutovalidateMode.onUserInteraction, // Kiểm tra ngay khi nhập
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(Icons.lock_outline, color: primaryDark.withOpacity(0.6)),
@@ -125,6 +169,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primaryGreen)),
+        errorMaxLines: 2,
       ),
     );
   }

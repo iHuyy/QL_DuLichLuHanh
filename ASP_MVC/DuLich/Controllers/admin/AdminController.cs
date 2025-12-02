@@ -65,11 +65,11 @@ namespace DuLich.Controllers
             if (!ModelState.IsValid)
                 return View(model);
 
-            var (success, role) = await _authService.ValidateLoginAsync(model.Username, model.Password);
+            var (success, role, errorMessage) = await _authService.ValidateLoginAsync(model.Username, model.Password);
 
             if (!success)
             {
-                ModelState.AddModelError(string.Empty, "Đăng nhập không thành công");
+                ModelState.AddModelError(string.Empty, string.IsNullOrEmpty(errorMessage) ? "Đăng nhập không thành công" : errorMessage);
                 return View(model);
             }
 
@@ -104,7 +104,7 @@ namespace DuLich.Controllers
                 if (role == "ROLE_STAFF")
                     return RedirectToAction("Index", "Staff");
 
-                return RedirectToAction("Index", "Home");
+                return RedirectToAction("Login", "Admin");
             }
 
             ModelState.AddModelError(string.Empty, "Đăng nhập không thành công");
@@ -864,7 +864,7 @@ WHERE rn BETWEEN :startRow AND :endRow";
 
             await _context.SaveChangesAsync();
 
-            TempData["Error"] = "Không tìm thấy người dùng.";
+            TempData["Success"] = "Đã cập nhật khách hàng.";
             return RedirectToAction("Users");
         }
 
@@ -883,7 +883,7 @@ WHERE rn BETWEEN :startRow AND :endRow";
                 await _authService.GrantRoleAsync(kh.ORACLE_USERNAME!, oracleRole);
             }
 
-            TempData["Error"] = "Không tìm thấy người dùng.";
+            TempData["Success"] = "Đã cập nhật vai trò.";
             return RedirectToAction("Users");
         }
 
@@ -896,7 +896,18 @@ WHERE rn BETWEEN :startRow AND :endRow";
             kh.TrangThai = trangThai;
             await _context.SaveChangesAsync();
 
-            TempData["Error"] = "Không tìm thấy người dùng.";
+            if (!string.IsNullOrEmpty(kh.ORACLE_USERNAME))
+            {
+                var shouldLock = string.Equals(trangThai, "BiKhoa", StringComparison.OrdinalIgnoreCase);
+                var result = await _authService.SetAccountLockAsync(kh.ORACLE_USERNAME, shouldLock);
+                if (!result.success)
+                {
+                    TempData["Error"] = result.message;
+                    return RedirectToAction("Users");
+                }
+            }
+
+            TempData["Success"] = "Đã cập nhật trạng thái.";
             return RedirectToAction("Users");
         }
 
@@ -918,12 +929,23 @@ WHERE rn BETWEEN :startRow AND :endRow";
                     TempData["Error"] = message;
                     return RedirectToAction("Users");
                 }
+                _context.Entry(kh).State = EntityState.Detached;
+                TempData["Success"] = message;
+            }
+            else
+            {
+                _context.KhachHangs.Remove(kh);
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    TempData["Success"] = "Đã xóa khách hàng.";
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    TempData["Error"] = "Khách hàng đã bị xóa hoặc thay đổi trước đó.";
+                }
             }
 
-            _context.KhachHangs.Remove(kh);
-            await _context.SaveChangesAsync();
-
-            TempData["Error"] = "Không tìm thấy người dùng.";
             return RedirectToAction("Users");
         }
 

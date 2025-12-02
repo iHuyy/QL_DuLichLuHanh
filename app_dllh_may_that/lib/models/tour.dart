@@ -50,7 +50,6 @@ class Tour {
   static String _toStr(dynamic v) => v == null ? '' : v.toString();
 
   factory Tour.fromJson(Map<String, dynamic> json) {
-    // Normalize image field: support data: URLs, raw base64 blobs, and paths/URLs.
     String? rawImage;
     for (final key in ['QR', 'QR_CODE', 'HINHANH', 'ANHTOUR', 'DULIEUANH', 'DU_LIEU_ANH']) {
       final v = _get(json, key);
@@ -75,15 +74,12 @@ class Tour {
       if (s.startsWith('data:')) {
         normalizedImage = s;
       } else {
-        // Try decode as base64 to see if it's raw BLOB
         try {
-          // remove whitespace/newlines
           final cleaned = s.replaceAll(RegExp(r"\s+"), '');
           base64Decode(cleaned);
           final mime = rawMime ?? 'image/jpeg';
           normalizedImage = 'data:$mime;base64,$cleaned';
         } catch (e) {
-          // not base64 -> treat as URL/path
           normalizedImage = s;
         }
       }
@@ -102,10 +98,7 @@ class Tour {
       giaNguoiLon: _toStr(_get(json, 'GIANGUOILON')).isEmpty ? null : _toStr(_get(json, 'GIANGUOILON')),
       giaTreEm: _toStr(_get(json, 'GIATREEM')).isEmpty ? null : _toStr(_get(json, 'GIATREEM')),
       soLuong: _toStr(_get(json, 'SOLUONG')).isEmpty ? null : _toStr(_get(json, 'SOLUONG')),
-      
-      // --- THÊM MAPPING CHO SOCHOCONLAI ---
       soChoConLai: _toStr(_get(json, 'SOCHOCONLAI')).isEmpty ? null : _toStr(_get(json, 'SOCHOCONLAI')),
-
       chiNhanh: (() {
         final rawId = _get(json, 'MACHINHANH') ?? _get(json, 'MaChiNhanh') ?? _get(json, 'MACHINHANH');
         if (rawId != null && _toStr(rawId).isNotEmpty) return _toStr(rawId);

@@ -1,9 +1,13 @@
 using DuLich.Models;
 using DuLich.Models.Data;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QRCoder;
+using System;
+using System.Collections.Generic;
+using System.IO;
 
 namespace DuLich.Controllers.admin
 {
@@ -13,12 +17,10 @@ namespace DuLich.Controllers.admin
     public class TourManagementController : Controller
     {
         private readonly ApplicationDbContext _db;
-        private readonly IWebHostEnvironment _env;
 
-        public TourManagementController(ApplicationDbContext db, IWebHostEnvironment env)
+        public TourManagementController(ApplicationDbContext db)
         {
             _db = db;
-            _env = env;
         }
 
 
@@ -143,15 +145,6 @@ namespace DuLich.Controllers.admin
                 await _db.SaveChangesAsync();
 
                 // Delete QR code file after successful DB transaction
-                if (!string.IsNullOrEmpty(t.QR))
-                {
-                    var qrPath = Path.Combine(_env.WebRootPath, t.QR.TrimStart('/'));
-                    if (System.IO.File.Exists(qrPath))
-                    {
-                        System.IO.File.Delete(qrPath);
-                    }
-                }
-
                 TempData["Success"] = "Xóa tour thành công";
             }
             catch (DbUpdateException ex)
@@ -181,15 +174,8 @@ namespace DuLich.Controllers.admin
             using var qrCode = new PngByteQRCode(data);
             var bytes = qrCode.GetGraphic(20);
 
-            // Save file
-            var qrfolder = Path.Combine(_env.WebRootPath, "images", "qrcode");
-            Directory.CreateDirectory(qrfolder);
-            var fileName = $"qrcode_{maTour}_{DateTime.UtcNow.Ticks}.png";
-            var full = Path.Combine(qrfolder, fileName);
-            await System.IO.File.WriteAllBytesAsync(full, bytes);
-
-            // Return relative path
-            return $"/images/qrcode/{fileName}";
+            // Store base64 data URI in DB
+            return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
         }
     }
 }

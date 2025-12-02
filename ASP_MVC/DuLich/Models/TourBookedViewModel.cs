@@ -6,7 +6,7 @@ namespace DuLich.Models
 {
     public class TourBookedViewModel
     {
-        public MyTourItem TourBooked { get; set; }
+        public MyTourItem TourBooked { get; set; } = new MyTourItem();
         public int BookingId { get; set; }
         public bool HideCancelButton { get; set; }
     }

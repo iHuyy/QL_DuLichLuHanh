@@ -18,19 +18,31 @@
             <div class="card-body">
                 @if (TempData["SuccessProfile"] != null)
                 {
-                    <div class="alert alert-success">@TempData["SuccessProfile"]</div>
+                    <div class="alert alert-success alert-dismissible fade show">
+                        @TempData["SuccessProfile"]
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    </div>
                 }
                 @if (TempData["ErrorProfile"] != null)
                 {
-                    <div class="alert alert-danger">@TempData["ErrorProfile"]</div>
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        @TempData["ErrorProfile"]
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    </div>
                 }
                 @if (TempData["SuccessPassword"] != null)
                 {
-                    <div class="alert alert-success">@TempData["SuccessPassword"]</div>
+                    <div class="alert alert-success alert-dismissible fade show">
+                        @TempData["SuccessPassword"]
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    </div>
                 }
                 @if (TempData["ErrorPassword"] != null)
                 {
-                    <div class="alert alert-danger">@TempData["ErrorPassword"]</div>
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        @TempData["ErrorPassword"]
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    </div>
                 }
             </div>
         </div>
@@ -80,17 +92,17 @@
                     @Html.AntiForgeryToken()
                     <div class="mb-3">
                         <label asp-for="ChangePassword.OldPassword" class="form-label"></label>
-                        <input asp-for="ChangePassword.OldPassword" class="form-control" />
+                        <input asp-for="ChangePassword.OldPassword" class="form-control" type="password" autocomplete="current-password" />
                         <span asp-validation-for="ChangePassword.OldPassword" class="text-danger small"></span>
                     </div>
                     <div class="mb-3">
                         <label asp-for="ChangePassword.NewPassword" class="form-label"></label>
-                        <input asp-for="ChangePassword.NewPassword" class="form-control" />
+                        <input asp-for="ChangePassword.NewPassword" class="form-control" type="password" autocomplete="new-password" />
                         <span asp-validation-for="ChangePassword.NewPassword" class="text-danger small"></span>
                     </div>
                     <div class="mb-3">
                         <label asp-for="ChangePassword.ConfirmPassword" class="form-label"></label>
-                        <input asp-for="ChangePassword.ConfirmPassword" class="form-control" />
+                        <input asp-for="ChangePassword.ConfirmPassword" class="form-control" type="password" autocomplete="new-password" />
                         <span asp-validation-for="ChangePassword.ConfirmPassword" class="text-danger small"></span>
                     </div>
                     <button type="submit" class="btn btn-warning">Đổi mật khẩu</button>

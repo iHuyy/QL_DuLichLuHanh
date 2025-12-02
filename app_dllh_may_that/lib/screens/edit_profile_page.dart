@@ -67,7 +67,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Cập nhật thành công!'), backgroundColor: primaryGreen),
         );
-        Navigator.pop(context, true); // Trả về true để màn hình trước refresh
+        Navigator.pop(context, true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(json['message'] ?? 'Thất bại'), backgroundColor: Colors.red),
@@ -135,6 +135,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
       validator: (value) {
         if (required && (value == null || value.isEmpty)) return 'Vui lòng nhập $label';
         if (isEmail && value != null && value.isNotEmpty && !value.contains('@')) return 'Email không hợp lệ';
+        
+        // *** MỚI: Validator cho Số điện thoại ***
+        if (isPhone && value != null && value.isNotEmpty) {
+           if (!RegExp(r'^0\d{9}$').hasMatch(value)) {
+             return 'SĐT phải là 10 số, bắt đầu bằng 0';
+           }
+        }
         return null;
       },
       keyboardType: isPhone ? TextInputType.phone : (isEmail ? TextInputType.emailAddress : TextInputType.text),

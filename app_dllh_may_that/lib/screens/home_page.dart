@@ -448,7 +448,7 @@ class _HomePageState extends State<HomePage> {
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(4), // Góc vuông nhẹ giống web
+              borderRadius: BorderRadius.circular(4),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.05),
@@ -478,7 +478,7 @@ class _HomePageState extends State<HomePage> {
                           horizontal: 12,
                           vertical: 6,
                         ),
-                        color: primaryGreen, // Màu xanh lá đặc trưng
+                        color: primaryGreen,
                         child: Text(
                           price > 0 ? currencyFormat.format(price) : 'Liên hệ',
                           style: const TextStyle(
@@ -557,16 +557,6 @@ class _HomePageState extends State<HomePage> {
                               color: Colors.grey.shade600,
                               fontWeight: FontWeight.w500,
                             ),
-                          ),
-                          const Spacer(),
-                          Row(
-                            children: const [
-                              Icon(Icons.star, size: 14, color: primaryGreen),
-                              Icon(Icons.star, size: 14, color: primaryGreen),
-                              Icon(Icons.star, size: 14, color: primaryGreen),
-                              Icon(Icons.star, size: 14, color: primaryGreen),
-                              Icon(Icons.star, size: 14, color: primaryGreen),
-                            ],
                           ),
                         ],
                       ),

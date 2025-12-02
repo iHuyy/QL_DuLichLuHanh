@@ -50,7 +50,7 @@ class AuthService {
   Future<void> deleteSessionData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('session_id');
-    await prefs.remove('jwt_token'); // Xóa cả JWT
+    await prefs.remove('jwt_token');
     await prefs.remove('user_id');
     await prefs.remove('user_role');
   }
@@ -83,12 +83,11 @@ class AuthService {
   Future<Map<String, dynamic>> login(String username, String password) async {
     final deviceInfo = await _getDeviceInfo();
 
-    // ----- 1. Đăng nhập vào PHP (Lấy PHP Session ID) -----
     http.Response phpResponse;
     Map<String, dynamic> phpData;
     try {
       phpResponse = await _apiClient.postJson(
-        "login.php", // Endpoint PHP
+        "login.php",
         body: {
           "username": username,
           "password": password,
@@ -100,7 +99,7 @@ class AuthService {
       print("login.php body: ${phpResponse.body}");
       phpData = jsonDecode(phpResponse.body);
       if (phpResponse.statusCode != 200 || phpData['success'] != true) {
-        return phpData; // Trả về lỗi từ PHP
+        return phpData;
       }
     } catch (e) {
       return {
@@ -109,9 +108,8 @@ class AuthService {
       };
     }
 
-    // ----- 2. Đăng nhập vào C# (Lấy JWT) -----
     http.Response csResponse;
-    Map<String, dynamic> csData = {}; // Khởi tạo rỗng để tránh null
+    Map<String, dynamic> csData = {};
     
     try {
       csResponse = await _apiClient.postJson(
@@ -124,7 +122,6 @@ class AuthService {
       
       print("ApiAuth/login status: ${csResponse.statusCode}");
       
-      // *** SỬA LỖI: Kiểm tra kỹ trước khi decode để tránh FormatException ***
       if (csResponse.statusCode == 200 && csResponse.body.isNotEmpty) {
         try {
           csData = jsonDecode(csResponse.body);
@@ -136,30 +133,20 @@ class AuthService {
       }
     } catch (e) {
       print("Lỗi kết nối C#: ${e.toString()}");
-      // Không return ở đây, để code chạy tiếp xuống phần lưu token PHP
     }
 
-    // ----- 3. Lưu token (Logic linh hoạt hơn) -----
     try {
       final phpSessionId = phpData['session_id'];
       
-      // Token C# có thể bị null nếu bước 2 lỗi
       final jwtToken = csData['token']; 
       
-      // Ưu tiên lấy ID từ PHP vì nó là hệ thống chính
       final userID = phpData['userID']?.toString() ?? csData['userId']?.toString() ?? username;
       final role = phpData['role']?.toString() ?? csData['role']?.toString() ?? 'DEFAULT';
-
-      // LOGIC QUYẾT ĐỊNH:
-      // Nếu có PHP session -> Cho phép đăng nhập (Web app hoạt động)
-      // Nếu có thêm C# token -> Cho phép dùng tính năng QR
       
       if (phpSessionId != null) {
-        // Nếu không có token C#, ta lưu chuỗi rỗng hoặc null để xử lý sau
         await saveSessionData(phpSessionId, jwtToken ?? "", userID, role);
         
         if (jwtToken == null) {
-            // Trả về cảnh báo nhưng vẫn cho vào
             phpData['message'] = "Đăng nhập thành công (Lưu ý: Tính năng QR có thể không hoạt động do lỗi kết nối Server phụ).";
         }
         return phpData; 
@@ -179,7 +166,6 @@ class AuthService {
   Future<Map<String, dynamic>> logout() async {
     Map<String, dynamic> result = {"success": false};
     try {
-      // Gọi API PHP (ApiClient sẽ tự gửi 'session_id')
       final response = await _apiClient.postJson("logout.php");
       try {
         final data = jsonDecode(response.body);
@@ -198,7 +184,6 @@ class AuthService {
       print("Error calling logout API, but proceeding with local logout: $e");
       result = {"success": false, "message": e.toString()};
     } finally {
-      // (SỬA ĐỔI) Luôn xóa token ở client
       await deleteSessionData();
     }
 
@@ -285,6 +270,9 @@ class AuthService {
     required String password,
     required String hoTen,
     required String email,
+    required String otp,       // Mới
+    required String otpHash,   // Mới (nhận từ bước 1)
+    required int otpExpiry,    // Mới (nhận từ bước 1)
     String? soDienThoai,
     String? diaChi,
   }) async {
@@ -297,6 +285,10 @@ class AuthService {
         "email": email,
         "soDienThoai": soDienThoai ?? '',
         "diaChi": diaChi ?? '',
+        // Gửi kèm bộ xác thực
+        "otp": otp,
+        "otp_hash": otpHash,
+        "otp_expiry": otpExpiry,
       },
     );
     return jsonDecode(response.body);
@@ -400,6 +392,35 @@ class AuthService {
         body: {
           "username": username,
           "otp": otp,
+          "newPassword": newPassword
+        },
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {"success": false, "message": "Lỗi kết nối: $e"};
+    }
+  }
+  Future<Map<String, dynamic>> sendRegisterOtp(String email, String username) async {
+    try {
+      final response = await _apiClient.postJson(
+        'api/ApiAuth/send-register-otp', // Route đến C#
+        body: {
+          "email": email,
+          "username": username,
+        },
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {"success": false, "message": "Lỗi kết nối: $e"};
+    }
+  }
+  Future<Map<String, dynamic>> forceChangePassword(String username, String oldPassword, String newPassword) async {
+    try {
+      final response = await _apiClient.postJson(
+        "force_change_password.php", // Gọi file PHP mới tạo
+        body: {
+          "username": username,
+          "oldPassword": oldPassword,
           "newPassword": newPassword
         },
       );

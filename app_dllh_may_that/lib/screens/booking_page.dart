@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:app_dllh/models/tour.dart';
 import 'package:app_dllh/models/booking_request.dart';
 import 'package:app_dllh/services/booking_service.dart';
+import 'package:app_dllh/services/auth_service.dart'; // [MỚI] Import AuthService
 import 'package:intl/intl.dart';
 
 // --- BỘ MÀU ---
@@ -22,6 +23,7 @@ class BookingPage extends StatefulWidget {
 
 class _BookingPageState extends State<BookingPage> {
   final BookingService _bookingService = BookingService();
+  final AuthService _authService = AuthService(); // [MỚI] Khởi tạo AuthService
   final _formKey = GlobalKey<FormState>();
   final currencyFormat = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
 
@@ -41,6 +43,41 @@ class _BookingPageState extends State<BookingPage> {
     _soDienThoaiController = TextEditingController();
     _emailController = TextEditingController();
     _ghiChuController = TextEditingController();
+
+    // [MỚI] Tự động tải thông tin người dùng để điền vào form
+    _autoFillUserInfo();
+  }
+
+  // [MỚI] Hàm lấy thông tin và điền form
+  Future<void> _autoFillUserInfo() async {
+    try {
+      // Gọi API lấy thông tin user (get_user.php)
+      final result = await _authService.getUser(widget.userID);
+      
+      if (result['success'] == true && result['data'] != null) {
+        final data = result['data'];
+        if (mounted) {
+          setState(() {
+            // Chỉ điền nếu ô đang trống (tránh ghi đè nếu user đã nhập nhanh)
+            if (_hoTenController.text.isEmpty) {
+              _hoTenController.text = data['fullName'] ?? '';
+            }
+            if (_emailController.text.isEmpty) {
+              _emailController.text = data['email'] ?? '';
+            }
+            if (_soDienThoaiController.text.isEmpty) {
+              _soDienThoaiController.text = data['phone'] ?? '';
+            }
+            // Nếu muốn điền địa chỉ vào ghi chú (tùy chọn)
+            // if (_ghiChuController.text.isEmpty && data['address'] != null) {
+            //   _ghiChuController.text = "Địa chỉ: ${data['address']}";
+            // }
+          });
+        }
+      }
+    } catch (e) {
+      print("Lỗi tự động điền thông tin: $e");
+    }
   }
 
   @override
@@ -54,11 +91,9 @@ class _BookingPageState extends State<BookingPage> {
 
   // --- HELPER: Lấy số chỗ còn lại ---
   int _getAvailableSlots() {
-    // Ưu tiên lấy số chỗ còn lại từ API tính toán
     if (widget.tour.soChoConLai != null) {
       return int.tryParse(widget.tour.soChoConLai.toString()) ?? 0;
     }
-    // Fallback: Lấy tổng số lượng (không chính xác bằng cách trên nhưng để phòng hờ)
     return int.tryParse(widget.tour.soLuong.toString()) ?? 0;
   }
 
@@ -79,8 +114,6 @@ class _BookingPageState extends State<BookingPage> {
 
   Future<void> _submitBooking() async {
     if (!_formKey.currentState!.validate()) return;
-
-    // Kiểm tra lần cuối ở phía Client
     int totalGuests = _soNguoiLon + _soTreEm;
     int available = _getAvailableSlots();
     if (totalGuests > available) {
@@ -89,9 +122,7 @@ class _BookingPageState extends State<BookingPage> {
       );
       return;
     }
-
     setState(() => _isLoading = true);
-
     try {
       final booking = BookingRequest(
         maTour: widget.tour.maTour,
@@ -103,18 +134,14 @@ class _BookingPageState extends State<BookingPage> {
         email: _emailController.text.trim(),
         ghiChu: _ghiChuController.text.trim(),
       );
-
       final result = await _bookingService.createBooking(booking);
-
       setState(() => _isLoading = false);
-
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result['message'] ?? 'Đặt tour thành công!'), backgroundColor: primaryGreen),
         );
         Navigator.of(context).pop({'success': true, 'bookingId': result['bookingId']});
       } else {
-        // Hiển thị lỗi từ Server (ví dụ: Hết chỗ)
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -138,7 +165,6 @@ class _BookingPageState extends State<BookingPage> {
   Widget build(BuildContext context) {
     final total = _calculateTotal();
     final availableSlots = _getAvailableSlots();
-    final currentTotalGuests = _soNguoiLon + _soTreEm;
     final bool isSoldOut = availableSlots <= 0;
 
     return Scaffold(

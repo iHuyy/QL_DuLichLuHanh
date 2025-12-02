@@ -56,16 +56,12 @@ class _TourScannerPageState extends State<TourScannerPage> {
   // Xử lý khi phát hiện mã (từ Camera hoặc Ảnh)
   // Xử lý khi phát hiện mã (từ Camera hoặc Ảnh)
   void _processTourCode(String rawValue) async {
-    // Nếu đang xử lý thì bỏ qua để tránh spam
     if (_isProcessing) return;
 
     final String? tourId = _extractTourId(rawValue);
-
-    // --- SỬA LỖI: Báo lỗi nếu QR không hợp lệ thay vì im lặng ---
     if (tourId == null) {
       if (!mounted) return;
 
-      // Đánh dấu đang xử lý để chặn quét liên tục trong giây lát
       setState(() {
         _isProcessing = true;
       });
@@ -78,7 +74,6 @@ class _TourScannerPageState extends State<TourScannerPage> {
         ),
       );
 
-      // Mở khóa lại sau 2 giây để người dùng quét mã khác
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
           setState(() {
@@ -88,13 +83,11 @@ class _TourScannerPageState extends State<TourScannerPage> {
       });
       return;
     }
-    // -----------------------------------------------------------
 
     setState(() {
       _isProcessing = true;
     });
 
-    // Dừng camera khi đã nhận diện đúng format
     await cameraController.stop();
 
     if (!mounted) return;
@@ -120,8 +113,7 @@ class _TourScannerPageState extends State<TourScannerPage> {
           final userID = prefs.getString('user_id') ?? '';
 
           if (!mounted) return;
-
-          // Chuyển trang thành công
+          
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(

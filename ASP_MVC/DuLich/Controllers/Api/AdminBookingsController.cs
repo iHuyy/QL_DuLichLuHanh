@@ -121,10 +121,16 @@ namespace DuLich.Controllers.Api
         {
             var booking = await _db.DatTours
                 .Include(b => b.Tour) // Include tour to update its slots
+                .Include(b => b.HoaDon)
                 .FirstOrDefaultAsync(d => d.MaDatTour == bookingId);
 
             if (booking == null)
                 return NotFound(new { message = "Không tìm thấy đặt tour." });
+
+            if (booking.HoaDon != null && IsInvoicePaid(booking.HoaDon.TrangThai))
+            {
+                return BadRequest(new { message = "Không thể hủy đặt tour đã thanh toán." });
+            }
 
             // Refund slots if the booking was taking up space
             if (booking.TrangThaiDat == "Chờ xác nhận" || booking.TrangThaiDat == "Đã xác nhận")
@@ -141,6 +147,17 @@ namespace DuLich.Controllers.Api
             await _db.SaveChangesAsync();
 
             return Ok(new { message = "Đã hủy đặt tour." });
+        }
+
+        private static bool IsInvoicePaid(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+            {
+                return false;
+            }
+
+            return status.Equals("Đã thanh toán", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("Hoàn tất", StringComparison.OrdinalIgnoreCase);
         }
 
         [HttpGet("invoices")]

@@ -13,6 +13,7 @@ namespace DuLich.Models.Data
     public class OracleSessionInterceptor : DbConnectionInterceptor
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private static bool _canQueryLabel = true;
 
         public OracleSessionInterceptor(IHttpContextAccessor httpContextAccessor)
         {
@@ -123,27 +124,34 @@ END;";
                         catch { }
                     }
 
-                    try
-                    {
-                        using var lbl = oraConn.CreateCommand();
-                        // Attempt to read the current session label for policy 'DULICH_OLS'. This may not be available in all DB setups,
-                        // so wrap in try/catch and only log if successful.
-                        lbl.CommandText = "SELECT SA_LABEL_ADMIN.LABEL_TO_CHAR('DULICH_OLS', SA_SESSION.GET_LABEL('DULICH_OLS')) FROM DUAL";
-                        var labelObj = await lbl.ExecuteScalarAsync(cancellationToken);
-                        if (labelObj != null && labelObj != DBNull.Value)
-                        {
-                            var logger = _httpContextAccessor?.HttpContext?.RequestServices?.GetService(typeof(ILogger<OracleSessionInterceptor>)) as ILogger<OracleSessionInterceptor>;
-                            logger?.LogInformation("Oracle session OLS label for policy DULICH_OLS: {Label}", labelObj.ToString());
-                        }
-                    }
-                    catch (Exception ex)
+                    if (_canQueryLabel)
                     {
                         try
                         {
-                            var logger = _httpContextAccessor?.HttpContext?.RequestServices?.GetService(typeof(ILogger<OracleSessionInterceptor>)) as ILogger<OracleSessionInterceptor>;
-                            logger?.LogWarning(ex, "Could not read OLS session label (SA_SESSION.GET_LABEL may be unavailable)");
+                            using var lbl = oraConn.CreateCommand();
+                            lbl.CommandText = "SELECT SA_LABEL_ADMIN.LABEL_TO_CHAR('DULICH_OLS', SA_SESSION.GET_LABEL('DULICH_OLS')) FROM DUAL";
+                            var labelObj = await lbl.ExecuteScalarAsync(cancellationToken);
+                            if (labelObj != null && labelObj != DBNull.Value)
+                            {
+                                var logger = _httpContextAccessor?.HttpContext?.RequestServices?.GetService(typeof(ILogger<OracleSessionInterceptor>)) as ILogger<OracleSessionInterceptor>;
+                                logger?.LogInformation("Oracle session OLS label for policy DULICH_OLS: {Label}", labelObj.ToString());
+                            }
                         }
-                        catch { }
+                        catch (OracleException ex) when (ex.Number == 904)
+                        {
+                            _canQueryLabel = false;
+                            var logger = _httpContextAccessor?.HttpContext?.RequestServices?.GetService(typeof(ILogger<OracleSessionInterceptor>)) as ILogger<OracleSessionInterceptor>;
+                            logger?.LogWarning(ex, "OLS label helper missing (LABEL_TO_CHAR unavailable); skipping future label lookups.");
+                        }
+                        catch (Exception ex)
+                        {
+                            try
+                            {
+                                var logger = _httpContextAccessor?.HttpContext?.RequestServices?.GetService(typeof(ILogger<OracleSessionInterceptor>)) as ILogger<OracleSessionInterceptor>;
+                                logger?.LogWarning(ex, "Could not read OLS session label (SA_SESSION.GET_LABEL may be unavailable)");
+                            }
+                            catch { }
+                        }
                     }
                 }
                 catch (Exception ex)

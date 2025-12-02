@@ -8,7 +8,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Microsoft.AspNetCore.Hosting;
 using DuLich.Models;
 using DuLich.Models.Data;
 using System.Data;
@@ -29,14 +28,24 @@ namespace DuLich.Controllers.staff
     public class StaffController : BaseController
     {
         private readonly ILogger<StaffController> _logger;
-        private readonly IWebHostEnvironment _env;
         private readonly OracleAuthService _authService;
 
-        public StaffController(ApplicationDbContext context, ILogger<StaffController> logger, IWebHostEnvironment env, OracleAuthService authService) : base(context)
+        public StaffController(ApplicationDbContext context, ILogger<StaffController> logger, OracleAuthService authService) : base(context)
         {
             _logger = logger;
-            _env = env;
             _authService = authService;
+        }
+
+        private async Task<NhanVien?> GetCurrentStaffAsync()
+        {
+            var username = User.Identity?.Name;
+            if (string.IsNullOrEmpty(username))
+            {
+                return null;
+            }
+
+            return await _context.NhanViens
+                .FirstOrDefaultAsync(n => n.ORACLE_USERNAME != null && n.ORACLE_USERNAME.ToUpper() == username.ToUpper());
         }
 
         // Helper: best-effort log of current Oracle session VPD and OLS label
@@ -424,10 +433,8 @@ RETURNING MAANH INTO :id";
                         openedConnectionHere = true;
                     }
 
-                    // Ensure VPD/OLS context is applied to this exact connection (required by policy CHECK_CONTROL)
                     await EnsureOracleSecurityContextAsync(conn, role, staff.MaChiNhanh.Value);
 
-                    // Verify context matches the tour branch to avoid ORA-28115 before hitting DB
                     try
                     {
                         using var verifyCmd = conn.CreateCommand();
@@ -477,27 +484,20 @@ RETURNING MAANH INTO :id";
                                 return View(tour);
                             }
 
-                            // Generate QR code and persist it immediately to avoid batching UPDATE + large BLOB INSERT
+                            // Generate QR code and persist it in the tour record so the image is loaded from the database
                             var scheme = Request?.Scheme ?? "http";
-                            var tourUrl = Url.Action("TourDetails", "Customer", new { id = tour.MaTour }, scheme) ?? $"/Customer/TourDetails/{tour.MaTour}";
-                            var qrCodeFileName = $"tour_{tour.MaTour}_{DateTime.Now:yyyyMMddHHmmss}.png";
-                            var qrCodeDirectory = Path.Combine(_env.WebRootPath, "images", "qrcode");
-                            Directory.CreateDirectory(qrCodeDirectory);
+                            var tourUrl = Url.Action("TourDetail", "Customer", new { id = tour.MaTour }, scheme) ?? $"/Customer/TourDetail/{tour.MaTour}";
 
                             using (var qrGenerator = new QRCoder.QRCodeGenerator())
                             {
                                 var qrCodeData = qrGenerator.CreateQrCode(tourUrl, QRCoder.QRCodeGenerator.ECCLevel.Q);
                                 using var qrCode = new QRCoder.PngByteQRCode(qrCodeData);
                                 var qrCodeImage = qrCode.GetGraphic(10);
-                                var qrCodePath = Path.Combine(qrCodeDirectory, qrCodeFileName);
-                                await System.IO.File.WriteAllBytesAsync(qrCodePath, qrCodeImage);
-                                tour.QR = $"/images/qrcode/{qrCodeFileName}";
+                                tour.QR = $"data:image/png;base64,{Convert.ToBase64String(qrCodeImage)}";
                             }
 
                             _logger.LogInformation("Saving QR for tour {TourId} before inserting images", tour.MaTour);
-                            // Ensure security context before saving QR
                             try { await EnsureOracleSecurityContextAsync(conn, role, staff.MaChiNhanh.Value); } catch (Exception ex) { _logger?.LogWarning(ex, "Failed to reapply Oracle security context before SaveChanges (QR)"); }
-                            // Verify session state before saving QR
                             try { await LogOracleSessionStateAsync(conn); } catch { }
                             await _context.SaveChangesAsync();
 
@@ -505,8 +505,6 @@ RETURNING MAANH INTO :id";
                             {
                                 var validImages = TourImages.Where(f => f != null && f.Length > 0).ToList();
                                 _logger.LogInformation("Preparing to save {Count} image(s) for tour {TourId}", validImages.Count, tour.MaTour);
-
-                                // Use Oracle-specific BLOB write to avoid ORA-01460 issues with EF batching
                                 foreach (var imageFile in validImages)
                                 {
                                     using (var ms = new MemoryStream())
@@ -522,7 +520,6 @@ RETURNING MAANH INTO :id";
 
                                         try
                                         {
-                                            // Insert the BLOB using a raw Oracle command (EMPTY_BLOB + SELECT ... FOR UPDATE)
                                             var newImageId = await InsertImageBlobRawAsync(tour.MaTour, imageData, Truncate(imageFile.ContentType, 50), Truncate(imageFile.FileName, 300));
                                             _logger.LogInformation("Inserted image id {ImageId} for tour {TourId}", newImageId, tour.MaTour);
                                         }
@@ -584,13 +581,23 @@ RETURNING MAANH INTO :id";
         [HttpGet]
         public async Task<IActionResult> EditTour(int id)
         {
-            var t = await _context.Tours.FindAsync(id);
-            if (t == null)
+            var staff = await GetCurrentStaffAsync();
+            if (staff == null || !staff.MaChiNhanh.HasValue)
             {
-                TempData["Error"] = "Tour không tồn tại hoặc bạn không có quyền sửa tour này.";
+                TempData["Error"] = "Không xác định được nhân viên hoặc chi nhánh.";
                 return RedirectToAction(nameof(Tours));
             }
-            return View(t);
+
+            var tour = await _context.Tours
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.MaTour == id && t.MaChiNhanh == staff.MaChiNhanh);
+
+            if (tour == null)
+            {
+                TempData["Error"] = "Tour không tồn tại hoặc không thuộc chi nhánh của bạn.";
+                return RedirectToAction(nameof(Tours));
+            }
+            return View(tour);
         }
 
         [HttpPost]
@@ -602,28 +609,74 @@ RETURNING MAANH INTO :id";
                 return NotFound();
             }
 
+            var staff = await GetCurrentStaffAsync();
+            if (staff == null || !staff.MaChiNhanh.HasValue)
+            {
+                TempData["Error"] = "Không xác định được nhân viên hoặc chi nhánh.";
+                return RedirectToAction(nameof(Tours));
+            }
+
+            var existingTour = await _context.Tours.FirstOrDefaultAsync(t => t.MaTour == id && t.MaChiNhanh == staff.MaChiNhanh);
+            if (existingTour == null)
+            {
+                TempData["Error"] = "Tour không tồn tại hoặc không thuộc chi nhánh của bạn.";
+                return RedirectToAction(nameof(Tours));
+            }
+
             if (ModelState.IsValid)
             {
                 try
                 {
-                    _context.Update(tour);
+                    existingTour.TieuDe = tour.TieuDe;
+                    existingTour.MoTa = tour.MoTa;
+                    existingTour.NoiKhoiHanh = tour.NoiKhoiHanh;
+                    existingTour.NoiDen = tour.NoiDen;
+                    existingTour.ThoiGian = tour.ThoiGian;
+                    existingTour.SoLuong = tour.SoLuong;
+                    existingTour.GiaNguoiLon = tour.GiaNguoiLon;
+                    existingTour.GiaTreEm = tour.GiaTreEm;
+                    existingTour.TrangThai = tour.TrangThai;
+                    existingTour.QR = string.IsNullOrWhiteSpace(tour.QR) ? existingTour.QR : tour.QR;
+
                     await _context.SaveChangesAsync();
                     TempData["Success"] = "Cập nhật tour thành công";
                 }
                 catch (DbUpdateConcurrencyException)
                 {
-                    if (!_context.Tours.Any(e => e.MaTour == tour.MaTour))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        TempData["Error"] = "Tour không tồn tại hoặc bạn không có quyền sửa tour này.";
-                    }
+                    TempData["Error"] = "Tour không tồn tại hoặc bạn không có quyền sửa tour này.";
                 }
                 return RedirectToAction(nameof(Tours));
             }
             return View(tour);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> UpdateTourStatus(int tourId, string newStatus)
+        {
+            var staff = await GetCurrentStaffAsync();
+            if (staff == null || !staff.MaChiNhanh.HasValue)
+            {
+                return Json(new { success = false, message = "Không xác định được nhân viên hoặc chi nhánh." });
+            }
+
+            var tour = await _context.Tours.FirstOrDefaultAsync(t => t.MaTour == tourId && t.MaChiNhanh == staff.MaChiNhanh);
+            if (tour == null)
+            {
+                return Json(new { success = false, message = "Tour không tồn tại hoặc không thuộc chi nhánh của bạn." });
+            }
+
+            tour.TrangThai = newStatus;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                return Json(new { success = true });
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger?.LogError(ex, "Failed to update tour status for {TourId}", tourId);
+                return Json(new { success = false, message = "Lỗi khi cập nhật trạng thái tour." });
+            }
         }
 
         [HttpPost]
@@ -647,15 +700,6 @@ RETURNING MAANH INTO :id";
             try
             {
                 await _context.SaveChangesAsync();
-
-                if (!string.IsNullOrEmpty(t.QR))
-                {
-                    var qrPath = Path.Combine(_env.WebRootPath, t.QR.TrimStart('/'));
-                    if (System.IO.File.Exists(qrPath))
-                    {
-                        System.IO.File.Delete(qrPath);
-                    }
-                }
 
                 TempData["Success"] = "Xóa tour thành công";
             }
@@ -894,7 +938,7 @@ RETURNING MAANH INTO :id";
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
+        public async Task<IActionResult> ChangePassword([Bind(Prefix = "ChangePassword")] ChangePasswordViewModel model)
         {
             if (!ModelState.IsValid)
             {

@@ -53,7 +53,7 @@ namespace DuLich.Services
                     HashAlgorithmName.SHA256,
                     RSASignaturePadding.Pkcs1);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Log lỗi nếu cần: Console.WriteLine("Lỗi verify RSA: " + ex.Message);
                 return false;

@@ -2,8 +2,13 @@ using DuLich.Models;
 using DuLich.Models.Data;
 using DuLich.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace DuLich.Controllers.Api
 {
@@ -20,16 +25,86 @@ namespace DuLich.Controllers.Api
             _rsaService = rsaService;
         }
 
-        // API lấy chi tiết hóa đơn
-        // URL: GET api/hoadon/123
+        [HttpPost("verify")]
+        [Authorize(Policy = "MobileUser")]
+        public async Task<IActionResult> Verify([FromForm] IFormFile? invoiceFile)
+        {
+            if (invoiceFile == null || invoiceFile.Length == 0)
+            {
+                return Ok(new { success = false, message = "Vui lòng chọn file PDF hóa đơn." });
+            }
+
+            var fileName = invoiceFile.FileName;
+            var match = Regex.Match(fileName, @"(\d+)");
+            if (!match.Success)
+            {
+                return Ok(new { success = false, message = "Tên file không hợp lệ. Phải chứa mã hóa đơn (VD: HoaDon_123.pdf)." });
+            }
+
+            if (!int.TryParse(match.Value, out int maHoaDon))
+            {
+                return Ok(new { success = false, message = "Mã hóa đơn không hợp lệ." });
+            }
+
+            var hoaDon = await _dbContext.HoaDons
+                .Include(h => h.DatTour)
+                .FirstOrDefaultAsync(h => h.MaHoaDon == maHoaDon);
+
+            if (hoaDon == null)
+            {
+                return Ok(new { success = false, message = $"Không tìm thấy hóa đơn #{maHoaDon} trên hệ thống." });
+            }
+
+            if (string.IsNullOrEmpty(hoaDon.ChuKySo))
+            {
+                return Ok(new { success = false, isValid = false, message = "Hóa đơn này chưa được ký số." });
+            }
+
+            // [LOGIC XÁC THỰC CHUẨN]
+            // Tái tạo payload từ dữ liệu hiện tại trong DB để đối chiếu với chữ ký đã lưu
+            var currentDataPayload = InvoiceSignatureHelper.CreatePayload(hoaDon.DatTour, hoaDon);
+            bool isValid = _rsaService.Verify(currentDataPayload, hoaDon.ChuKySo);
+
+            if (isValid)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    isValid = true,
+                    message = "Hóa đơn HỢP LỆ.\nDữ liệu khớp hoàn toàn với chữ ký bảo mật.",
+                    data = new
+                    {
+                        maHoaDon = hoaDon.MaHoaDon,
+                        ngayXuat = hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm"),
+                        trangThai = hoaDon.TrangThai
+                    }
+                });
+            }
+            else
+            {
+                return Ok(new
+                {
+                    success = true,
+                    isValid = false,
+                    message = "CẢNH BÁO: Dữ liệu KHÔNG HỢP LỆ!\nThông tin (số tiền, ngày lập...) đã bị thay đổi so với chữ ký gốc.",
+                    data = new
+                    {
+                        maHoaDon = hoaDon.MaHoaDon,
+                        ngayXuat = hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm"),
+                        trangThai = hoaDon.TrangThai
+                    }
+                });
+            }
+        }
+
         [HttpGet("{maDatTour}")]
-        [Authorize(Policy = "MobileUser")] // <-- QUAN TRỌNG: Dùng Policy MobileUser để nhận JWT
+        [Authorize(Policy = "MobileUser")]
         public async Task<IActionResult> GetInvoice(int maDatTour)
         {
             var username = User.Identity?.Name;
             if (string.IsNullOrEmpty(username)) return Unauthorized();
 
-            var customer = await _dbContext.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+            var customer = await _dbContext.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME != null && k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
             if (customer == null) return Unauthorized();
 
             var hoaDon = await _dbContext.HoaDons
@@ -38,16 +113,15 @@ namespace DuLich.Controllers.Api
 
             if (hoaDon == null) return NotFound(new { message = "Không tìm thấy hóa đơn" });
 
-            // Kiểm tra chữ ký số
             var payload = InvoiceSignatureHelper.CreatePayload(hoaDon.DatTour, hoaDon);
             var valid = _rsaService.Verify(payload, hoaDon.ChuKySo ?? string.Empty);
 
             return Ok(new
             {
-                success = true, // Thêm cờ success để Flutter dễ check
+                success = true,
                 invoice = new
                 {
-                    MAHOADON = hoaDon.MaHoaDon, // Trả về key chữ hoa để khớp với map trong Flutter
+                    MAHOADON = hoaDon.MaHoaDon,
                     MADATTOUR = hoaDon.MaDatTour,
                     SOTIEN = hoaDon.SoTien,
                     NGAYXUAT = hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -59,13 +133,13 @@ namespace DuLich.Controllers.Api
         }
 
         [HttpPost("{maDatTour}/thanh-toan")]
-        [Authorize(Policy = "MobileUser")] // <-- QUAN TRỌNG: Dùng Policy MobileUser
+        [Authorize(Policy = "MobileUser")]
         public async Task<IActionResult> Pay(int maDatTour)
         {
             var username = User.Identity?.Name;
             if (string.IsNullOrEmpty(username)) return Unauthorized();
 
-            var customer = await _dbContext.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+            var customer = await _dbContext.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME != null && k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
             if (customer == null) return Unauthorized();
 
             var booking = await _dbContext.DatTours
@@ -76,21 +150,22 @@ namespace DuLich.Controllers.Api
             {
                 return NotFound(new { success = false, message = "Không tìm thấy đơn đặt tour hoặc hóa đơn" });
             }
+            if (string.Equals(booking.TrangThaiDat, "Đã hủy", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new { success = false, message = "Đơn đặt đã hủy không thể thanh toán." });
+            }
 
             if (booking.HoaDon.TrangThai == "Đã thanh toán" || booking.HoaDon.TrangThai == "Hoàn tất")
             {
                 return Ok(new { success = true, message = "Hóa đơn đã được thanh toán trước đó" });
             }
 
-            // Cập nhật trạng thái
             if (booking.TrangThaiDat != "Đã xác nhận" && booking.TrangThaiDat != "Hoàn thành" && booking.TrangThaiDat != "Đã hủy")
             {
                 booking.TrangThaiDat = "Chờ xác nhận";
             }
-            booking.HoaDon.TrangThai = "Đã thanh toán"; // Đồng bộ trạng thái
+            booking.HoaDon.TrangThai = "Đã thanh toán";
 
-            // Ký lại hóa đơn (để xác nhận trạng thái mới nếu cần) hoặc giữ nguyên chữ ký cũ
-            // Ở đây ta cập nhật DB
             _dbContext.DatTours.Update(booking);
             _dbContext.HoaDons.Update(booking.HoaDon);
 
@@ -98,12 +173,7 @@ namespace DuLich.Controllers.Api
 
             return Ok(new { success = true, message = "Thanh toán thành công" });
         }
-        // Thêm action này vào HoaDonController class
 
-        // GET: api/hoadon/html/{maDatTour}
-        // Lưu ý: Flutter đang gọi 'api/invoice/html/...', bạn nên sửa Flutter thành 'api/hoadon/html/...' 
-        // hoặc đổi Route của controller này, hoặc thêm Route phụ như bên dưới.
-        // GET: api/hoadon/html/{maDatTour}
         [HttpGet("html/{maDatTour}")]
         [Authorize(Policy = "MobileUser")]
         public async Task<IActionResult> GetInvoiceHtml(int maDatTour)
@@ -111,7 +181,7 @@ namespace DuLich.Controllers.Api
             var username = User.Identity?.Name;
             if (string.IsNullOrEmpty(username)) return Unauthorized();
 
-            var customer = await _dbContext.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+            var customer = await _dbContext.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME != null && k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
             if (customer == null) return Unauthorized();
 
             var booking = await _dbContext.DatTours
@@ -119,30 +189,26 @@ namespace DuLich.Controllers.Api
                 .Include(d => d.HoaDon)
                 .FirstOrDefaultAsync(d => d.MaDatTour == maDatTour && d.MaKhachHang == customer.MaKhachHang);
 
-            // Kiểm tra null cho HoaDon
             if (booking == null || booking.HoaDon == null || booking.Tour == null)
             {
                 return NotFound("Không tìm thấy dữ liệu hóa đơn");
             }
 
             var signerName = "Hệ thống DuLich";
-
-            // SỬA LỖI: Ép kiểu hoặc dùng ! để khẳng định không null (vì đã check ở trên)
             var htmlContent = GenerateInvoiceHtml(booking.HoaDon!, booking, booking.Tour!, customer, signerName);
 
-            return Content(htmlContent, "text/html");
+            return Content(htmlContent, "text/html; charset=utf-8", System.Text.Encoding.UTF8);
         }
 
-        // Hàm Helper sinh HTML (Copy logic từ CustomerController sang đây)
         private string GenerateInvoiceHtml(HoaDon hoaDon, DatTour booking, Tour tour, KhachHang customer, string signerName)
         {
-            // Tính toán hash để hiển thị (giống logic Verify)
             var signatureData = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
             string hashHex = "";
             string authCode = "";
 
             try
             {
+                // Tạo Auth Code ngắn từ Hash của dữ liệu (để đối chiếu nhanh)
                 byte[] hashBytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(signatureData));
                 hashHex = BitConverter.ToString(hashBytes).Replace("-", "");
                 authCode = hashHex.Length >= 12 ? hashHex.Substring(0, 12) : hashHex;
@@ -153,7 +219,7 @@ namespace DuLich.Controllers.Api
             var ngayXuat = hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss") ?? "N/A";
             var ngayDi = tour.ThoiGian?.ToString("dd/MM/yyyy") ?? "N/A";
 
-            // Trả về chuỗi HTML
+            // [ĐÃ SỬA] Ẩn chữ ký số dài dòng, chỉ hiện trạng thái xác thực
             return $@"
     <!DOCTYPE html>
     <html>
@@ -200,9 +266,9 @@ namespace DuLich.Controllers.Api
 
         <div class='signature-box'>
             <strong>THÔNG TIN XÁC THỰC (DIGITAL SIGNATURE)</strong><br/>
-            <p>Chữ ký số hệ thống:<br/>{hoaDon.ChuKySo}</p>
+            <p>Trạng thái: <b style='color:green'>Đã ký số bảo mật</b></p>
             <p>Mã kiểm tra (Auth Code): <b>{authCode}</b></p>
-            <p><i>Hóa đơn này được ký số bảo mật bởi hệ thống DuLich. Mọi chỉnh sửa sẽ làm mất hiệu lực của chữ ký.</i></p>
+            <p><i>Hóa đơn này được bảo vệ bởi chữ ký số hệ thống DuLich. Bất kỳ thay đổi nào về nội dung sẽ khiến hóa đơn trở nên không hợp lệ khi tra cứu.</i></p>
         </div>
 
         <div class='footer'>

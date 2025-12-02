@@ -198,7 +198,7 @@ namespace DuLich.Controllers
         public class QrApproveRequest
         {
             [JsonPropertyName("qrToken")]
-            public string QrToken { get; set; }
+            public string QrToken { get; set; } = string.Empty;
         }
     }
 }

@@ -13,7 +13,7 @@ namespace DuLich.Models
         public int Id { get; set; }
 
         [Column("SESSIONKEY")]
-        public string SessionKey { get; set; }
+        public string SessionKey { get; set; } = string.Empty;
 
         [Column("USERID")]
         public int? UserId { get; set; }
