@@ -197,6 +197,18 @@ namespace DuLich.Controllers
                     Note = h.Notes ?? string.Empty
                 }).ToList();
 
+            var now = DateTime.Now;
+            model.AutoSchedules = BackupScheduleProvider.Definitions
+                .Select(def => new BackupScheduleItem
+                {
+                    Name = def.DisplayName,
+                    Type = def.BackupType,
+                    TimeOfDay = def.TimeOfDay,
+                    NextRun = BackupScheduleProvider.GetNextRun(def.TimeOfDay, now)
+                })
+                .OrderBy(s => s.TimeOfDay)
+                .ToList();
+
             return View("BackupRestore", model);
         }
 

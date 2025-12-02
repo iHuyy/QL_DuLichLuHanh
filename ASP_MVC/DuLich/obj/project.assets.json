@@ -6165,19 +6165,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\Admin\\.nuget\\packages\\": {}
+    "C:\\Users\\quang\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "G:\\Study\\KLTN\\AppQLDVDLLH\\Working\\ASP_MVC\\DuLich\\DuLich.csproj",
+      "projectUniqueName": "D:\\QuanLyDuLichLuHanh\\Project\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
       "projectName": "DuLich",
-      "projectPath": "G:\\Study\\KLTN\\AppQLDVDLLH\\Working\\ASP_MVC\\DuLich\\DuLich.csproj",
-      "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
-      "outputPath": "G:\\Study\\KLTN\\AppQLDVDLLH\\Working\\ASP_MVC\\DuLich\\obj\\",
+      "projectPath": "D:\\QuanLyDuLichLuHanh\\Project\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\DuLich.csproj",
+      "packagesPath": "C:\\Users\\quang\\.nuget\\packages\\",
+      "outputPath": "D:\\QuanLyDuLichLuHanh\\Project\\QL_DuLichLuHanh\\ASP_MVC\\DuLich\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\quang\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [

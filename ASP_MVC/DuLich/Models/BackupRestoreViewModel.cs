@@ -14,6 +14,7 @@ namespace DuLich.Models
         public List<BackupHistoryItem> RestoreHistory { get; set; } = new();
         public List<SelectListItem> BackupFiles { get; set; } = new();
         public List<SelectListItem> BackupDirectories { get; set; } = new();
+        public List<BackupScheduleItem> AutoSchedules { get; set; } = new();
     }
 
     public class BackupHistoryItem
@@ -25,5 +26,13 @@ namespace DuLich.Models
         public string Status { get; set; } = string.Empty; // e.g. Completed, Running, Failed
         public string Location { get; set; } = string.Empty; // backupset path or FRA
         public string Note { get; set; } = string.Empty;
+    }
+
+    public class BackupScheduleItem
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public TimeSpan TimeOfDay { get; set; }
+        public DateTime NextRun { get; set; }
     }
 }

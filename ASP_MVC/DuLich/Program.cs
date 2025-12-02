@@ -190,6 +190,7 @@ builder.Services.AddHostedService<QueuedHostedService>();
 
 // Add the new service to automatically update expired tours
 builder.Services.AddHostedService<TourStatusUpdaterService>();
+builder.Services.AddHostedService<BackupSchedulerService>();
 
 // *** KẾT THÚC THÊM MỚI (SIGNALR & BACKGROUND TASKS) ***
 
