@@ -152,7 +152,7 @@
 
     <script src="~/customer/travel-agency/lib/jquery/jquery.min.js" asp-append-version="true"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
-        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        xintegrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous"></script>
     <script src="~/customer/travel-agency/lib/wow/wow.min.js" asp-append-version="true"></script>
     <script src="~/customer/travel-agency/lib/easing/easing.min.js" asp-append-version="true"></script>
@@ -172,17 +172,19 @@
             aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
             <div class="modal-dialog">
                 <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="sessionTimeoutModalLabel">Phiên sắp hết hạn</h5>
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title" id="sessionTimeoutModalLabel">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>Cảnh báo hết phiên
+                        </h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        Phiên làm việc của bạn sẽ hết hạn sau <span id="sessionTimeoutCountdown">60</span> giây. Bạn có muốn
-                        tiếp tục?
+                        Bạn đã không hoạt động trong thời gian dài.<br/>
+                        Hệ thống sẽ tự động đăng xuất sau <strong id="sessionTimeoutCountdown" class="text-danger fs-5">30</strong> giây nữa để bảo mật tài khoản.
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" id="logoutButton">Đăng xuất</button>
-                        <button type="button" class="btn btn-primary" id="keepAliveButton">Tiếp tục</button>
+                        <button type="button" class="btn btn-secondary" id="logoutButton">Đăng xuất ngay</button>
+                        <button type="button" class="btn btn-primary" id="keepAliveButton">Tiếp tục làm việc</button>
                     </div>
                 </div>
             </div>
@@ -190,8 +192,10 @@
 
         <script type="text/javascript">
             (function () {
-                const sessionMinutes = 15;
-                const warningSecondsBeforeEnd = 60;
+                // [CẤU HÌNH] Thời gian Timeout: 2 Phút
+                const sessionMinutes = 2; 
+                // Hiện cảnh báo trước 30 giây (tức là phút thứ 1:30 sẽ hiện modal)
+                const warningSecondsBeforeEnd = 30; 
 
                 let warningTimer;
                 let logoutTimer;
@@ -206,6 +210,7 @@
                     clearTimeout(logoutTimer);
                     clearInterval(countdownInterval);
 
+                    // Thời gian tính bằng mili giây
                     const warningTime = (sessionMinutes * 60 - warningSecondsBeforeEnd) * 1000;
                     const logoutTime = sessionMinutes * 60 * 1000;
 
@@ -229,6 +234,7 @@
 
                 async function keepAlive() {
                     try {
+                        // Gọi API để reset thời gian idle trên server
                         const response = await fetch('/api/ApiAuth/keepalive', {
                             method: 'GET',
                             headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -236,35 +242,55 @@
                         if (response.ok) {
                             console.log("Session extended.");
                             modalInstance.hide();
-                            startTimers(); // Restart timers after successful keep-alive
+                            startTimers(); // Reset lại bộ đếm 2 phút
                         } else {
-                            logout(); // If keep-alive fails, logout
+                            // Nếu server báo lỗi (ví dụ session đã chết thật), thì logout luôn
+                            logout(); 
                         }
                     } catch (error) {
-                        logout(); // If there's a network error, logout
+                        // Lỗi mạng -> Logout cho an toàn
+                        logout(); 
                     }
                 }
 
                 function logout() {
-                    // Use the form post to ensure middleware for logout runs properly
+                    // Tạo form ẩn để POST logout (kích hoạt middleware xóa cookie/session)
                     const logoutForm = document.createElement('form');
                     logoutForm.method = 'post';
-                    logoutForm.action = '/Customer/Logout';
-                    // Add antiforgery token if your form has one
+                    // Kiểm tra xem đang ở trang Admin hay Customer để gọi action phù hợp
+                    const isAdmin = window.location.pathname.toLowerCase().startsWith('/admin');
+                    logoutForm.action = isAdmin ? '/Admin/Logout' : '/Customer/Logout';
+                    
+                    // Thêm CSRF token nếu có (thường có input hidden __RequestVerificationToken trong body)
+                    const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+                    if (tokenInput) {
+                        const hiddenField = document.createElement('input');
+                        hiddenField.type = 'hidden';
+                        hiddenField.name = '__RequestVerificationToken';
+                        hiddenField.value = tokenInput.value;
+                        logoutForm.appendChild(hiddenField);
+                    }
+
                     document.body.appendChild(logoutForm);
                     logoutForm.submit();
                 }
 
-                // Event Listeners
+                // Gán sự kiện cho các nút trong modal
                 document.getElementById('keepAliveButton').addEventListener('click', keepAlive);
                 document.getElementById('logoutButton').addEventListener('click', logout);
 
-                // Reset timers on user activity
+                // Reset timer khi người dùng có tương tác (di chuột, gõ phím, cuộn trang, chạm)
                 ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'].forEach(event => {
-                    document.addEventListener(event, startTimers, { passive: true });
+                    document.addEventListener(event, () => {
+                        // Chỉ reset timer nếu modal cảnh báo CHƯA hiện ra.
+                        // Nếu modal đã hiện, người dùng buộc phải bấm nút "Tiếp tục" để xác nhận.
+                        if (!modalElement.classList.contains('show')) {
+                            startTimers(); 
+                        }
+                    }, { passive: true });
                 });
 
-                // Initial start
+                // Bắt đầu đếm giờ ngay khi tải trang
                 startTimers();
             })();
         </script>

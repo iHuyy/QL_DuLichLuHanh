@@ -1,18 +1,20 @@
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies; // Cần namespace này
+using Microsoft.AspNetCore.Authentication.Cookies;
 using DuLich.Models.Data;
 using Microsoft.EntityFrameworkCore;
 using System;
-using System.Collections.Generic; // Cần cho List<Claim>
-using System.Security.Claims;    // Cần cho Claim, ClaimsIdentity
+using System.Collections.Generic;
+using System.Security.Claims;
 
 namespace DuLich.Middlewares
 {
     public class SessionValidationMiddleware
     {
         private readonly RequestDelegate _next;
+        // [CẤU HÌNH] Thời gian Idle cho phép (phút)
+        private const int IDLE_TIMEOUT_MINUTES = 2; 
 
         public SessionValidationMiddleware(RequestDelegate next)
         {
@@ -25,8 +27,8 @@ namespace DuLich.Middlewares
             {
                 var path = context.Request.Path.Value ?? string.Empty;
 
-                // Bỏ qua các file tĩnh và API login để tránh vòng lặp
-                if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
+                // Bỏ qua file tĩnh và các trang login/register
+                if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase) && !path.Contains("/sessions")
                     || path.StartsWith("/Customer/Login", StringComparison.OrdinalIgnoreCase)
                     || path.StartsWith("/Customer/Register", StringComparison.OrdinalIgnoreCase)
                     || path.StartsWith("/css", StringComparison.OrdinalIgnoreCase)
@@ -34,20 +36,39 @@ namespace DuLich.Middlewares
                     || path.StartsWith("/images", StringComparison.OrdinalIgnoreCase)
                     || path.StartsWith("/favicon.ico", StringComparison.OrdinalIgnoreCase))
                 {
-                    await _next(context);
-                    return;
+                    if (!path.StartsWith("/api/hoadon")) 
+                    {
+                        await _next(context);
+                        return;
+                    }
                 }
 
                 var sessionId = context.Request.Cookies["USER_SESSION_ID"];
-                // Console.WriteLine($"SessionValidationMiddleware: incoming path={path}, USER_SESSION_ID={(sessionId ?? "<none>")}");
 
                 if (!string.IsNullOrEmpty(sessionId))
                 {
                     var sess = await db.UserSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
-                    // 1. Nếu Session trong DB không hợp lệ -> Đăng xuất và xóa cookie
-                    if (sess == null || sess.IsActive != "Y")
+                    
+                    bool isValid = sess != null && sess.IsActive == "Y";
+
+                    // Kiểm tra thời gian Idle
+                    if (isValid)
                     {
-                        Console.WriteLine("Session invalid or inactive. Logging out.");
+                        var timeSinceLastActivity = DateTime.UtcNow - sess.LastActivity;
+                        if (timeSinceLastActivity.TotalMinutes > IDLE_TIMEOUT_MINUTES)
+                        {
+                            // Quá 2 phút -> Hủy session
+                            isValid = false;
+                            sess.IsActive = "N"; 
+                            db.UserSessions.Update(sess);
+                            await db.SaveChangesAsync();
+                            Console.WriteLine($"Session {sessionId} expired due to inactivity > {IDLE_TIMEOUT_MINUTES}m.");
+                        }
+                    }
+
+                    if (!isValid)
+                    {
+                        // Logout và xóa Cookie
                         try
                         {
                             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -55,29 +76,31 @@ namespace DuLich.Middlewares
                         catch { }
                         context.Response.Cookies.Delete("USER_SESSION_ID");
 
-                        // Chỉ redirect nếu không phải đang ở trang Login
                         if (!path.Contains("/Login"))
                         {
-                            context.Response.Redirect("/Customer/Login");
-                            return;
+                            // Nếu là API thì trả về 401, nếu là trang Web thì redirect về Login
+                            if (path.StartsWith("/api"))
+                            {
+                                context.Response.StatusCode = 401;
+                                return;
+                            }
+                            else
+                            {
+                                context.Response.Redirect("/Customer/Login?reason=timeout");
+                                return;
+                            }
                         }
                     }
                     else
                     {
-                        // 2. Session DB hợp lệ. Cập nhật thời gian hoạt động
+                        // Còn hạn -> Cập nhật lại thời gian hoạt động
                         sess.LastActivity = DateTime.UtcNow;
                         db.UserSessions.Update(sess);
                         await db.SaveChangesAsync();
 
-                        // *** SỬA LỖI QUAN TRỌNG Ở ĐÂY ***
-                        // Nếu Session DB ngon lành nhưng ASP.NET Core User chưa đăng nhập
-                        // (Trường hợp login QR xong redirect, cookie auth chưa kịp ăn hoặc bị mất)
+                        // Logic Re-hydrate User (Tự động đăng nhập lại nếu Cookie mất nhưng Session DB còn)
                         if (context.User?.Identity?.IsAuthenticated != true && sess.UserId.HasValue)
                         {
-                            Console.WriteLine($"[AUTO-LOGIN] Valid DB Session found ({sess.SessionId}), re-hydrating User Identity.");
-
-                            // Tìm User để lấy Username/Role
-                            // Lưu ý: Logic này giả định user là KhachHang. Nếu có cả NhanVien cần check UserType
                             string username = "UNKNOWN";
                             string role = "ROLE_CUSTOMER";
 
@@ -95,6 +118,7 @@ namespace DuLich.Middlewares
                                     role = sess.UserType == "ADMIN" ? "ROLE_ADMIN" : "ROLE_STAFF";
                                 }
                             }
+
                             if (username != "UNKNOWN")
                             {
                                 var claims = new List<Claim>
@@ -102,17 +126,13 @@ namespace DuLich.Middlewares
                                     new Claim(ClaimTypes.Name, username),
                                     new Claim(ClaimTypes.Role, role)
                                 };
+                                if (sess.UserType != "CUSTOMER") // Add Branch Claim for Staff
+                                {
+                                     // Logic lấy chi nhánh nếu cần (đơn giản hóa ở đây)
+                                }
 
                                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-                                var authProperties = new AuthenticationProperties { IsPersistent = true };
-
-                                // Thực hiện đăng nhập vào Context hiện tại ngay lập tức
-                                await context.SignInAsync(
-                                    CookieAuthenticationDefaults.AuthenticationScheme,
-                                    new ClaimsPrincipal(claimsIdentity),
-                                    authProperties);
-
-                                // Quan trọng: Gán user vào context ngay để request hiện tại dùng được luôn
+                                await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(claimsIdentity));
                                 context.User = new ClaimsPrincipal(claimsIdentity);
                             }
                         }

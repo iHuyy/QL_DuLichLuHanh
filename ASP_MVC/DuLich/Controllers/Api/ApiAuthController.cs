@@ -8,6 +8,8 @@ using Microsoft.Extensions.Caching.Memory;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
+using System;
 
 namespace DuLich.Controllers.Api
 {
@@ -42,34 +44,40 @@ namespace DuLich.Controllers.Api
         [AllowAnonymous]
         public async Task<IActionResult> MobileLogin([FromBody] LoginModel model)
         {
-            var (success, role, errorMessage) = await _authService.ValidateLoginAsync(model.Username, model.Password);
+            // 1. Xác thực Username/Password với Oracle
+            var (success, oracleRole, errorMessage) = await _authService.ValidateLoginAsync(model.Username, model.Password);
 
             if (!success && errorMessage == "PASSWORD_EXPIRED")
             {
-                return Ok(new { 
-                    success = false, 
-                    require_change_password = true, 
-                    message = "Mật khẩu đã hết hạn. Vui lòng đổi mật khẩu mới." 
-                });
+                return Ok(new { success = false, require_change_password = true, message = "Mật khẩu đã hết hạn. Vui lòng đổi mật khẩu mới." });
             }
 
             if (success)
             {
+                // 2. Tìm thông tin trong bảng KhachHang
                 var user = await _context.KhachHangs
                     .FirstOrDefaultAsync(k => k.ORACLE_USERNAME == model.Username.ToUpper());
 
-                if (user != null && role == "ROLE_CUSTOMER")
+                if (user != null)
                 {
-                    var token = _jwtService.GenerateToken(user, role);
-                    return Ok(new { success = true, token, role, userId = user.MaKhachHang.ToString() });
+                    var token = _jwtService.GenerateToken(user, "ROLE_CUSTOMER");
+                    
+                    return Ok(new { 
+                        success = true, 
+                        token, 
+                        role = "ROLE_CUSTOMER", 
+                        userId = user.MaKhachHang.ToString() 
+                    });
                 }
-
-                return Unauthorized(new { success = false, message = "User is not a customer." });
+                
+                
+                return Unauthorized(new { success = false, message = "Tài khoản không tồn tại trong dữ liệu Khách hàng." });
             }
 
             return Unauthorized(new { success = false, message = errorMessage });
         }
 
+        
         [HttpPost("forgot-password")]
         [AllowAnonymous]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
@@ -142,7 +150,6 @@ namespace DuLich.Controllers.Api
             return "***@" + parts[1];
         }
 
-        // --- SỬA LỖI ORA-00904 TẠI ĐÂY ---
         [HttpPost("send-register-otp")]
         [AllowAnonymous]
         public async Task<IActionResult> SendRegisterOtp([FromBody] SendRegisterOtpRequest request)
@@ -152,7 +159,6 @@ namespace DuLich.Controllers.Api
                 if (request == null || string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Username))
                     return Ok(new { success = false, message = "Vui lòng nhập Email và Tên đăng nhập." });
 
-                // 1. Kiểm tra trùng lặp (Sử dụng CountAsync thay vì AnyAsync để tránh lỗi SQL 'FALSE')
                 var countEmailKhach = await _context.KhachHangs.CountAsync(k => k.Email == request.Email);
                 var countEmailNV = await _context.NhanViens.CountAsync(n => n.Email == request.Email);
                 
@@ -165,15 +171,11 @@ namespace DuLich.Controllers.Api
                 if (countUserKhach > 0 || countUserNV > 0) 
                     return Ok(new { success = false, message = "Tên đăng nhập đã tồn tại." });
 
-                // 2. Sinh OTP
                 var otp = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
-
-                // 3. Tạo Chữ ký (Hash)
                 long expiryTime = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds();
                 var dataToSign = $"{request.Email}|{otp}|{expiryTime}";
                 var signature = ComputeHmacSha256(dataToSign, SECRET_KEY);
 
-                // 4. Gửi Email
                 await _emailService.SendEmailAsync(request.Email, "Mã xác thực Đăng ký",
                     $"<h3>Mã OTP đăng ký của bạn là: <b style='color:red;font-size:24px'>{otp}</b></h3><p>Mã có hiệu lực 5 phút.</p>");
 
@@ -182,13 +184,11 @@ namespace DuLich.Controllers.Api
                     success = true,
                     message = $"Đã gửi OTP tới {MaskEmail(request.Email)}",
                     otp_hash = signature,
-                    otp_expiry = expiryTime,
-                    // debug_otp = otp // Uncomment để test nếu cần
+                    otp_expiry = expiryTime
                 });
             }
             catch (Exception ex)
             {
-                // Ghi log lỗi ra console để debug nếu cần
                 Console.WriteLine($"Error sending OTP: {ex}");
                 return Ok(new { success = false, message = "Lỗi gửi email: " + ex.Message });
             }
@@ -203,7 +203,6 @@ namespace DuLich.Controllers.Api
             }
         }
 
-        // DTO Classes
         public class ForgotPasswordRequest { public string Username { get; set; } = string.Empty; }
         public class VerifyOtpRequest { public string Username { get; set; } = string.Empty; public string Otp { get; set; } = string.Empty; }
         public class ResetPasswordRequest { public string Username { get; set; } = string.Empty; public string Otp { get; set; } = string.Empty; public string NewPassword { get; set; } = string.Empty; }

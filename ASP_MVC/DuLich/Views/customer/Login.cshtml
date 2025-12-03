@@ -5,6 +5,41 @@
     Layout = "~/Views/Shared/_AuthLayout.cshtml";
 }
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+    /* CSS Tùy chỉnh Input Group để liền mạch */
+    .input-group-custom {
+        display: flex;
+        border: 1px solid #ced4da; /* Viền bao quanh cả nhóm */
+        border-radius: 0.25rem; /* Bo góc giống Bootstrap mặc định */
+        overflow: hidden;
+    }
+
+    /* Input: Bỏ viền để hòa vào group */
+    .input-group-custom .form-control {
+        border: none;
+        box-shadow: none; /* Bỏ shadow khi focus để tránh đè viền */
+    }
+
+    /* Icon mắt: Nền trắng, con trỏ tay */
+    .input-group-text-custom {
+        background-color: white;
+        border: none;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        cursor: pointer;
+        color: #6c757d; /* Màu xám nhẹ */
+    }
+
+    /* Hiệu ứng Focus: Khi click vào input, viền cả group sáng lên */
+    .input-group-custom:focus-within {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+</style>
+
 @if (ViewBag.SuccessMessage != null)
 {
     <div class="alert alert-success text-center">
@@ -24,7 +59,13 @@
 
     <div class="form-group mb-3">
         <label asp-for="Password" class="form-label fw-semibold">Mật khẩu</label>
-        <input asp-for="Password" class="form-control" placeholder="Mật khẩu" />
+        
+        <div class="input-group-custom">
+            <input asp-for="Password" class="form-control" placeholder="Mật khẩu" id="passwordInput" type="password" />
+            <span class="input-group-text-custom" id="togglePassword">
+                <i class="fa fa-eye"></i>
+            </span>
+        </div>
         <span asp-validation-for="Password" class="text-danger"></span>
     </div>
 
@@ -48,7 +89,6 @@
     <p>Chưa có tài khoản? <a class="text-primary" asp-action="Register">Đăng ký</a></p>
 </div>
 
-<!-- QR Code Modal -->
 <div class="modal fade" id="qrModal" tabindex="-1" role="dialog" aria-labelledby="qrModalLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -68,57 +108,78 @@
         </div>
     </div>
 </div>
+
 @section Scripts {
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
     <script>
         $(document).ready(function () {
+            // Xử lý ẩn/hiện mật khẩu
+            $('#togglePassword').click(function () {
+                const passwordInput = $('#passwordInput');
+                const icon = $(this).find('i');
+
+                if (passwordInput.attr('type') === 'password') {
+                    passwordInput.attr('type', 'text');
+                    icon.removeClass('fa-eye').addClass('fa-eye-slash');
+                } else {
+                    passwordInput.attr('type', 'password');
+                    icon.removeClass('fa-eye-slash').addClass('fa-eye');
+                }
+            });
+
+            // Logic QR Code (Giữ nguyên)
             var currentQrToken = "";
             var pollInterval = null;
 
-            // Hàm tải QR Code
+            window.generateQrCode = function() {
+                 loadQrCode();
+            }
+
             function loadQrCode() {
+                $('#qrCodeImage').attr('src', '');
+                $('#qrSpinner').show();
+
                 $.get('/api/QrLogin/generate-anonymous-qr', function (data) {
+                    $('#qrSpinner').hide();
                     if (data.qrCodeImage) {
-                        // Hiển thị ảnh
                         $('#qrCodeImage').attr('src', 'data:image/png;base64,' + data.qrCodeImage);
                         currentQrToken = data.qrToken;
-                        
-                        // Bắt đầu hỏi trạng thái
                         startPolling();
                     }
+                }).fail(function() {
+                    $('#qrSpinner').hide();
+                    alert("Không thể tải mã QR.");
                 });
             }
 
-            // Hàm hỏi trạng thái định kỳ
             function startPolling() {
                 if (pollInterval) clearInterval(pollInterval);
 
                 pollInterval = setInterval(function () {
                     if (!currentQrToken) return;
+                    if (!$('#qrModal').hasClass('show')) {
+                        clearInterval(pollInterval);
+                        return;
+                    }
 
                     $.get('/api/QrLogin/poll-qr-status/' + currentQrToken, function (response) {
-                        console.log("QR Status:", response.status);
-
                         if (response.status === 'COMPLETED') {
-                            // ĐĂNG NHẬP THÀNH CÔNG!
                             clearInterval(pollInterval);
-                            // Chuyển hướng về trang chủ hoặc reload
-                            window.location.href = '/Customer/'; 
+                            window.location.href = '/Customer/';
                         }
                         else if (response.status === 'EXPIRED') {
                             clearInterval(pollInterval);
-                            alert("Mã QR đã hết hạn. Đang tải lại...");
-                            loadQrCode(); // Tải mã mới
+                            loadQrCode();
                         }
-                        // Nếu PENDING thì cứ tiếp tục chờ
                     });
-                }, 2000); // Hỏi mỗi 2 giây
+                }, 2000); 
             }
-
-            // Gọi hàm khi trang tải xong
-            loadQrCode();
+            
+            $('#qrModal').on('hidden.bs.modal', function () {
+                if (pollInterval) clearInterval(pollInterval);
+            });
         });
     </script>
 }

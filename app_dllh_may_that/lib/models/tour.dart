@@ -15,6 +15,7 @@ class Tour {
   final String? soLuong;
   final String? soChoConLai; // Số chỗ còn lại
   final String? chiNhanh;
+  final String? trangThai; // <--- THÊM MỚI
 
   Tour({
     this.maTour,
@@ -31,6 +32,7 @@ class Tour {
     this.soLuong,
     this.soChoConLai,
     this.chiNhanh,
+    this.trangThai, // <--- THÊM MỚI
   });
 
   // Helper: tìm giá trị bất kể key viết hoa/thuong
@@ -99,6 +101,9 @@ class Tour {
       giaTreEm: _toStr(_get(json, 'GIATREEM')).isEmpty ? null : _toStr(_get(json, 'GIATREEM')),
       soLuong: _toStr(_get(json, 'SOLUONG')).isEmpty ? null : _toStr(_get(json, 'SOLUONG')),
       soChoConLai: _toStr(_get(json, 'SOCHOCONLAI')).isEmpty ? null : _toStr(_get(json, 'SOCHOCONLAI')),
+      // MAPPING TRANGTHAI
+      trangThai: _toStr(_get(json, 'TRANGTHAI')).isEmpty ? null : _toStr(_get(json, 'TRANGTHAI')), 
+      
       chiNhanh: (() {
         final rawId = _get(json, 'MACHINHANH') ?? _get(json, 'MaChiNhanh') ?? _get(json, 'MACHINHANH');
         if (rawId != null && _toStr(rawId).isNotEmpty) return _toStr(rawId);

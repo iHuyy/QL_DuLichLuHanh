@@ -470,10 +470,16 @@ namespace DuLich.Controllers
         public async Task<IActionResult> TourDetail(int id)
         {
             var tour = await _context.Tours.FindAsync(id);
-            if (tour == null)
-            {
-                return NotFound();
-            }
+            if (tour == null) return NotFound();
+
+            // 1. Tính tổng số chỗ đã đặt (dựa vào bảng DatTour) - Hàm này lấy từ BaseController
+            int totalBooked = await GetReservedSeatCountAsync(id);
+
+            // 2. Tính số chỗ còn lại để hiển thị
+            // Lưu ý: tour.SoLuong bây giờ được coi là TỔNG SỨC CHỨA CỐ ĐỊNH
+            int totalCapacity = tour.SoLuong ?? 0;
+            int remainingSlots = Math.Max(0, totalCapacity - totalBooked);
+
             var model = new TourDetailViewModel
             {
                 MaTour = tour.MaTour,
@@ -482,15 +488,20 @@ namespace DuLich.Controllers
                 DiemKhoiHanh = tour.NoiKhoiHanh ?? "Chưa xác định",
                 DiemDen = tour.NoiDen ?? tour.ThanhPho ?? "Chưa xác định",
                 NgayKhoiHanh = tour.ThoiGian ?? DateTime.Now,
-                NgayKetThuc = tour.ThoiGian?.AddDays(5) ?? DateTime.Now.AddDays(5), // Gi? s? tour k?o d?i 5 ng?y
+                NgayKetThuc = tour.ThoiGian?.AddDays(3) ?? DateTime.Now.AddDays(3),
                 Gia = tour.GiaNguoiLon ?? 0,
-                SoLuong = tour.SoLuong ?? 0
+                
+                // QUAN TRỌNG: Truyền số chỗ còn lại đã tính toán ra View
+                SoLuong = remainingSlots 
             };
+
             ViewBag.ImageIds = await _context.AnhTours
                 .Where(a => a.MaTour == id)
                 .OrderBy(a => a.MaAnh)
                 .Select(a => a.MaAnh)
                 .ToListAsync();
+
+            // Load tour liên quan (giữ nguyên logic cũ)
             ViewBag.RelatedTours = await _context.Tours
                 .Where(t => t.MaTour != id && (t.NoiDen == model.DiemDen || t.ThanhPho == model.DiemDen))
                 .OrderBy(t => t.MaTour)
@@ -502,6 +513,7 @@ namespace DuLich.Controllers
                     Gia = t.GiaNguoiLon ?? 0
                 })
                 .ToListAsync();
+
             return View(model);
         }
         [HttpGet]
@@ -509,18 +521,19 @@ namespace DuLich.Controllers
         public async Task<IActionResult> Booking(int id)
         {
             var tour = await _context.Tours.FindAsync(id);
-            if (tour == null)
-            {
-                return NotFound();
-            }
+            if (tour == null) return NotFound();
+
             var username = User.Identity?.Name;
-            if (string.IsNullOrEmpty(username))
-            {
-                // Handle the case where the username is not available.
-                // This might mean redirecting to login or returning an error.
-                return RedirectToAction("Login");
-            }
-            var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME != null && k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+            if (string.IsNullOrEmpty(username)) return RedirectToAction("Login");
+            
+            var customer = await _context.KhachHangs
+                .FirstOrDefaultAsync(k => k.ORACLE_USERNAME == username.ToUpper());
+
+            // 1. Tính toán lại số liệu thực tế
+            int totalBooked = await GetReservedSeatCountAsync(id);
+            int totalCapacity = tour.SoLuong ?? 0;
+            int remainingSlots = Math.Max(0, totalCapacity - totalBooked);
+
             var model = new CreateBookingViewModel
             {
                 TourId = tour.MaTour,
@@ -528,7 +541,11 @@ namespace DuLich.Controllers
                 StartDate = tour.ThoiGian,
                 PriceAdult = tour.GiaNguoiLon ?? 0,
                 PriceChild = tour.GiaTreEm ?? 0,
-                AvailableSlots = tour.SoLuong ?? 0,
+                
+                // Hiển thị đúng số chỗ còn lại và tổng sức chứa
+                AvailableSlots = remainingSlots, 
+                TotalSlots = totalCapacity,
+                
                 FullName = customer?.HoTen,
                 Email = customer?.Email,
                 PhoneNumber = customer?.SoDienThoai,
@@ -541,43 +558,42 @@ namespace DuLich.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Booking([FromForm] CreateBookingViewModel model)
         {
-            if (!ModelState.IsValid)
-            {
-                return View(model);
-            }
+            if (!ModelState.IsValid) return View(model);
+
             var tour = await _context.Tours.FindAsync(model.TourId);
             if (tour == null) return NotFound();
+
             var username = User.Identity?.Name;
-            if (string.IsNullOrEmpty(username)) return Unauthorized();
-            var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME != null && k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+            var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME == username.ToUpper());
             if (customer == null) return Unauthorized();
-            // Kiểm tra số lượng chỗ (nhu cầu)
-            var totalQuantity = model.NumAdults + model.NumChildren;
-            if (tour.SoLuong.HasValue && totalQuantity > tour.SoLuong.Value)
+
+            // --- BƯỚC KIỂM TRA QUAN TRỌNG ---
+            // 1. Tính lại số chỗ đã đặt hiện tại (Concurrency check)
+            int currentBooked = await GetReservedSeatCountAsync(model.TourId);
+            int totalCapacity = tour.SoLuong ?? 0;
+            int remaining = totalCapacity - currentBooked;
+            int requestQty = model.NumAdults + model.NumChildren;
+
+            // 2. Kiểm tra xem còn đủ chỗ không
+            if (requestQty > remaining)
             {
-                ModelState.AddModelError(string.Empty, $"Số lượng khách ({totalQuantity}) vượt quá số chỗ còn lại ({tour.SoLuong.Value}).");
+                ModelState.AddModelError(string.Empty, $"Rất tiếc, tour chỉ còn {remaining} chỗ trống. Bạn đang đặt {requestQty} chỗ.");
+                
+                // Cập nhật lại số hiển thị cho view để khách biết
+                model.AvailableSlots = remaining;
+                model.TotalSlots = totalCapacity;
                 return View(model);
             }
+            // ----------------------------------
+
             using (var transaction = _context.Database.BeginTransaction())
             {
                 try
                 {
-                    // Decrease the available slots for the tour (atomic at DB level)
-                    if (tour.SoLuong.HasValue)
-                    {
-                        var updated = await _context.Database.ExecuteSqlRawAsync(
-                            "UPDATE TADMIN.TOUR SET SOLUONG = SOLUONG - :p_reserve WHERE MATOUR = :p_id AND SOLUONG >= :p_reserve",
-                            new OracleParameter("p_reserve", totalQuantity),
-                            new OracleParameter("p_id", tour.MaTour));
-                        if (updated == 0)
-                        {
-                            transaction.Rollback();
-                            ModelState.AddModelError(string.Empty, "Không còn đủ chỗ hợp lệ cho số lượng khách.");
-                            return View(model);
-                        }
-                        // Refresh the tracked tour to reflect the new remaining slots
-                        await _context.Entry(tour).ReloadAsync();
-                    }
+                    // [THAY ĐỔI LỚN]: Đã XÓA bỏ đoạn code trừ SOLUONG trong bảng TOUR
+                    // Chỉ thực hiện thêm mới Booking và Hóa đơn
+
+                    // 1. Tạo Booking
                     var booking = new DatTour
                     {
                         MaTour = model.TourId,
@@ -589,36 +605,29 @@ namespace DuLich.Controllers
                         TrangThaiDat = "Chờ xác nhận",
                         YeuCauDacBiet = model.SpecialRequest
                     };
+                    
                     _context.DatTours.Add(booking);
-                    await _context.SaveChangesAsync(); // Luu d? l?y MaDatTour
-                    var hoaDon = await _context.HoaDons.FirstOrDefaultAsync(h => h.MaDatTour == booking.MaDatTour);
-                    if (hoaDon == null)
+                    await _context.SaveChangesAsync(); // Lưu để lấy MaDatTour
+
+                    // 2. Tạo Hóa đơn
+                    var hoaDon = new HoaDon
                     {
-                        hoaDon = new HoaDon
-                        {
-                            MaDatTour = booking.MaDatTour,
-                            NgayXuat = DateTime.Now,
-                            SoTien = booking.TongTien,
-                            TrangThai = "Chưa thanh toán"
-                        };
-                        _context.HoaDons.Add(hoaDon);
-                        await _context.SaveChangesAsync(); // Luu d? l?y MaHoaDon
-                    }
-                    var payloadObj = new
-                    {
-                        maHoaDon = hoaDon.MaHoaDon,
-                        maDatTour = booking.MaDatTour,
-                        maKhachHang = booking.MaKhachHang,
-                        soTien = (double)(hoaDon.SoTien ?? 0), // ï¿½p ki?u double cho gi?ng JSON number
-                        ngayXuat = hoaDon.NgayXuat?.ToString("yyyy-MM-dd HH:mm:ss"), // ï¿½?nh d?ng ngï¿½y gi?ng Oracle TO_CHAR
-                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds() // Timestamp hi?n t?i
+                        MaDatTour = booking.MaDatTour,
+                        NgayXuat = DateTime.Now,
+                        SoTien = booking.TongTien,
+                        TrangThai = "Chưa thanh toán"
                     };
-                    string payloadJson = System.Text.Json.JsonSerializer.Serialize(payloadObj);
-                    string signature = _rsaService.Sign(payloadJson);
-                    hoaDon.Payload = payloadJson; // Luu JSON g?c vï¿½o c?t Payload
-                    hoaDon.ChuKySo = signature;   // Luu ch? kï¿½
+                    _context.HoaDons.Add(hoaDon);
+                    await _context.SaveChangesAsync(); // Lưu để lấy MaHoaDon
+
+                    // 3. Ký số hóa đơn
+                    var payload = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
+                    hoaDon.ChuKySo = _rsaService.Sign(payload);
+                    hoaDon.Payload = payload; // Lưu payload gốc
+                    
                     _context.HoaDons.Update(hoaDon);
                     await _context.SaveChangesAsync();
+
                     transaction.Commit();
                     return RedirectToAction("Payment", new { bookingId = booking.MaDatTour });
                 }

@@ -628,6 +628,11 @@ class _HomePageState extends State<HomePage> {
 
               var tours = snapshot.data ?? [];
 
+              tours = tours.where((t) {
+                final status = t.trangThai?.toLowerCase().trim() ?? '';
+                return status == 'hoạt động'; 
+              }).toList();
+
               // Filter
               if (_selectedBranchId != null || _selectedBranch.isNotEmpty) {
                 tours = tours.where((t) {
