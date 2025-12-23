@@ -1,0 +1,149 @@
+﻿@{
+    ViewData["Title"] = "Quản lý booking";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Quản lý booking</h4>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="bookingsList" class="display table" style="min-width: 1100px">
+                        <thead>
+                            <tr>
+                                <th>Tên tour</th>
+                                <th>Khách hàng</th>
+                                <th>Ngày đặt</th>
+                                <th>Số người lớn</th>
+                                <th>Số trẻ em</th>
+                                <th>Ngày bắt đầu</th>
+                                <th>Trạng thái</th>
+                                <th>Tổng tiền</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal hiển thị hóa đơn -->
+<div class="modal fade" id="invoiceModal" tabindex="-1" role="dialog" aria-labelledby="invoiceModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document" style="max-width: 90%;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="invoiceModalLabel">Hóa đơn</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" style="height: 80vh;">
+                <iframe id="invoiceFrame" src="" style="border: none; width: 100%; height: 100%;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+}
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            loadBookings();
+        });
+
+        function badgeStatus(status) {
+            if (!status) return '<span class="badge badge-secondary">Chưa xác nhận</span>';
+            const lower = status.toLowerCase();
+            if (lower.includes('huy')) return '<span class="badge badge-danger">Đã hủy</span>';
+            if (lower.includes('xac nhan')) return '<span class="badge badge-success">Đã xác nhận</span>';
+            return `<span class="badge badge-info">${status}</span>`;
+        }
+
+        function loadBookings() {
+            $('#bookingsList').DataTable({
+                ajax: '/api/admin/bookings',
+                order: [[5, 'desc']],
+                columns: [
+                    { data: 'tenTour' },
+                    { data: 'tenKhachHang' },
+                    { data: 'ngayDat', render: d => d ? moment(d).format('DD/MM/YYYY') : '' },
+                    { data: 'soNguoiLon' },
+                    { data: 'soTreEm' },
+                    { data: 'ngayBatDau', render: d => d ? moment(d).format('DD/MM/YYYY') : '' },
+                    { data: 'trangThai', render: badgeStatus },
+                    {
+                        data: 'tongTien',
+                        render: function (data) {
+                            return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(data);
+                        }
+                    },
+                    {
+                        data: null,
+                        orderable: false,
+                        render: function (data) {
+                            const actions = [];
+                            const hasInvoice = !!data.maHoaDon;
+                            if (hasInvoice) {
+                                actions.push(`<button class="btn btn-success btn-sm mr-1" onclick="showInvoice(${data.maHoaDon})">Xem hóa đơn</button>`);
+                            }
+                            const status = (data.trangThai || '').toLowerCase();
+                            const isCancelled = status.includes('huy');
+                            const isConfirmed = status.includes('xac nhan');
+                            if (!isConfirmed && !isCancelled) {
+                                actions.push(`<button class="btn btn-info btn-sm mr-1" onclick="confirmBooking(${data.maDatTour})">Xác nhận</button>`);
+                            }
+                            if (!isCancelled) {
+                                actions.push(`<button class="btn btn-danger btn-sm" onclick="cancelBooking(${data.maDatTour})">Hủy</button>`);
+                            }
+                            return actions.join('');
+                        }
+                    }
+                ]
+            });
+        }
+
+        function confirmBooking(id) {
+            $.post('/api/admin/bookings/confirm', { bookingId: id })
+                .done(() => {
+                    $('#bookingsList').DataTable().ajax.reload(null, false);
+                    toastr.success('Đã xác nhận booking và cập nhật hóa đơn');
+                })
+                .fail(() => toastr.error('Không xác nhận được booking'));
+        }
+
+        function cancelBooking(id) {
+            if (!confirm('Bạn có chắc chắn muốn hủy booking này?')) return;
+            $.post('/api/admin/bookings/cancel', { bookingId: id, reason: 'Admin cancel' })
+                .done(() => {
+                    $('#bookingsList').DataTable().ajax.reload(null, false);
+                    toastr.success('Đã hủy booking');
+                })
+                .fail(() => toastr.error('Không hủy được booking'));
+        }
+
+        function showInvoice(hoaDonId) {
+            if (!hoaDonId) return;
+            $('#invoiceFrame').attr('src', `/Customer/PrintInvoice?hoaDonId=${hoaDonId}`);
+            $('#invoiceModal').modal('show');
+        }
+    </script>
+}

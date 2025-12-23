@@ -1,0 +1,112 @@
+@using System.Linq
+@model DuLich.Models.InvoiceViewModel
+@{
+    ViewData["Title"] = "Xác nhận thanh toán";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var isPaid = string.Equals(Model.TrangThai, "Đã thanh toán", StringComparison.OrdinalIgnoreCase);
+    var paymentOptions = new[]
+    {
+        new { Value = "Thanh toán tại văn phòng", Label = "Thanh toán tại văn phòng", Description = "Thanh toán trực tiếp tại văn phòng của Du lịch." },
+        new { Value = "Thanh toán thẻ", Label = "Thanh toán thẻ", Description = "Thanh toán nhanh qua thẻ ngân hàng." },
+        new { Value = "Ví Momo", Label = "Ví Momo", Description = "Thanh toán qua ví điện tử Momo." }
+    };
+    var selectedMethod = Model.PaymentMethod ?? paymentOptions[0].Value;
+    var selectedDescription = paymentOptions.FirstOrDefault(option => option.Value == selectedMethod)?.Description ?? string.Empty;
+}
+
+<div class="container-xxl py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Hóa đơn đặt tour</h4>
+                </div>
+
+                <div class="card-body p-4">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6 class="text-uppercase text-muted">Thông tin hóa đơn</h6>
+                            <p class="mb-1"><strong>Mã hóa đơn:</strong> @Model.MaHoaDon</p>
+                            <p class="mb-1"><strong>Ngày xuất:</strong> @Model.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss")</p>
+                            <p class="mb-0"><strong>Trạng thái:</strong> <span class="fw-bold text-primary">@Model.TrangThai</span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-uppercase text-muted">Khách hàng</h6>
+                            <p class="mb-1"><strong>Họ tên:</strong> @Model.TenKhachHang</p>
+                            <p class="mb-1"><strong>Email:</strong> @Model.Email</p>
+                            <p class="mb-1"><strong>Số điện thoại:</strong> @Model.SoDienThoai</p>
+                            <p class="mb-0"><strong>Địa chỉ:</strong> @Model.DiaChi</p>
+                        </div>
+                    </div>
+
+                    <hr />
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6 class="text-uppercase text-muted">Tour</h6>
+                            <p class="mb-1"><strong>Tên tour:</strong> @Model.TenTour</p>
+                            <p class="mb-0"><strong>Ngày khởi hành:</strong> @Model.NgayKhoiHanh?.ToString("dd/MM/yyyy")</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-uppercase text-muted">Số lượng</h6>
+                            <p class="mb-1"><strong>Người lớn:</strong> @Model.SoNguoiLon</p>
+                            <p class="mb-0"><strong>Trẻ em:</strong> @Model.SoTreEm</p>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end">
+                        <div class="text-end">
+                            <p class="text-muted mb-1">Tổng tiền thanh toán</p>
+                            <h3 class="text-primary">@Model.SoTien?.ToString("#,##0") VNĐ</h3>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-column gap-3 mt-4 align-items-center">
+                        <form asp-action="ConfirmPayment" asp-controller="Customer" method="post" class="w-100">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="bookingId" value="@ViewBag.BookingId" />
+                            
+                            <div class="mb-3 w-100" style="max-width: 560px; margin: 0 auto;">
+                                <label class="form-label fw-semibold">Phương thức thanh toán</label>
+                                <select class="form-select" name="paymentMethod">
+                                    @foreach (var option in paymentOptions)
+                                    {
+                                        <option value="@option.Value" selected="@(option.Value == selectedMethod ? "selected" : null)">
+                                            @option.Label
+                                        </option>
+                                    }
+                                </select>
+                                @if (!string.IsNullOrWhiteSpace(selectedDescription))
+                                {
+                                    <small class="text-muted">@selectedDescription</small>
+                                }
+                            </div>
+                            
+                            <div class="d-flex flex-wrap gap-3 justify-content-center mt-3">
+                                @if (!isPaid)
+                                {
+                                    <button type="submit" class="btn btn-primary rounded-pill px-5 py-2">
+                                        <i class="fa fa-credit-card me-2"></i> Xác nhận Thanh toán
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-success rounded-pill px-5 py-2" disabled>
+                                        <i class="fa fa-check-circle me-2"></i> Đã thanh toán
+                                    </button>
+                                }
+                                
+                                </div>
+                            
+                            @if(!isPaid) {
+                                <div class="text-center mt-3">
+                                    <small class="text-muted fst-italic">Hóa đơn điện tử sẽ được nhân viên xuất và gửi sau khi thanh toán hoàn tất.</small>
+                                </div>
+                            }
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

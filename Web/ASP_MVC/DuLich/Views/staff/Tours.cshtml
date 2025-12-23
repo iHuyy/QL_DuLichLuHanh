@@ -1,0 +1,155 @@
+@model List<DuLich.Models.TourViewModel>
+@{
+    ViewData["Title"] = "Quản lý Tour";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Quản lý Tour</h4>
+        </div>
+    </div>
+    <div class="col-sm-6 p-md-0 justify-content-sm-end mt-2 mt-sm-0 d-flex">
+        <a href="@Url.Action("CreateTour", "Staff")" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Thêm Tour mới
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="example" class="display table" style="min-width: 845px">
+                        <thead>
+                            <tr>
+                                <th>Mã Tour</th>
+                                <th>Tên Tour</th>
+                                <th>Điểm đến</th>
+                                <th>Ngày khởi hành</th>
+                                <th>Giá</th>
+                                <th>Số chỗ còn lại</th>
+                                <th>Trạng thái</th>
+                                <th>QR Code</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var tour in Model)
+                            {
+                                <tr>
+                                    <td>@tour.MaTour</td>
+                                    <td>@tour.TenTour</td>
+                                    <td>@tour.DiemDen</td>
+                                    <td>@tour.NgayKhoiHanh.ToString("dd/MM/yyyy")</td>
+                                    <td>@tour.Gia.ToString("N0") VNĐ</td>
+                                    <td>@tour.SoChoConLai / @tour.SoLuong</td>
+                                    <td>
+                                        <select class="form-control form-control-sm"
+                                            onchange="updateTourStatus(this, @tour.Id)">
+                                            <option value="Hoạt động"
+                                                selected="@(tour.TrangThai == "Hoạt động" ? "selected" : (string?)null)">
+                                                Hoạt động</option>
+                                            <option value="Tạm ngưng"
+                                                selected="@(tour.TrangThai == "Tạm ngưng" ? "selected" : (string?)null)">Tạm
+                                                ngưng</option>
+                                            <option value="Đã hủy"
+                                                selected="@(tour.TrangThai == "Đã hủy" ? "selected" : (string?)null)">Đã hủy
+                                            </option>
+                                            <option value="Đã kết thúc"
+                                                selected="@(tour.TrangThai == "Đã kết thúc" ? "selected" : (string?)null)">
+                                                Đã kết thúc</option>
+                                            <option value="Ẩn"
+                                                selected="@(tour.TrangThai == "Ẩn" ? "selected" : (string?)null)">Ẩn
+                                            </option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(tour.QR))
+                                        {
+                                            <button class="btn btn-info btn-sm" onclick="showQR('@tour.QR')">
+                                                <i class="fas fa-qrcode">QR</i>
+                                            </button>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="d-flex gap-2">
+                                            <a href="@Url.Action("EditTour", "Staff", new { id = tour.Id })"
+                                                class="btn btn-sm btn-primary">
+                                                Sửa
+                                            </a>
+                                            <form asp-controller="Staff" asp-action="DeleteTour" asp-route-id="@tour.Id"
+                                                method="post" class="mb-0">
+                                                <button type="submit" class="btn btn-sm btn-danger"
+                                                    onclick="return confirm('Bạn có chắc muốn xóa tour này?');">
+                                                    Xóa
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal hiển thị QR Code -->
+<div class="modal fade" id="qrModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">QR Code</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="qrImage" src="" alt="QR Code" style="max-width: 100%;" />
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#example').DataTable({
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Vietnamese.json'
+                }
+            });
+        });
+
+        function showQR(qrPath) {
+            $('#qrImage').attr('src', qrPath);
+            $('#qrModal').modal('show');
+        }
+
+        function updateTourStatus(selectElement, tourId) {
+            var newStatus = $(selectElement).val();
+
+            if (!confirm('Bạn có chắc muốn đổi trạng thái của tour #' + tourId + ' thành "' + newStatus + '" không?')) {
+                location.reload();
+                return;
+            }
+
+            $.post('@Url.Action("UpdateTourStatus", "Staff")', { tourId: tourId, newStatus: newStatus })
+                .done(function (response) {
+                    if (response.success) {
+                        location.reload();
+                    } else {
+                        alert('Có lỗi xảy ra khi cập nhật: ' + response.message);
+                        location.reload();
+                    }
+                })
+                .fail(function () {
+                    alert('Không thể kết nối đến máy chủ để cập nhật trạng thái.');
+                    location.reload();
+                });
+        }
+    </script>
+}

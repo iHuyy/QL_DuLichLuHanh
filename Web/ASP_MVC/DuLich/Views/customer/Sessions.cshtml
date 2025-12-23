@@ -1,0 +1,99 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Quản lý phiên";
+}
+
+<div class="container mt-4">
+    <h2>Quản lý phiên đăng nhập</h2>
+    <p>Hiển thị các phiên đang hoạt động trên các thiết bị khác. Bạn có thể đăng xuất các phiên đó từ đây.</p>
+
+    <div id="alerts"></div>
+
+    <table class="table table-striped table-hover" id="sessions-table">
+        <thead class="thead-dark">
+            <tr>
+                <th>Thiết bị</th>
+                <th>Thông tin thiết bị</th>
+                <th>Thời gian đăng nhập</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td colspan="4" class="text-center">Đang tải...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+<script>
+    async function loadSessions() {
+        try {
+            const res = await fetch('/api/sessions/active', { credentials: 'include' });
+            if (!res.ok) {
+                showAlert('Không thể lấy danh sách phiên. Vui lòng thử lại.', 'danger');
+                return;
+            }
+            const data = await res.json();
+            const tbody = document.querySelector('#sessions-table tbody');
+            tbody.innerHTML = '';
+            if (!data.sessions || data.sessions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">Không có phiên nào khác đang hoạt động.</td></tr>';
+                return;
+            }
+            data.sessions.forEach(s => {
+                const tr = document.createElement('tr');
+                const device = document.createElement('td'); device.textContent = s.device_type || 'WEB';
+                const info = document.createElement('td'); info.textContent = s.device_info || '';
+                const time = document.createElement('td'); time.textContent = new Date(s.login_time).toLocaleString();
+                const action = document.createElement('td');
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-sm btn-danger';
+                btn.textContent = 'Đăng xuất';
+                btn.onclick = () => remoteLogout(s.session_id);
+                action.appendChild(btn);
+
+                tr.appendChild(device);
+                tr.appendChild(info);
+                tr.appendChild(time);
+                tr.appendChild(action);
+
+                tbody.appendChild(tr);
+            });
+        } catch (e) {
+            showAlert('Lỗi khi gọi API: ' + (e && e.message ? e.message : ''), 'danger');
+        }
+    }
+
+    function showAlert(message, type) {
+        const alerts = document.getElementById('alerts');
+        alerts.innerHTML = `<div class="alert alert-${type}" role="alert">${message}</div>`;
+        setTimeout(() => alerts.innerHTML = '', 5000);
+    }
+
+    async function remoteLogout(sessionId) {
+        if (!confirm('Bạn có chắc muốn đăng xuất phiên này?')) return;
+        try {
+            const res = await fetch('/api/sessions/logout-remote', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id_to_logout: sessionId })
+            });
+            if (!res.ok) {
+                const txt = await res.text();
+                showAlert('Đăng xuất từ xa thất bại: ' + txt, 'danger');
+                return;
+            }
+            showAlert('Đã đăng xuất phiên thành công', 'success');
+            await loadSessions();
+        } catch (e) {
+            showAlert('Lỗi khi gọi API: ' + (e && e.message ? e.message : ''), 'danger');
+        }
+    }
+
+    // load on page ready
+    document.addEventListener('DOMContentLoaded', function(){
+        loadSessions();
+    });
+</script>
+}

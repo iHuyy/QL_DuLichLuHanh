@@ -1,0 +1,352 @@
+@model DuLich.Models.AdminAuditViewModel
+@using System.Text.Json
+@using System.Text
+@using Microsoft.AspNetCore.Html
+@{
+    ViewData["Title"] = "Nhat ky Audit He thong";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+
+    IHtmlContent FormatJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "{}")
+        {
+            return new HtmlString("<i class='text-muted'>(khong co)</i>");
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var sb = new StringBuilder("<ul class='list-unstyled mb-0'>");
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                sb.Append($"<li><strong class='text-primary'>{prop.Name}:</strong> {prop.Value.ToString()}</li>");
+            }
+            sb.Append("</ul>");
+            return new HtmlString(sb.ToString());
+        }
+        catch (JsonException)
+        {
+            return new HtmlString(System.Net.WebUtility.HtmlEncode(json));
+        }
+    }
+}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-sm-12">
+            <div class="page-title-box">
+                <div class="row">
+                    <div class="col">
+                        <h4 class="page-title">Nhật ký Audit</h4>
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a asp-action="Dashboard">Admin</a></li>
+                            <li class="breadcrumb-item active">Nhat ky Audit</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+
+        <div class="card">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" id="audit-tabs" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link @(Model.ActiveTab == "TOUR" ? "active" : "")" id="tour-tab" data-toggle="tab"
+                        href="#tour" role="tab" aria-controls="tour"
+                        aria-selected="@(Model.ActiveTab == "TOUR")">Tour</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(Model.ActiveTab == "STAFF" ? "active" : "")" id="staff-tab" data-toggle="tab"
+                        href="#staff" role="tab" aria-controls="staff"
+                        aria-selected="@(Model.ActiveTab == "STAFF")">Nhân Viên</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(Model.ActiveTab == "DATABASE" ? "active" : "")" id="database-tab"
+                        data-toggle="tab" href="#database" role="tab" aria-controls="database"
+                        aria-selected="@(Model.ActiveTab == "DATABASE")">CSDL</a>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content" id="audit-tabs-content">
+                <div class="tab-pane fade @(Model.ActiveTab == "TOUR" ? "show active" : "")" id="tour" role="tabpanel"
+                    aria-labelledby="tour-tab">
+                    <h5 class="card-title">Audit Tour</h5>
+                    <p class="card-text">Quản lý Auditing của Tour</p>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Thời gian</th>
+                                    <th>Bảng</th>
+                                    <th>Hành động</th>
+                                    <th>Giá trị cũ</th>
+                                    <th>Giá trị mới</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.TourRecords == null || !Model.TourRecords.Any())
+                                {
+                                    <tr>
+                                        <td colspan="5" class="text-center">Không có dữ liệu kiểm toán.</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var record in Model.TourRecords)
+                                    {
+                                        <tr>
+                                            <td>@record.Timestamp?.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                            <td>@record.TableName</td>
+                                            <td><span class="badge badge-info">@record.Action</span></td>
+                                            <td>
+                                                <div
+                                                    style="max-height: 150px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.85em; white-space: pre-wrap; word-break: break-all;">
+                                                    @FormatJson(record.OldValue)</div>
+                                            </td>
+                                            <td>
+                                                <div
+                                                    style="max-height: 150px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.85em; white-space: pre-wrap; word-break: break-all;">
+                                                    @FormatJson(record.NewValue)</div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @{
+                        var tourTotalPages = (int)Math.Ceiling((double)(Model.TourTotal) / Model.PageSize);
+                    }
+                    @if (tourTotalPages > 1)
+                    {
+                        <nav aria-label="Tour pagination">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item @(Model.TourPage == 1 ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="TOUR"
+                                        asp-route-pageTour="@(Model.TourPage - 1)" aria-label="Previous">&laquo;</a>
+                                </li>
+                                @for (int i = 1; i <= tourTotalPages; i++)
+                                {
+                                    <li class="page-item @(i == Model.TourPage ? "active" : "")">
+                                        <a class="page-link" asp-action="Audit" asp-route-tab="TOUR"
+                                            asp-route-pageTour="@i">@i</a>
+                                    </li>
+                                }
+                                <li class="page-item @(Model.TourPage >= tourTotalPages ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="TOUR"
+                                        asp-route-pageTour="@(Model.TourPage + 1)" aria-label="Next">&raquo;</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    }
+                </div>
+
+                <div class="tab-pane fade @(Model.ActiveTab == "STAFF" ? "show active" : "")" id="staff" role="tabpanel"
+                    aria-labelledby="staff-tab">
+                    <h5 class="card-title">Audit Nhân viên (Standard)</h5>
+                    <p class="card-text">Quản lý audit standard cho bảng NhânViên.</p>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Hành động</th>
+                                    <th>Thời gian</th>
+                                    <th>SQL thực thi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.StaffRecords == null || !Model.StaffRecords.Any())
+                                {
+                                    <tr>
+                                        <td colspan="3" class="text-center">Không tìm thấy dữ liệu audit.</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var record in Model.StaffRecords)
+                                    {
+                                        <tr>
+                                            <td><span class="badge badge-primary">@record.Action</span></td>
+                                            <td>@record.Timestamp?.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                            <td>
+                                                <div
+                                                    style="max-height: 100px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.8em; white-space: pre-wrap; word-break: break-all;">
+                                                    @record.SqlText</div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @{
+                        var staffTotalPages = (int)Math.Ceiling((double)(Model.StaffTotal) / Model.PageSize);
+                    }
+                    @if (staffTotalPages > 1)
+                    {
+                        <nav aria-label="Staff pagination">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item @(Model.StaffPage == 1 ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="STAFF"
+                                        asp-route-pageStaff="@(Model.StaffPage - 1)" aria-label="Previous">&laquo;</a>
+                                </li>
+                                @for (int i = 1; i <= staffTotalPages; i++)
+                                {
+                                    <li class="page-item @(i == Model.StaffPage ? "active" : "")">
+                                        <a class="page-link" asp-action="Audit" asp-route-tab="STAFF"
+                                            asp-route-pageStaff="@i">@i</a>
+                                    </li>
+                                }
+                                <li class="page-item @(Model.StaffPage >= staffTotalPages ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="STAFF"
+                                        asp-route-pageStaff="@(Model.StaffPage + 1)" aria-label="Next">&raquo;</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    }
+                </div>
+
+                <div class="tab-pane fade @(Model.ActiveTab == "DATABASE" ? "show active" : "")" id="database"
+                    role="tabpanel" aria-labelledby="database-tab">
+                    <h5 class="card-title">Audit CSDL</h5>
+                    <p class="card-text">Kiểm toán các thao tác trên Cơ sở dữ liệu.</p>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Thời gian</th>
+                                    <th>Người thực hiện</th>
+                                    <th>Bảng</th>
+                                    <th>Policy (FGA)</th>
+                                    <th>Hành động</th>
+                                    <th>SQL Thực thi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.DatabaseRecords == null || !Model.DatabaseRecords.Any())
+                                {
+                                    <tr>
+                                        <td colspan="6" class="text-center">Khong tim thay du lieu audit.</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var record in Model.DatabaseRecords)
+                                    {
+                                        <tr>
+                                            <td>@record.Timestamp?.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                            <td>@record.PerformedBy</td>
+                                            <td>@record.TableName</td>
+                                            <td>@(string.IsNullOrWhiteSpace(record.PolicyName) ? "-" : record.PolicyName)</td>
+                                            <td><span class="badge badge-success">@record.Action</span></td>
+                                            <td>
+                                                @if (!string.IsNullOrWhiteSpace(record.SqlText))
+                                                {
+                                                    <div
+                                                        style="max-height: 100px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.8em; white-space: pre-wrap; word-break: break-all;">
+                                                        @record.SqlText</div>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @{
+                        var dbTotalPages = (int)Math.Ceiling((double)(Model.DatabaseTotal) / Model.PageSize);
+                    }
+                    @if (dbTotalPages > 1)
+                    {
+                        <nav aria-label="Database pagination">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item @(Model.DatabasePage == 1 ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="DATABASE"
+                                        asp-route-pageDatabase="@(Model.DatabasePage - 1)" aria-label="Previous">&laquo;</a>
+                                </li>
+                                @for (int i = 1; i <= dbTotalPages; i++)
+                                {
+                                    <li class="page-item @(i == Model.DatabasePage ? "active" : "")">
+                                        <a class="page-link" asp-action="Audit" asp-route-tab="DATABASE"
+                                            asp-route-pageDatabase="@i">@i</a>
+                                    </li>
+                                }
+                                <li class="page-item @(Model.DatabasePage >= dbTotalPages ? "disabled" : "")">
+                                    <a class="page-link" asp-action="Audit" asp-route-tab="DATABASE"
+                                        asp-route-pageDatabase="@(Model.DatabasePage + 1)" aria-label="Next">&raquo;</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    }
+                </div>
+            <div class="card-body">
+                <h5 class="card-title mb-3">Lịch sử sao lưu</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Loại tác vụ</th>
+                                <th>Thời gian yêu cầu</th>
+                                <th>Thời gian hoàn thành</th>
+                                <th>Trạng thái</th>
+                                <th>Đích</th>
+                                <th>Người yêu cầu</th>
+                                <th>Ghi chú</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.BackupHistories == null || !Model.BackupHistories.Any())
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">Không có lịch sử sao lưu</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var backup in Model.BackupHistories)
+                                {
+                                    <tr>
+                                        <td>@backup.ActionType</td>
+                                        <td>@backup.RequestedAt.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                        <td>@(backup.CompletedAt?.ToString("dd/MM/yyyy HH:mm:ss") ?? "-")</td>
+                                        <td>
+                                            <span class="badge @(backup.Status?.Contains("Hoàn") == true ? "badge-success" : backup.Status?.Contains("Thất bại") == true ? "badge-danger" : "badge-warning")">
+                                                @backup.Status
+                                            </span>
+                                        </td>
+                                        <td>@(string.IsNullOrWhiteSpace(backup.Target) ? "-" : backup.Target)</td>
+                                        <td>@(string.IsNullOrWhiteSpace(backup.RequestedBy) ? "-" : backup.RequestedBy)</td>
+                                        <td>@(string.IsNullOrWhiteSpace(backup.Notes) ? "-" : backup.Notes)</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            var hash = window.location.hash;
+            if (hash) {
+                $('#audit-tabs a[href="' + hash + '"]').tab('show');
+            }
+
+            $('#audit-tabs a').on('shown.bs.tab', function (e) {
+                window.location.hash = e.target.hash;
+            });
+        });
+    </script>
+}

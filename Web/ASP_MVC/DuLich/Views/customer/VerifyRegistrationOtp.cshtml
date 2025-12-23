@@ -1,0 +1,114 @@
+@model DuLich.Models.VerifyRegistrationViewModel
+@{
+    ViewData["Title"] = "Xac thuc dang ky";
+    Layout = "~/Views/Shared/_AuthLayout.cshtml";
+}
+
+<h4 class="text-center mb-4">@ViewData["Title"]</h4>
+<p class="text-center">Mã OTP đã được gửi <strong>@Model.Email</strong>. Vui lòng kiểm tra thư mục Spam nếu không tìm
+    thấy, nhập mã vào ô bên dưới. Mã có hiệu lực trong 180s.</p>
+
+<form asp-action="VerifyRegistrationOtp" method="post" id="otpForm">
+    <input type="hidden" asp-for="Email" />
+    <div asp-validation-summary="ModelOnly" class="text-danger text-center"></div>
+
+    <div class="form-group mb-3">
+        <label asp-for="Otp" class="form-label fw-semibold"></label>
+        <input asp-for="Otp" class="form-control" placeholder="Nhap ma OTP gom 6 chu so" autofocus />
+        <span asp-validation-for="Otp" class="text-danger"></span>
+    </div>
+
+    <div class="d-grid gap-2 mt-4">
+        <button type="submit" class="btn btn-success">Xac nhan</button>
+        <button type="button" id="resendOtpBtn" class="btn btn-secondary" disabled>
+            Gui lai ma OTP
+            <span id="countdown" class="ms-2 text-muted">(60s)</span>
+        </button>
+        <a asp-action="Register" class="btn btn-outline-secondary">Quay lai</a>
+    </div>
+</form>
+
+<p class="text-center small text-muted mt-3">Neu khong nhan duoc ma OTP, kiem tra muc Spam hoac dung nut "Gui lai ma
+    OTP".</p>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const resendBtn = document.getElementById('resendOtpBtn');
+            const countdownSpan = document.getElementById('countdown');
+            const email = document.querySelector('input[name="Email"]')?.value?.trim();
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            let countdown = 60;
+            let countdownInterval;
+
+            const updateCountdownLabel = () => {
+                if (countdown > 0) {
+                    countdownSpan.textContent = `(${countdown}s)`;
+                } else {
+                    countdownSpan.textContent = '';
+                }
+            };
+
+            const startCountdown = () => {
+                if (countdownInterval) {
+                    clearInterval(countdownInterval);
+                }
+                resendBtn.disabled = true;
+                countdown = 60;
+                updateCountdownLabel();
+
+                countdownInterval = setInterval(() => {
+                    countdown--;
+                    if (countdown <= 0) {
+                        clearInterval(countdownInterval);
+                        countdownInterval = undefined;
+                        updateCountdownLabel();
+                        resendBtn.disabled = false;
+                    } else {
+                        updateCountdownLabel();
+                    }
+                }, 1000);
+            };
+
+            resendBtn.addEventListener('click', async function () {
+                if (!email) {
+                    alert('Khong tim thay email de gui OTP. Vui long quay lai trang dang ky.');
+                    return;
+                }
+
+                const token = tokenInput?.value || '';
+                resendBtn.disabled = true;
+                try {
+                    const response = await fetch('/Customer/ResendOtp', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': token
+                        },
+                        body: JSON.stringify({ email: email })
+                    });
+
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        const message = result?.message || 'Khong the gui lai ma OTP';
+                        alert('Loi: ' + message);
+                        resendBtn.disabled = false;
+                        return;
+                    }
+
+                    alert(result.message);
+                    startCountdown();
+                } catch (error) {
+                    console.error(error);
+                    alert('Da xay ra loi mang. Vui long thu lai.');
+                    resendBtn.disabled = false;
+                }
+            });
+
+            startCountdown();
+        });
+    </script>
+}

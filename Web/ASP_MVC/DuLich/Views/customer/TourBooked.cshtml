@@ -1,0 +1,138 @@
+@model DuLich.Models.TourBookedViewModel
+
+@{
+    ViewData["Title"] = "Tour đã đặt";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@section Hero {
+    <div class="container-fluid bg-primary py-5 mb-5 hero-header">
+        <div class="container text-center py-5">
+            <h1 class="display-5 text-white mb-3">@Model.TourBooked.Title</h1>
+            <p class="text-white-50 mb-0">Thông tin chi tiết đơn đặt tour #@Model.BookingId</p>
+        </div>
+    </div>
+}
+
+<form asp-controller="Customer" asp-action="CancelBooking" method="post" class="row g-4 align-items-start">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="bookingId" value="@Model.BookingId" />
+    <input type="hidden" name="tourId" value="@Model.TourBooked.TourId" />
+
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h4 class="mb-4">Thông tin liên hệ</h4>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Họ và tên</label>
+                        <input type="text" class="form-control" value="@Model.TourBooked.FullName" readonly />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" value="@Model.TourBooked.Email" readonly />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Số điện thoại</label>
+                        <input type="text" class="form-control" value="@Model.TourBooked.PhoneNumber" readonly />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Địa chỉ</label>
+                        <input type="text" class="form-control" value="@Model.TourBooked.Address" readonly />
+                    </div>
+                </div>
+                <hr class="my-4" />
+                <p class="small text-muted">
+                    Bằng cách giữ lại đặt chỗ này bạn đồng ý với các điều khoản thanh toán và chính sách hoàn tiền của
+                    DuLich.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5 class="mb-3">Tóm tắt đơn</h5>
+                <p class="text-muted mb-1">Tour #@Model.TourBooked.TourId</p>
+                <p class="mb-3">
+                    <i class="fa fa-calendar-alt text-primary me-2"></i>
+                    @Model.TourBooked.StartDate?.ToString("dd/MM/yyyy") - @Model.TourBooked.EndDate?.ToString("dd/MM/yyyy")
+                </p>
+                
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Người lớn</span>
+                    <span>@Model.TourBooked.NumAdults x @Model.TourBooked.PriceAdult.ToString("N0") VNĐ</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Trẻ em</span>
+                    <span>@Model.TourBooked.NumChildren x @Model.TourBooked.PriceChild.ToString("N0") VNĐ</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Giảm giá</span>
+                    <span class="text-success">
+                        @((Model.TourBooked.NumAdults * Model.TourBooked.PriceAdult + Model.TourBooked.NumChildren * Model.TourBooked.PriceChild - Model.TourBooked.TotalPrice).ToString("N0")) VNĐ
+                    </span>
+                </div>
+                <div class="d-flex justify-content-between border-top pt-3 mt-3">
+                    <span class="fw-bold">Tổng cộng</span>
+                    <span class="fw-bold text-primary fs-5">@Model.TourBooked.TotalPrice.ToString("N0") VNĐ</span>
+                </div>
+                
+                <p class="mt-3 mb-1">
+                    Trạng thái thanh toán: 
+                    <strong>@(Model.TourBooked.IsPaid ? "Đã thanh toán" : "Chưa thanh toán")</strong>
+                </p>
+
+                <div class="d-grid gap-2 mt-4">
+                    @if (Model.TourBooked.BookingStatus == "f") // Hoàn thành
+                    {
+                        <a asp-controller="Customer" asp-action="TourDetail" asp-route-id="@Model.TourBooked.TourId"
+                           class="btn btn-outline-primary rounded-pill">Xem lại thông tin tour</a>
+                    }
+                    else if (Model.TourBooked.BookingStatus == "c") // Đã hủy
+                    {
+                        <div class="alert alert-warning rounded-pill mb-0 text-center">
+                            Đơn đặt tour đã hủy. Bạn chỉ có thể xem thông tin.
+                        </div>
+                    }
+                    else
+                    {
+                        // Logic chính cho quy trình thanh toán mới
+                        if (!Model.TourBooked.IsPaid)
+                        {
+                            <a asp-controller="Customer" asp-action="Payment" asp-route-bookingId="@Model.BookingId"
+                               class="btn btn-primary rounded-pill">Thanh toán</a>
+                            <button type="submit" class="btn btn-outline-danger rounded-pill">Hủy tour</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-success rounded-pill" disabled>Đã thanh toán</button>
+
+                            @if (Model.TourBooked.IsIssued) // Đã được nhân viên ký số
+                            {
+                                <div class="d-flex gap-2 justify-content-center">
+                                    <a class="btn btn-outline-primary rounded-pill flex-fill" target="_blank" asp-controller="Customer"
+                                       asp-action="PrintInvoice" asp-route-hoaDonId="@Model.TourBooked.CheckoutId">
+                                        <i class="fa fa-print"></i> In hóa đơn
+                                    </a>
+                                    <a class="btn btn-outline-secondary rounded-pill flex-fill" target="_blank" asp-controller="Customer"
+                                       asp-action="DownloadInvoicePdf" asp-route-hoaDonId="@Model.TourBooked.CheckoutId">
+                                        <i class="fa fa-download"></i> Tải PDF
+                                    </a>
+                                </div>
+                            }
+                            else // Đã thanh toán nhưng chưa ký số
+                            {
+                                <div class="alert alert-info rounded-3 mb-0 text-center small">
+                                    <i class="fa fa-clock"></i> Đang chờ nhân viên xuất hóa đơn điện tử.
+                                </div>
+                            }
+                            
+                            }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</form>

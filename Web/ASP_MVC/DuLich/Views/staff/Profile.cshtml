@@ -1,0 +1,117 @@
+﻿@model DuLich.Models.StaffProfileViewModel
+@{
+    ViewData["Title"] = "Thông tin nhân viên";
+    Layout = "~/Views/Shared/_StaffLayout.cshtml";
+}
+
+<div class="row page-titles mx-0">
+    <div class="col-sm-6 p-md-0">
+        <div class="welcome-text">
+            <h4>Thông tin cá nhân</h4>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-body">
+                @if (TempData["SuccessProfile"] != null)
+                {
+                    <div class="alert alert-success alert-dismissible fade show">
+                        @TempData["SuccessProfile"]
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    </div>
+                }
+                @if (TempData["ErrorProfile"] != null)
+                {
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        @TempData["ErrorProfile"]
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    </div>
+                }
+                @if (TempData["SuccessPassword"] != null)
+                {
+                    <div class="alert alert-success alert-dismissible fade show">
+                        @TempData["SuccessPassword"]
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    </div>
+                }
+                @if (TempData["ErrorPassword"] != null)
+                {
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        @TempData["ErrorPassword"]
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h4>Cập nhật thông tin</h4>
+            </div>
+            <div class="card-body">
+                <form asp-action="UpdateProfile" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="MaNhanVien" />
+                    <div class="mb-3">
+                        <label asp-for="HoTen" class="form-label"></label>
+                        <input asp-for="HoTen" class="form-control" />
+                        <span asp-validation-for="HoTen" class="text-danger small"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Email" class="form-label"></label>
+                        <input asp-for="Email" class="form-control" />
+                        <span asp-validation-for="Email" class="text-danger small"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="SoDienThoai" class="form-label"></label>
+                        <input asp-for="SoDienThoai" class="form-control" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Chi nhánh</label>
+                        <input class="form-control" value="@Model.BranchName" readonly />
+                    </div>
+                    <button type="submit" class="btn btn-primary">Lưu thông tin</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h4>Đổi mật khẩu</h4>
+            </div>
+            <div class="card-body">
+                <form asp-action="ChangePassword" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label asp-for="ChangePassword.OldPassword" class="form-label"></label>
+                        <input asp-for="ChangePassword.OldPassword" class="form-control" type="password" autocomplete="current-password" />
+                        <span asp-validation-for="ChangePassword.OldPassword" class="text-danger small"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="ChangePassword.NewPassword" class="form-label"></label>
+                        <input asp-for="ChangePassword.NewPassword" class="form-control" type="password" autocomplete="new-password" />
+                        <span asp-validation-for="ChangePassword.NewPassword" class="text-danger small"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="ChangePassword.ConfirmPassword" class="form-label"></label>
+                        <input asp-for="ChangePassword.ConfirmPassword" class="form-control" type="password" autocomplete="new-password" />
+                        <span asp-validation-for="ChangePassword.ConfirmPassword" class="text-danger small"></span>
+                    </div>
+                    <button type="submit" class="btn btn-warning">Đổi mật khẩu</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

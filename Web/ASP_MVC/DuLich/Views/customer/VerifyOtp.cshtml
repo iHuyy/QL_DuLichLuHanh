@@ -1,0 +1,29 @@
+@model DuLich.Models.VerifyOtpViewModel
+@{ ViewData["Title"] = "Nhập mã xác thực"; Layout = "~/Views/Shared/_AuthLayout.cshtml"; }
+
+<h4 class="text-center mb-4">Nhập mã OTP</h4>
+<p class="text-center text-muted">Mã xác thực đã được gửi đến email của tài khoản <strong>@Model.Username</strong>.</p>
+
+<form asp-action="VerifyOtp" method="post">
+    <input type="hidden" asp-for="Username" />
+    <div asp-validation-summary="ModelOnly" class="text-danger text-center"></div>
+    
+    <div class="form-group mb-4">
+        <label class="form-label fw-semibold">Mã OTP (6 số)</label>
+        <input asp-for="Otp" class="form-control text-center" style="letter-spacing: 5px; font-size: 20px;" placeholder="------" maxlength="6" />
+        <span asp-validation-for="Otp" class="text-danger"></span>
+    </div>
+
+    <div class="d-grid gap-2">
+        <button type="submit" class="btn btn-primary">Xác nhận</button>
+    </div>
+
+    <div class="d-flex justify-content-between mt-4">
+        <a asp-action="ForgotPassword" class="text-decoration-none text-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Quay lại
+        </a>
+        <a asp-action="Login" class="text-decoration-none text-danger">
+            Hủy bỏ <i class="fas fa-times ms-1"></i>
+        </a>
+    </div>
+</form>

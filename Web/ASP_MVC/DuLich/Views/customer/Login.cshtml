@@ -1,0 +1,185 @@
+@model DuLich.Models.LoginModel
+
+@{
+    ViewData["Title"] = "Đăng nhập khách hàng";
+    Layout = "~/Views/Shared/_AuthLayout.cshtml";
+}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+    /* CSS Tùy chỉnh Input Group để liền mạch */
+    .input-group-custom {
+        display: flex;
+        border: 1px solid #ced4da; /* Viền bao quanh cả nhóm */
+        border-radius: 0.25rem; /* Bo góc giống Bootstrap mặc định */
+        overflow: hidden;
+    }
+
+    /* Input: Bỏ viền để hòa vào group */
+    .input-group-custom .form-control {
+        border: none;
+        box-shadow: none; /* Bỏ shadow khi focus để tránh đè viền */
+    }
+
+    /* Icon mắt: Nền trắng, con trỏ tay */
+    .input-group-text-custom {
+        background-color: white;
+        border: none;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        cursor: pointer;
+        color: #6c757d; /* Màu xám nhẹ */
+    }
+
+    /* Hiệu ứng Focus: Khi click vào input, viền cả group sáng lên */
+    .input-group-custom:focus-within {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+</style>
+
+@if (ViewBag.SuccessMessage != null)
+{
+    <div class="alert alert-success text-center">
+        @ViewBag.SuccessMessage
+    </div>
+}
+
+<h4 class="text-center mb-4">@ViewData["Title"]</h4>
+<form asp-action="Login" method="post">
+    <div asp-validation-summary="ModelOnly" class="text-danger text-center mb-3"></div>
+
+    <div class="form-group mb-3">
+        <label asp-for="Username" class="form-label fw-semibold">Tên đăng nhập</label>
+        <input asp-for="Username" class="form-control" placeholder="Tên đăng nhập" />
+        <span asp-validation-for="Username" class="text-danger"></span>
+    </div>
+
+    <div class="form-group mb-3">
+        <label asp-for="Password" class="form-label fw-semibold">Mật khẩu</label>
+        
+        <div class="input-group-custom">
+            <input asp-for="Password" class="form-control" placeholder="Mật khẩu" id="passwordInput" type="password" />
+            <span class="input-group-text-custom" id="togglePassword">
+                <i class="fa fa-eye"></i>
+            </span>
+        </div>
+        <span asp-validation-for="Password" class="text-danger"></span>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="form-check">
+            <input type="checkbox" class="form-check-input" id="rememberMe">
+            <label class="form-check-label" for="rememberMe">Ghi nhớ đăng nhập</label>
+        </div>
+        <a asp-action="ForgotPassword" class="text-muted">Quên mật khẩu?</a>
+    </div>
+
+    <div class="d-grid gap-2">
+        <button type="submit" class="btn btn-primary btn-block">Đăng nhập</button>
+        <button type="button" class="btn btn-outline-secondary btn-block" data-toggle="modal" data-target="#qrModal" onclick="generateQrCode()">
+            Đăng nhập bằng QR
+        </button>
+    </div>
+</form>
+
+<div class="new-account text-center mt-4">
+    <p>Chưa có tài khoản? <a class="text-primary" asp-action="Register">Đăng ký</a></p>
+</div>
+
+<div class="modal fade" id="qrModal" tabindex="-1" role="dialog" aria-labelledby="qrModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="qrModalLabel">Đăng nhập bằng QR Code</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body text-center">
+                <p>Quét mã QR này bằng ứng dụng di động của bạn để đăng nhập.</p>
+                <img id="qrCodeImage" src="" alt="QR Code" style="max-width: 100%;" />
+                <div id="qrSpinner" class="spinner-border" role="status" style="display: none;">
+                    <span class="sr-only">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+    <script>
+        $(document).ready(function () {
+            // Xử lý ẩn/hiện mật khẩu
+            $('#togglePassword').click(function () {
+                const passwordInput = $('#passwordInput');
+                const icon = $(this).find('i');
+
+                if (passwordInput.attr('type') === 'password') {
+                    passwordInput.attr('type', 'text');
+                    icon.removeClass('fa-eye').addClass('fa-eye-slash');
+                } else {
+                    passwordInput.attr('type', 'password');
+                    icon.removeClass('fa-eye-slash').addClass('fa-eye');
+                }
+            });
+
+            // Logic QR Code (Giữ nguyên)
+            var currentQrToken = "";
+            var pollInterval = null;
+
+            window.generateQrCode = function() {
+                 loadQrCode();
+            }
+
+            function loadQrCode() {
+                $('#qrCodeImage').attr('src', '');
+                $('#qrSpinner').show();
+
+                $.get('/api/QrLogin/generate-anonymous-qr', function (data) {
+                    $('#qrSpinner').hide();
+                    if (data.qrCodeImage) {
+                        $('#qrCodeImage').attr('src', 'data:image/png;base64,' + data.qrCodeImage);
+                        currentQrToken = data.qrToken;
+                        startPolling();
+                    }
+                }).fail(function() {
+                    $('#qrSpinner').hide();
+                    alert("Không thể tải mã QR.");
+                });
+            }
+
+            function startPolling() {
+                if (pollInterval) clearInterval(pollInterval);
+
+                pollInterval = setInterval(function () {
+                    if (!currentQrToken) return;
+                    if (!$('#qrModal').hasClass('show')) {
+                        clearInterval(pollInterval);
+                        return;
+                    }
+
+                    $.get('/api/QrLogin/poll-qr-status/' + currentQrToken, function (response) {
+                        if (response.status === 'COMPLETED') {
+                            clearInterval(pollInterval);
+                            window.location.href = '/Customer/';
+                        }
+                        else if (response.status === 'EXPIRED') {
+                            clearInterval(pollInterval);
+                            loadQrCode();
+                        }
+                    });
+                }, 2000); 
+            }
+            
+            $('#qrModal').on('hidden.bs.modal', function () {
+                if (pollInterval) clearInterval(pollInterval);
+            });
+        });
+    </script>
+}
