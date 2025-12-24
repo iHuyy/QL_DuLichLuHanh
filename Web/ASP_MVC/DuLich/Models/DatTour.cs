@@ -43,5 +43,7 @@ namespace DuLich.Models
         public Tour? Tour { get; set; }
 
         public HoaDon? HoaDon { get; set; }
+        [Column("TRANGTHAITHANHTOAN")] 
+        public string? TrangThaiThanhToan { get; set; }
     }
 }

@@ -1048,9 +1048,9 @@ RETURNING MAANH INTO :id";
         {
             // 1. Lấy thông tin đặt tour
             var booking = await _context.DatTours
-                .Include(d => d.Tour)
-                .Include(d => d.KhachHang)
-                .FirstOrDefaultAsync(d => d.MaDatTour == bookingId);
+        .Include(d => d.Tour)
+        .Include(d => d.KhachHang)
+        .FirstOrDefaultAsync(d => d.MaDatTour == bookingId);
 
             if (booking == null)
             {
@@ -1058,47 +1058,57 @@ RETURNING MAANH INTO :id";
                 return RedirectToAction("Bookings");
             }
 
-            // 2. Kiểm tra hóa đơn đã tồn tại chưa
-            var existInvoice = await _context.HoaDons.AnyAsync(h => h.MaDatTour == bookingId);
-            if (existInvoice)
+            // 2. Kiểm tra/Lấy hóa đơn (SỬA ĐOẠN NÀY)
+            // Thay vì check AnyAsync, hãy lấy đối tượng ra luôn
+            var hoaDon = await _context.HoaDons.FirstOrDefaultAsync(h => h.MaDatTour == bookingId);
+
+            if (hoaDon == null)
             {
-                TempData["Error"] = "Hóa đơn cho phiếu đặt này đã tồn tại.";
-                return RedirectToAction("Bookings");
+                // Nếu chưa có (trường hợp Trigger bị tắt), tạo mới
+                hoaDon = new HoaDon
+                {
+                    MaDatTour = booking.MaDatTour,
+                    // Các trường khác sẽ được gán bên dưới
+                };
+                _context.HoaDons.Add(hoaDon);
             }
 
-            // 3. Tạo đối tượng Hóa Đơn (Theo đúng Models/HoaDon.cs hiện tại)
-            var hoaDon = new HoaDon
-            {
-                MaDatTour = booking.MaDatTour,
-                SoTien = booking.TongTien,
-                NgayXuat = DateTime.Now,           // Sửa từ NgayLap -> NgayXuat
-                TrangThai = "Đã thanh toán",       // Gán trạng thái hóa đơn
-                PhuongThucThanhToan = "Chuyển khoản", // Hoặc lấy từ thông tin thanh toán nếu có
-                Payload = $"Thanh toan tour {booking.Tour?.TieuDe ?? "Tour"} - Ma dat: {booking.MaDatTour}", // Lưu nội dung vào Payload thay vì NoiDung
-                ChuKySo = null
-                // Đã bỏ MaKhachHang vì không có trong Model
-            };
+            // Nếu hóa đơn đã "Đã thanh toán" rồi thì chặn lại để tránh ký đè (tùy nghiệp vụ)
+            // if (hoaDon.TrangThai == "Đã thanh toán") { ... return ... }
 
-            // 4. Thực hiện Ký số
+            // 3. Cập nhật thông tin cho Hóa đơn (dù mới hay cũ)
+            hoaDon.SoTien = booking.TongTien;
+            hoaDon.NgayXuat = DateTime.Now;
+            hoaDon.TrangThai = "Đã thanh toán"; // Set trạng thái mong muốn
+            hoaDon.PhuongThucThanhToan = "Chuyển khoản"; // Hoặc lấy từ form
+
+            // 4. Tạo Payload và Ký số
             try
             {
-                // Format dữ liệu ký: Sử dụng NgayXuat thay vì NgayLap
-                var ngayXuatStr = hoaDon.NgayXuat.HasValue ? hoaDon.NgayXuat.Value.ToString("yyyy-MM-dd HH:mm:ss") : "";
-                var soTienStr = hoaDon.SoTien.HasValue ? hoaDon.SoTien.Value.ToString() : "0";
+                // Lưu ý: Cần gán ID tạm nếu là mới để Payload có MaHoaDon (nếu logic payload cần ID)
+                // Tuy nhiên logic hiện tại của bạn dùng MaHoaDon trong Payload. 
+                // Nếu là Insert mới, MaHoaDon chưa có (Identity). Bạn cần SaveChanges trước để lấy ID.
 
-                // Chuỗi dữ liệu gốc (Data to Sign)
-                string dataToSign = $"{hoaDon.MaDatTour}|{soTienStr}|{ngayXuatStr}";
+                if (hoaDon.MaHoaDon == 0)
+                {
+                    await _context.SaveChangesAsync();
+                }
 
-                // Gọi service ký số
-                string signature = _signatureService.SignData(dataToSign);
+                // Tạo nội dung Payload chuẩn để ký
+                // Dùng Helper bạn đã có
+                string payloadContent = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
+                hoaDon.Payload = payloadContent; // Lưu Payload vào DB
 
+                // Thực hiện ký số trên Payload này
+                string signature = _signatureService.SignData(payloadContent);
                 hoaDon.ChuKySo = signature;
-
-                // 5. Lưu vào Database
-                _context.HoaDons.Add(hoaDon);
 
                 // Cập nhật trạng thái booking
                 booking.TrangThaiDat = "Đã xuất hóa đơn";
+
+                // Lưu thay đổi cuối cùng
+                if (_context.Entry(hoaDon).State == EntityState.Detached)
+                    _context.HoaDons.Update(hoaDon);
 
                 await _context.SaveChangesAsync();
 

@@ -356,73 +356,115 @@ END;";
         [HttpPost("bookings/confirm")]
         public async Task<IActionResult> ConfirmBooking([FromForm] int bookingId)
         {
-            // 1. Lấy thông tin Booking
+            var staff = await GetCurrentStaffAsync();
+            if (staff == null || !staff.MaChiNhanh.HasValue)
+            {
+                return Unauthorized(new { message = "Không xác định được danh tính nhân viên hoặc chi nhánh." });
+            }
+
+            // [BƯỚC 2 - QUAN TRỌNG NHẤT] Thiết lập ngữ cảnh bảo mật Oracle (VPD/OLS)
+            // Nếu thiếu bước này, câu lệnh UPDATE sẽ chạy nhưng không thay đổi gì trong DB (do bị Policy chặn)
+            try
+            {
+                await EnsureOracleSecurityContextAsync(staff.MaChiNhanh.Value);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = "Lỗi thiết lập bảo mật Oracle: " + ex.Message });
+            }
+
+            // [BƯỚC 3] Load Booking kèm Hóa đơn
             var booking = await _context.DatTours
                 .Include(d => d.Tour)
                 .Include(d => d.KhachHang)
-                .Include(d => d.HoaDon) // Include để check đã có hóa đơn chưa
+                .Include(d => d.HoaDon) // Eager load để kiểm tra trigger đã tạo chưa
                 .FirstOrDefaultAsync(d => d.MaDatTour == bookingId);
 
             if (booking == null) return NotFound(new { message = "Không tìm thấy booking" });
 
-            // 2. Logic tạo hóa đơn và Ký số (Nếu chưa có hóa đơn)
-            if (booking.HoaDon == null)
+            // Kiểm tra Booking có thuộc chi nhánh nhân viên không (để an toàn)
+            if (booking.Tour != null && booking.Tour.MaChiNhanh != staff.MaChiNhanh)
             {
-                using (var transaction = _context.Database.BeginTransaction())
+                return BadRequest(new { message = "Booking này thuộc chi nhánh khác, bạn không có quyền xử lý." });
+            }
+
+            using (var transaction = _context.Database.BeginTransaction())
+            {
+                try
                 {
-                    try
+                    HoaDon hoaDon;
+                    bool isNewInvoice = false;
+                    string methodToInvoice = "Chuyển khoản/Tiền mặt"; // Hoặc lấy từ tham số [FromForm]
+
+                    // [BƯỚC 4] Xử lý Hóa đơn: Nếu Trigger đã tạo thì lấy ra Sửa, chưa có thì Thêm mới
+                    if (booking.HoaDon != null)
                     {
-                        // A. Tạo hóa đơn
-                        var hoaDon = new HoaDon
+                        // Trigger đã chạy trước đó -> Lấy hóa đơn này ra để cập nhật
+                        hoaDon = booking.HoaDon;
+                    }
+                    else
+                    {
+                        // Trigger chưa chạy hoặc bị tắt -> Tạo mới thủ công
+                        hoaDon = new HoaDon
                         {
                             MaDatTour = booking.MaDatTour,
-                            NgayXuat = DateTime.Now,
-                            SoTien = booking.TongTien,
-                            TrangThai = "Đã thanh toán", // Vì Staff xác nhận tức là tiền đã về
-                            PhuongThucThanhToan = "Chuyển khoản/Tiền mặt", // Có thể cập nhật chi tiết hơn nếu cần
-                            ChuKySo = null,
-                            Payload = null
+                            NgayXuat = DateTime.Now
                         };
+                        isNewInvoice = true;
                         _context.HoaDons.Add(hoaDon);
-                        await _context.SaveChangesAsync();
-
-                        // B. Tạo Payload và Ký số
-                        // Lưu ý: Đảm bảo NgayXuat và SoTien đã có dữ liệu
-                        var ngayXuatStr = hoaDon.NgayXuat.HasValue ? hoaDon.NgayXuat.Value.ToString("yyyy-MM-dd HH:mm:ss") : "";
-                        var soTienStr = hoaDon.SoTien.HasValue ? hoaDon.SoTien.Value.ToString() : "0";
-
-                        string dataToSign = $"{hoaDon.MaDatTour}|{soTienStr}|{ngayXuatStr}";
-
-                        // Gọi service ký số
-                        string signature = _signatureService.SignData(dataToSign);
-
-                        hoaDon.ChuKySo = signature;
-                        hoaDon.Payload = dataToSign; // Lưu lại payload gốc để verify sau này
-
-                        _context.HoaDons.Update(hoaDon);
-
-                        // C. Cập nhật trạng thái Booking
-                        booking.TrangThaiDat = "Đã xác nhận"; // Chuyển sang đã xác nhận
-                        _context.DatTours.Update(booking);
-
-                        await _context.SaveChangesAsync();
-                        transaction.Commit();
                     }
-                    catch (Exception ex)
+
+                    // [BƯỚC 5] Cập nhật thông tin Hóa đơn
+                    hoaDon.SoTien = booking.TongTien;
+                    hoaDon.NgayXuat = DateTime.Now;
+                    hoaDon.TrangThai = "Đã thanh toán";
+                    hoaDon.PhuongThucThanhToan = methodToInvoice;
+
+                    // Lưu lần 1: Để đảm bảo Hóa đơn đã tồn tại trong DB và có MaHoaDon (nếu là mới)
+                    await _context.SaveChangesAsync();
+
+                    // [BƯỚC 6] Tạo Payload & Ký số
+                    // Lúc này hoaDon đã có MaHoaDon chuẩn từ DB
+                    string dataToSign = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
+                    if (string.IsNullOrEmpty(dataToSign)) throw new Exception("Không thể tạo nội dung ký số (Payload rỗng).");
+
+                    string signature = _signatureService.SignData(dataToSign);
+
+                    // Cập nhật chữ ký vào object
+                    hoaDon.Payload = dataToSign;
+                    hoaDon.ChuKySo = signature;
+                    // Gán lại trạng thái lần nữa để chắc chắn EF nhận diện thay đổi
+                    hoaDon.TrangThai = "Đã thanh toán";
+
+                    // [BƯỚC 7] Cập nhật Booking
+                    booking.TrangThaiDat = "Đã xác nhận";
+                    booking.TrangThaiThanhToan = "Đã thanh toán"; // Nếu model có trường này
+
+                    // Đánh dấu trạng thái Modified cho EF biết cần Update
+                    if (_context.Entry(hoaDon).State == EntityState.Unchanged)
                     {
-                        transaction.Rollback();
-                        return BadRequest(new { message = "Lỗi khi tạo hóa đơn và ký số: " + ex.Message });
+                        _context.Entry(hoaDon).State = EntityState.Modified;
                     }
+
+                    // Lưu lần 2: Cập nhật Payload, Chữ ký và Trạng thái Booking
+                    await _context.SaveChangesAsync();
+                    transaction.Commit();
+
+                    return Ok(new
+                    {
+                        success = true, // Client JS cần trường này để hiện Toastr success
+                        message = "Đã xác nhận và ký số thành công!",
+                        maHoaDon = hoaDon.MaHoaDon
+                    });
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    // Ghi log lỗi chi tiết ra console/file để debug
+                    Console.WriteLine("Error ConfirmBooking: " + ex.ToString());
+                    return BadRequest(new { success = false, message = "Lỗi xử lý: " + ex.Message });
                 }
             }
-            else
-            {
-                // Trường hợp đã có hóa đơn (có thể do lỗi logic cũ), chỉ update trạng thái
-                booking.TrangThaiDat = "Đã xác nhận";
-                await _context.SaveChangesAsync();
-            }
-
-            return Ok(new { message = "Đã xác nhận, tạo hóa đơn và ký số thành công!" });
         }
 
         [HttpPost("bookings/cancel")]

@@ -380,59 +380,72 @@ namespace DuLich.Controllers
         public async Task<IActionResult> MyTour()
         {
             var username = User.Identity?.Name;
-            if (string.IsNullOrEmpty(username))
-            {
-                // Handle the case where the username is not available.
-                // This might mean redirecting to login or returning an error.
-                return RedirectToAction("Login");
-            }
+            if (string.IsNullOrEmpty(username)) return RedirectToAction("Login");
+
             var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME != null && k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
-            if (customer == null)
-            {
-                return RedirectToAction("Login"); // Redirect to login if customer not found
-            }
+            if (customer == null) return RedirectToAction("Login");
+
             await UpdateDepartedBookingsToCompletedAsync();
             var model = new MyTourViewModel();
-            // Fetch booked tours for the current customer
+
+            // Lấy danh sách tour đã đặt
             var bookedTours = await _context.DatTours
                 .Where(dt => dt.MaKhachHang == customer.MaKhachHang)
-                .Include(dt => dt.Tour) // Include Tour details
-                .Include(dt => dt.HoaDon) // Include HoaDon details
+                .Include(dt => dt.Tour)
+                .Include(dt => dt.HoaDon)
                 .OrderByDescending(dt => dt.MaDatTour)
                 .ToListAsync();
+
             foreach (var booking in bookedTours)
             {
                 var tour = booking.Tour;
                 if (tour == null) continue;
+
+                // Lấy ảnh (Lấy 1 ảnh đại diện để tối ưu)
                 var imageIds = await _context.AnhTours
                     .Where(a => a.MaTour == tour.MaTour)
                     .OrderBy(a => a.MaAnh)
                     .Select(a => a.MaAnh)
+                    .Take(1)
                     .ToListAsync();
-                var status = booking.TrangThaiDat ?? string.Empty;
-                string bookingStatusChar = "b"; // Default to pending
-                if (status == "Hoàn thành")
+
+                // XỬ LÝ TRẠNG THÁI (Logic Mới)
+                // b: Pending (Chờ xác nhận)
+                // p: Paid/Waiting (Đã thanh toán, chờ hóa đơn) - Mới
+                // y: Confirmed (Đã xác nhận & ký số)
+                // f: Finished (Hoàn thành)
+                // c: Cancelled (Hủy)
+
+                string bookingStatusChar = "b";
+                bool isPaid = booking.TrangThaiThanhToan == "Đã thanh toán" || booking.TrangThaiThanhToan == "Chờ duyệt";
+
+                if (booking.TrangThaiDat == "Đã hủy")
                 {
-                    bookingStatusChar = "f"; // Finished
+                    bookingStatusChar = "c";
                 }
-                else if (status == "Đã xác nhận" && tour.ThoiGian > DateTime.Now)
+                else if (booking.TrangThaiDat == "Hoàn thành" || (booking.TrangThaiDat == "Đã xác nhận" && tour.ThoiGian <= DateTime.Now))
                 {
-                    bookingStatusChar = "y"; // Upcoming
+                    bookingStatusChar = "f";
                 }
-                else if (status == "Đã xác nhận" && tour.ThoiGian <= DateTime.Now)
+                else if (booking.TrangThaiDat == "Đã xác nhận")
                 {
-                    bookingStatusChar = "f"; // Finished
+                    bookingStatusChar = "y";
                 }
-                else if (status == "Đã hủy")
+                else if (isPaid) // Đã thanh toán nhưng chưa được xác nhận (Trạng thái p)
                 {
-                    bookingStatusChar = "c"; // Cancelled
+                    bookingStatusChar = "p";
                 }
+                else
+                {
+                    bookingStatusChar = "b";
+                }
+
                 model.MyTours.Add(new MyTourItem
                 {
                     TourId = tour.MaTour,
                     BookingId = booking.MaDatTour,
-                    CheckoutId = booking.HoaDon?.MaHoaDon ?? 0, // Assign MaHoaDon as CheckoutId
-                    BookingStatus = bookingStatusChar,
+                    CheckoutId = booking.HoaDon?.MaHoaDon ?? 0,
+                    BookingStatus = bookingStatusChar, // Truyền ký tự trạng thái mới
                     Title = tour.TieuDe ?? string.Empty,
                     Description = tour.MoTa ?? string.Empty,
                     Destination = tour.NoiDen ?? tour.NoiKhoiHanh ?? tour.ThanhPho ?? string.Empty,
@@ -441,19 +454,15 @@ namespace DuLich.Controllers
                     NumChildren = booking.SoTreEm ?? 0,
                     TotalPrice = booking.TongTien ?? 0,
                     Images = imageIds.Select(id => $"/api/image/{id}").ToList(),
-                    IsPaid = booking.HoaDon?.TrangThai == "Đã thanh toán"
+                    IsPaid = isPaid // Truyền trạng thái thanh toán
                 });
             }
-            // Fetch popular tours (similar logic to Index action)
-            var popularToursQuery = _context.Tours.Where(t => t.TrangThai == "Hoạt động");
-            var popularTours = await popularToursQuery.OrderBy(t => t.MaTour).Take(4).ToListAsync();
+
+            // Lấy tour phổ biến (Giữ nguyên logic cũ)
+            var popularTours = await _context.Tours.Where(t => t.TrangThai == "Hoạt động").OrderBy(t => t.MaTour).Take(4).ToListAsync();
             foreach (var t in popularTours)
             {
-                var imageIds = await _context.AnhTours
-                    .Where(a => a.MaTour == t.MaTour)
-                    .OrderBy(a => a.MaAnh)
-                    .Select(a => a.MaAnh)
-                    .ToListAsync();
+                var imageIds = await _context.AnhTours.Where(a => a.MaTour == t.MaTour).OrderBy(a => a.MaAnh).Select(a => a.MaAnh).Take(1).ToListAsync();
                 model.PopularTours.Add(new TourItem
                 {
                     MaTour = t.MaTour,
@@ -464,6 +473,7 @@ namespace DuLich.Controllers
                     Images = imageIds.Select(id => $"/api/image/{id}").ToList()
                 });
             }
+
             return View(model);
         }
         [HttpGet]
@@ -600,6 +610,7 @@ namespace DuLich.Controllers
                         SoTreEm = model.NumChildren,
                         TongTien = (model.NumAdults * (tour.GiaNguoiLon ?? 0)) + (model.NumChildren * (tour.GiaTreEm ?? 0)),
                         TrangThaiDat = "Chờ xác nhận",
+                        TrangThaiThanhToan = "Chưa thanh toán",
                         YeuCauDacBiet = model.SpecialRequest
                     };
 
@@ -607,20 +618,20 @@ namespace DuLich.Controllers
                     await _context.SaveChangesAsync(); // Lưu để lấy MaDatTour
 
                     // 2. Tạo Hóa đơn (TRẠNG THÁI: CHƯA KÝ SỐ)
-                    var hoaDon = new HoaDon
-                    {
-                        MaDatTour = booking.MaDatTour,
-                        NgayXuat = DateTime.Now,
-                        SoTien = booking.TongTien,
-                        TrangThai = "Chưa thanh toán",
+                    // var hoaDon = new HoaDon
+                    // {
+                    //     MaDatTour = booking.MaDatTour,
+                    //     NgayXuat = DateTime.Now,
+                    //     SoTien = booking.TongTien,
+                    //     TrangThai = "Chưa thanh toán",
 
-                        // QUAN TRỌNG: Đặt null để đánh dấu là chưa được ký
-                        ChuKySo = null,
-                        Payload = null
-                    };
+                    //     // QUAN TRỌNG: Đặt null để đánh dấu là chưa được ký
+                    //     ChuKySo = null,
+                    //     Payload = null
+                    // };
 
-                    _context.HoaDons.Add(hoaDon);
-                    await _context.SaveChangesAsync();
+                    // _context.HoaDons.Add(hoaDon);
+                    // await _context.SaveChangesAsync();
 
                     // --- ĐÃ XÓA BỎ BƯỚC 3: TỰ ĐỘNG KÝ SỐ ---
                     // Việc ký số giờ đây sẽ được thực hiện bởi Nhân viên trong trang quản lý.
@@ -753,26 +764,37 @@ namespace DuLich.Controllers
             var username = User.Identity?.Name;
             if (string.IsNullOrEmpty(username))
             {
-                // Handle the case where the username is not available.
-                // This might mean redirecting to login or returning an error.
                 return RedirectToAction("Login");
             }
+
             var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME != null && k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
             if (customer == null)
             {
                 return RedirectToAction("Login");
             }
+
             await UpdateDepartedBookingsToCompletedAsync();
+
             var booking = await _context.DatTours
                 .Where(dt => dt.MaDatTour == bookingId && dt.MaKhachHang == customer.MaKhachHang)
                 .Include(dt => dt.Tour)
                 .Include(dt => dt.HoaDon)
                 .FirstOrDefaultAsync();
+
             if (booking == null || booking.Tour == null)
             {
                 return NotFound();
             }
+
             var tour = booking.Tour;
+
+            // [THAY ĐỔI QUAN TRỌNG] Logic xác định "Đã thanh toán"
+            // Kiểm tra cột TrangThaiThanhToan trong bảng DatTour
+            // Nếu là "Chờ duyệt" (khách vừa ấn thanh toán) HOẶC "Đã thanh toán" (nhân viên đã xác nhận)
+            // thì biến IsPaid sẽ là true -> Ẩn nút thanh toán.
+            bool daThanhToan = booking.TrangThaiThanhToan == "Đã thanh toán"
+                            || booking.TrangThaiThanhToan == "Chờ duyệt";
+
             var myTourItem = new MyTourItem
             {
                 TourId = tour.MaTour,
@@ -781,7 +803,7 @@ namespace DuLich.Controllers
                 BookingStatus = booking.TrangThaiDat == "Hoàn thành" ? "f" :
                                 booking.TrangThaiDat == "Đã xác nhận" && tour.ThoiGian > DateTime.Now ? "y" :
                                 booking.TrangThaiDat == "Đã xác nhận" && tour.ThoiGian <= DateTime.Now ? "f" :
-                                booking.TrangThaiDat == "Đã hủy" ? "c" : "b", // 'b' for pending, 'y' for upcoming, 'f' for finished, 'c' for cancelled
+                                booking.TrangThaiDat == "Đã hủy" ? "c" : "b",
                 Title = tour.TieuDe ?? string.Empty,
                 Description = tour.MoTa ?? string.Empty,
                 Destination = tour.NoiDen ?? tour.NoiKhoiHanh ?? tour.ThanhPho ?? string.Empty,
@@ -794,18 +816,27 @@ namespace DuLich.Controllers
                 PhoneNumber = customer.SoDienThoai,
                 Address = customer.DiaChi,
                 StartDate = tour.ThoiGian,
-                EndDate = tour.ThoiGian?.AddDays(3), // Assuming a default tour duration of 3 days
+                EndDate = tour.ThoiGian?.AddDays(3),
                 PriceAdult = tour.GiaNguoiLon ?? 0,
                 PriceChild = tour.GiaTreEm ?? 0,
-                IsPaid = booking.HoaDon?.TrangThai == "Đã thanh toán",
+
+                // Gán giá trị IsPaid theo logic mới
+                IsPaid = daThanhToan,
+
+                // IsIssued chỉ true khi thực sự có chữ ký số trong Hóa đơn
                 IsIssued = !string.IsNullOrEmpty(booking.HoaDon?.ChuKySo)
             };
+
             var model = new TourBookedViewModel
             {
                 TourBooked = myTourItem,
                 BookingId = booking.MaDatTour,
-                HideCancelButton = (myTourItem.BookingStatus == "c" || myTourItem.BookingStatus == "f") // Hide if cancelled or finished
+                HideCancelButton = (myTourItem.BookingStatus == "c" || myTourItem.BookingStatus == "f")
             };
+
+            // Truyền text trạng thái cụ thể để hiển thị trên View
+            ViewBag.PaymentStatusText = booking.TrangThaiThanhToan ?? "Chưa thanh toán";
+
             return View(model);
         }
         [HttpPost]
@@ -857,58 +888,48 @@ namespace DuLich.Controllers
         public async Task<IActionResult> Payment(int bookingId)
         {
             var username = User.Identity?.Name;
-            if (string.IsNullOrEmpty(username))
-            {
-                return RedirectToAction("Login");
-            }
-            var customer = await _dbContext.KhachHangs
-                .FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
-            if (customer == null)
-            {
-                return RedirectToAction("Login");
-            }
-            var booking = await _dbContext.DatTours
+            if (string.IsNullOrEmpty(username)) return RedirectToAction("Login");
+
+            var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+
+            // Chỉ lấy thông tin Booking và Tour, KHÔNG bắt buộc phải có HoaDon
+            var booking = await _context.DatTours
                 .Include(b => b.Tour)
-                .Include(b => b.HoaDon)
                 .FirstOrDefaultAsync(b => b.MaDatTour == bookingId && b.MaKhachHang == customer.MaKhachHang);
-            if (booking == null || booking.HoaDon == null || booking.Tour == null)
+
+            if (booking == null || booking.Tour == null)
             {
-                TempData["ErrorMessage"] = "Không tìm thấy thông tin đặt tour hoặc hóa đơn";
+                TempData["ErrorMessage"] = "Không tìm thấy thông tin đặt tour.";
                 return RedirectToAction("MyTour");
             }
-            if (IsCancellationStatus(booking.TrangThaiDat))
+
+            // Nếu đã thanh toán rồi thì không cho vào trang này nữa, chuyển về chi tiết
+            if (booking.TrangThaiDat == "Đã thanh toán" || booking.TrangThaiDat == "Đã xác nhận")
             {
-                TempData["ErrorMessage"] = "Đơn đặt đã hủy không thể thanh toán.";
-                return RedirectToAction("MyTour");
+                return RedirectToAction("TourBooked", new { bookingId = booking.MaDatTour });
             }
-            bool isValid = false;
-            string payloadJson = booking.HoaDon.Payload ?? string.Empty;
-            string signature = booking.HoaDon.ChuKySo ?? string.Empty;
-            if (!string.IsNullOrEmpty(payloadJson) && !string.IsNullOrEmpty(signature))
-            {
-                isValid = _rsaService.Verify(payloadJson, signature);
-            }
-            else
-            {
-                isValid = false;
-            }
+
+            // Dùng lại InvoiceViewModel nhưng bỏ qua các trường của Hóa đơn (MaHoaDon, ChuKySo...)
             var model = new InvoiceViewModel
             {
-                MaHoaDon = booking.HoaDon.MaHoaDon,
-                NgayXuat = booking.HoaDon.NgayXuat,
-                SoTien = booking.HoaDon.SoTien,
-                TrangThai = booking.HoaDon.TrangThai,
-                IsSignatureValid = isValid,
+                // Thông tin hiển thị
                 TenTour = booking.Tour.TieuDe,
                 NgayKhoiHanh = booking.Tour.ThoiGian,
                 SoNguoiLon = booking.SoNguoiLon,
                 SoTreEm = booking.SoTreEm,
+                SoTien = booking.TongTien,
+
+                // Thông tin khách hàng
                 TenKhachHang = customer.HoTen,
                 Email = customer.Email,
                 SoDienThoai = customer.SoDienThoai,
                 DiaChi = customer.DiaChi,
-                PaymentMethod = booking.HoaDon.PhuongThucThanhToan
+
+                // Đặt mặc định trạng thái
+                TrangThai = "Chờ thanh toán",
+                IsSignatureValid = false // Chưa có chữ ký
             };
+
             ViewBag.BookingId = booking.MaDatTour;
             return View(model);
         }
@@ -919,73 +940,32 @@ namespace DuLich.Controllers
         {
             // 1. Kiểm tra đăng nhập
             var username = User.Identity?.Name;
-            if (string.IsNullOrEmpty(username))
+            if (string.IsNullOrEmpty(username)) return RedirectToAction("Login");
+
+            var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
+            if (customer == null) return RedirectToAction("Login");
+
+            var booking = await _context.DatTours.FirstOrDefaultAsync(b => b.MaDatTour == bookingId && b.MaKhachHang == customer.MaKhachHang);
+            if (booking == null)
             {
-                return RedirectToAction("Login");
-            }
-
-            var customer = await _context.KhachHangs
-                .FirstOrDefaultAsync(k => k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
-
-            if (customer == null)
-            {
-                return RedirectToAction("Login");
-            }
-
-            // 2. Lấy thông tin Booking và Hóa đơn
-            var booking = await _context.DatTours
-                .Include(b => b.HoaDon)
-                .FirstOrDefaultAsync(b => b.MaDatTour == bookingId && b.MaKhachHang == customer.MaKhachHang);
-
-            if (booking == null || booking.HoaDon == null)
-            {
-                TempData["ErrorMessage"] = "Không tìm thấy thông tin đặt tour hoặc hóa đơn";
+                TempData["ErrorMessage"] = "Không tìm thấy booking.";
                 return RedirectToAction("MyTour");
             }
 
-            // 3. Kiểm tra nếu đơn đã hủy thì không cho thanh toán
-            if (IsCancellationStatus(booking.TrangThaiDat))
+            if (booking.TrangThaiDat == "Đã hủy" || booking.TrangThaiDat == "Hoàn thành")
             {
-                TempData["ErrorMessage"] = "Đơn đặt đã hủy không thể thanh toán.";
+                TempData["ErrorMessage"] = "Đơn đặt đã hủy hoặc hoàn thành không thể thanh toán.";
                 return RedirectToAction("TourBooked", new { bookingId });
             }
 
-            // 4. Xử lý phương thức thanh toán
-            var chosenMethod = string.IsNullOrWhiteSpace(paymentMethod)
-                ? "Thanh toán tại văn phòng"
-                : paymentMethod.Trim();
+            // [THAY ĐỔI] Không lưu paymentMethod vào DB nữa
+            // Chỉ cập nhật trạng thái để đánh dấu khách đã thao tác
+            booking.TrangThaiThanhToan = "Đã thanh toán";
 
-            booking.HoaDon.PhuongThucThanhToan = chosenMethod;
+            _context.DatTours.Update(booking);
+            await _context.SaveChangesAsync();
 
-            // 5. Cập nhật trạng thái (nếu chưa thanh toán)
-            if (!IsInvoicePaid(booking.HoaDon.TrangThai))
-            {
-                // Cập nhật trạng thái đặt tour
-                if (booking.TrangThaiDat != "Đã xác nhận" && booking.TrangThaiDat != "Hoàn thành" && booking.TrangThaiDat != "Đã hủy")
-                {
-                    booking.TrangThaiDat = "Chờ xác nhận";
-                }
-
-                // Cập nhật trạng thái hóa đơn
-                booking.HoaDon.TrangThai = "Đã thanh toán";
-
-                // Lưu thay đổi vào Database
-                _context.DatTours.Update(booking);
-                _context.HoaDons.Update(booking.HoaDon);
-                await _context.SaveChangesAsync();
-
-                // --- ĐÃ XÓA BỎ ĐOẠN TẠO PDF VÀ KÝ SỐ TỰ ĐỘNG ---
-
-                TempData["SuccessMessage"] = "Thanh toán thành công! Vui lòng chờ nhân viên kiểm tra và xuất hóa đơn điện tử.";
-            }
-            else
-            {
-                // Trường hợp đã thanh toán rồi nhưng khách nhấn lại để cập nhật phương thức
-                _context.HoaDons.Update(booking.HoaDon);
-                await _context.SaveChangesAsync();
-                TempData["SuccessMessage"] = "Thông tin thanh toán đã được cập nhật.";
-            }
-
+            TempData["SuccessMessage"] = "Đã gửi xác nhận thanh toán! Vui lòng chờ nhân viên kiểm tra và xuất hóa đơn.";
             return RedirectToAction("TourBooked", new { bookingId = bookingId });
         }
         [HttpGet]
