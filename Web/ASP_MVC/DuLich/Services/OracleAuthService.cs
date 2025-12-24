@@ -240,13 +240,13 @@ namespace DuLich.Services
                     failedAttempts++;
                     _cache.Set(failedAttemptsCacheKey, failedAttempts, lockDuration); // Store for 15 minutes
 
-                    if (failedAttempts >= 5)
+                    if (failedAttempts >= 3)
                     {
                         // Lock account in Oracle
                         await SetAccountLockAsync(normalizedUsername, true);
-                        return (false, string.Empty, $"Tài khoản của bạn đã bị khóa tạm thời do nhập sai mật khẩu 5 lần. Vui lòng thử lại sau {lockDuration.TotalMinutes} phút hoặc liên hệ quản trị viên.");
+                        return (false, string.Empty, $"Tài khoản của bạn đã bị khóa tạm thời do nhập sai mật khẩu 3 lần. Vui lòng thử lại sau {lockDuration.TotalMinutes} phút hoặc liên hệ quản trị viên.");
                     }
-                    return (false, string.Empty, $"Tên đăng nhập hoặc mật khẩu không đúng. Bạn còn {5 - failedAttempts} lần thử.");
+                    return (false, string.Empty, $"Tên đăng nhập hoặc mật khẩu không đúng. Bạn còn {3 - failedAttempts} lần thử.");
                 }
                 // Handle ORA-28000: account locked
                 if (ex.Number == 28000)

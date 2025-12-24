@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:app_dllh/services/api_client.dart';
-import 'package:app_dllh/services/booking_service.dart'; // Import Service hủy
+import 'package:app_dllh/services/booking_service.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:app_dllh/utils/image_helper.dart';
 import 'invoice_detail_page.dart';
+// import 'payment_review_page.dart'; // Bỏ comment nếu bạn muốn chuyển sang trang thanh toán
 
 // --- BỘ MÀU ĐỒNG BỘ ---
 const Color primaryGreen = Color(0xFF86B817);
@@ -23,7 +24,7 @@ class BookingDetailPage extends StatefulWidget {
 class _BookingDetailPageState extends State<BookingDetailPage> {
   late Future<Map<String, dynamic>> _detailFuture;
   final ApiClient _apiClient = ApiClient();
-  final BookingService _bookingService = BookingService(); // Khởi tạo Service
+  final BookingService _bookingService = BookingService();
   final currencyFormat = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
   
   // Biến trạng thái loading khi hủy
@@ -42,6 +43,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
     
     final body = resp.body.trim();
+    // Xử lý trường hợp server trả về lỗi HTML thay vì JSON
     if (body.startsWith('<')) {
       final idx = body.indexOf('{');
       if (idx >= 0) {
@@ -116,7 +118,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   Future<void> _handleCancel() async {
     setState(() => _isCanceling = true);
     
-    // Gọi API hủy (cần đảm bảo cancel_booking.php đã có trên server)
+    // Gọi API hủy
     final result = await _bookingService.cancelBooking(widget.bookingId, "Khách hàng hủy qua App");
     
     setState(() => _isCanceling = false);
@@ -176,7 +178,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
           final invoiceId = _getInt(m, ['MAHOADON', 'MaHoaDon']);
           
           final bookingDate = _getString(m, ['NGAYDAT', 'NgayDat']);
-          final tourDate = _getString(m, ['THOIGIAN', 'ThoiGian']);
+          final tourDateStr = _getString(m, ['THOIGIAN', 'ThoiGian']);
           final startPlace = _getString(m, ['NOIKHOIHANH', 'NoiKhoiHanh']);
           final destination = _getString(m, ['NOIDEN', 'NoiDen']);
           
@@ -189,15 +191,38 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
           
           final status = _getString(m, ['TRANGTHAIDAT', 'TrangThaiDat']);
           final paymentStatus = _getString(m, ['TRANGTHAITHANHTOAN', 'TrangThaiThanhToan']);
+          final bool isPaid = paymentStatus.toLowerCase().contains('đã thanh toán');
 
-          // --- LOGIC MỚI: KIỂM TRA ĐIỀU KIỆN HỦY ---
-          // Cho phép hủy nếu:
-          // 1. Trạng thái KHÔNG chứa "hủy", "hoàn thành", "kết thúc"
-          // 2. VÀ Trạng thái thanh toán KHÔNG chứa "đã thanh toán"
+          // --- LOGIC MỚI: TÍNH NGÀY HỢP LỆ ---
+          bool isDateValid = false;
+          if (tourDateStr.isNotEmpty) {
+            try {
+              // Parse ngày khởi hành (Hỗ trợ định dạng chuẩn YYYY-MM-DD từ backend)
+              DateTime? startDate = DateTime.tryParse(tourDateStr);
+              if (startDate != null) {
+                // Reset giờ về 0h để so sánh ngày chính xác
+                final dateOnlyStart = DateTime(startDate.year, startDate.month, startDate.day);
+                final dateOnlyNow = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+                
+                final diff = dateOnlyStart.difference(dateOnlyNow).inDays;
+                // Chỉ cho hủy nếu còn > 1 ngày (VD: Đi 25, Nay 23 => Diff=2 => OK. Nay 24 => Diff=1 => Fail)
+                if (diff > 1) {
+                  isDateValid = true;
+                }
+              }
+            } catch (e) {
+              print("Lỗi parse ngày: $e");
+            }
+          }
+
+          // --- ĐIỀU KIỆN HIỂN THỊ NÚT HỦY ---
+          // 1. Trạng thái tour chưa Hủy, chưa Hoàn thành/Kết thúc
+          // 2. Ngày hiện tại cách ngày đi > 1 ngày
+          // 3. (Bỏ điều kiện chưa thanh toán -> Đã thanh toán vẫn hủy được nếu đúng ngày)
           final bool canCancel = !status.toLowerCase().contains('hủy') && 
                                  !status.toLowerCase().contains('hoàn thành') &&
                                  !status.toLowerCase().contains('kết thúc') &&
-                                 !paymentStatus.toLowerCase().contains('đã thanh toán');
+                                 isDateValid;
 
           return Column(
             children: [
@@ -247,7 +272,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                         title: 'THÔNG TIN HÀNH TRÌNH',
                         icon: Icons.map_outlined,
                         children: [
-                          _buildRow(Icons.calendar_month, 'Khởi hành', tourDate),
+                          _buildRow(Icons.calendar_month, 'Khởi hành', tourDateStr),
                           const Divider(height: 24),
                           _buildRow(Icons.location_on_outlined, 'Nơi đi', startPlace),
                           const SizedBox(height: 12),
@@ -319,19 +344,52 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                 ),
               ),
               
-              // 5. BOTTOM BAR: Nút Hủy & Xem Hóa Đơn
-              // Hiển thị Bottom Bar nếu có invoice HOẶC có thể hủy
-              if (invoiceId > 0 || canCancel) 
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
-                  ),
-                  child: Row(
-                    children: [
-                      // 1. Nút Hủy Đặt Tour (Màu đỏ nhạt)
-                      if (canCancel) 
+              // 5. BOTTOM BAR: Xử lý nút bấm
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
+                ),
+                child: Row(
+                  children: [
+                    // TRƯỜNG HỢP 1: Chưa thanh toán -> Hiện nút Thanh toán (ưu tiên) + Hủy (nếu được)
+                    if (!isPaid && !status.toLowerCase().contains('hủy')) ...[
+                       Expanded(
+                        flex: 3,
+                        child: SizedBox(
+                          height: 50,
+                          child: ElevatedButton.icon(
+                            onPressed: () { 
+                                // Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentReviewPage(...))); 
+                            }, 
+                            icon: const Icon(Icons.payment, color: Colors.white),
+                            label: const Text('Thanh Toán', style: TextStyle(fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(backgroundColor: primaryGreen),
+                          ),
+                        ),
+                      ),
+                      if (canCancel) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: SizedBox(
+                            height: 50,
+                            child: OutlinedButton(
+                              onPressed: _isCanceling ? null : _confirmCancel,
+                              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+                              child: _isCanceling 
+                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.delete_outline, color: Colors.red),
+                            ),
+                          ),
+                        )
+                      ]
+                    ]
+                    // TRƯỜNG HỢP 2: Đã thanh toán (Hoặc Đã hủy/Hoàn thành) -> Hiện Hóa đơn + Hủy (nếu được)
+                    else ...[
+                      // Nút Hủy (Hiện bên trái)
+                      if (canCancel) ...[
                         Expanded(
                           child: SizedBox(
                             height: 50,
@@ -341,8 +399,8 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.red, strokeWidth: 2))
                                   : const Icon(Icons.cancel_outlined, color: Colors.red),
                               label: Text(
-                                _isCanceling ? 'Đang hủy...' : 'Hủy Đặt Tour',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red),
+                                _isCanceling ? 'Đang hủy...' : 'Hủy Tour',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red),
                               ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red.shade50,
@@ -355,12 +413,11 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                             ),
                           ),
                         ),
-                      
-                      // Khoảng cách nếu có cả 2 nút
-                      if (canCancel && invoiceId > 0) 
+                        // Khoảng cách giữa 2 nút
                         const SizedBox(width: 12),
+                      ],
 
-                      // 2. Nút Xem Hóa Đơn (Màu xanh đậm)
+                      // Nút Hóa Đơn (Hiện bên phải, hoặc full width nếu ko hủy được)
                       if (invoiceId > 0)
                         Expanded(
                           child: SizedBox(
@@ -385,10 +442,14 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                               ),
                             ),
                           ),
-                        ),
+                        )
+                      // Nếu không hủy được và chưa có hóa đơn (ví dụ đang chờ xử lý)
+                      else if (!canCancel && !status.toLowerCase().contains('hủy'))
+                         const Expanded(child: Center(child: Text("Đang xử lý đơn hàng...", style: TextStyle(color: Colors.grey)))),
                     ],
-                  ),
+                  ],
                 ),
+              ),
             ],
           );
         },

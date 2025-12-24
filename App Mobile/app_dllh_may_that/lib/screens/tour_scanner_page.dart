@@ -42,7 +42,7 @@ class _TourScannerPageState extends State<TourScannerPage> {
 
   // Hàm trích xuất Tour ID
   String? _extractTourId(String rawValue) {
-    final uriRegex = RegExp(r'TourDetails\/(\d+)');
+    final uriRegex = RegExp(r'TourDetail\/(\d+)');
     final match = uriRegex.firstMatch(rawValue);
     if (match != null) {
       return match.group(1);

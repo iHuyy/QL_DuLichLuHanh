@@ -226,7 +226,7 @@ namespace DuLich.Controllers
                         QR = t.QR ?? string.Empty
                     });
                 }
-                model.PopularTours = model.Tours.Take(4).ToList();
+                model.PopularTours = model.Tours.ToList();
                 return View("Home", model);
             }
             catch (OperationCanceledException ex)
@@ -833,43 +833,54 @@ namespace DuLich.Controllers
         public async Task<IActionResult> CancelBooking(int bookingId)
         {
             var username = User.Identity?.Name;
-            if (string.IsNullOrEmpty(username))
-            {
-                // Handle the case where the username is not available.
-                // This might mean redirecting to login or returning an error.
-                return RedirectToAction("Login");
-            }
+            if (string.IsNullOrEmpty(username)) return RedirectToAction("Login");
+
             var customer = await _context.KhachHangs.FirstOrDefaultAsync(k => k.ORACLE_USERNAME != null && k.ORACLE_USERNAME.ToUpper() == username.ToUpper());
-            if (customer == null)
-            {
-                return RedirectToAction("Login");
-            }
-            await UpdateDepartedBookingsToCompletedAsync();
+            if (customer == null) return RedirectToAction("Login");
+
+            // Load thêm thông tin Tour để lấy ngày khởi hành
             var booking = await _context.DatTours
                 .Include(dt => dt.HoaDon)
+                .Include(dt => dt.Tour) // Bắt buộc include Tour để check ngày
                 .Where(dt => dt.MaDatTour == bookingId && dt.MaKhachHang == customer.MaKhachHang)
                 .FirstOrDefaultAsync();
-            if (booking == null)
+
+            if (booking == null) return NotFound();
+
+            // 1. Kiểm tra trạng thái hiện tại
+            if (booking.TrangThaiDat == "Đã hủy" || booking.TrangThaiDat == "Hoàn thành")
             {
-                return NotFound();
+                TempData["ErrorMessage"] = "Tour này đã kết thúc hoặc đã hủy, không thể thao tác.";
+                return RedirectToAction("TourBooked", new { bookingId });
             }
-            if (booking.HoaDon != null && IsInvoicePaid(booking.HoaDon.TrangThai))
+
+            // 2. KIỂM TRA NGÀY KHỞI HÀNH (Logic: 25 đi thì 24 không được hủy => Phải còn > 1 ngày)
+            if (booking.Tour?.ThoiGian != null)
             {
-                TempData["ErrorMessage"] = "Không thể hủy tour đã thanh toán.";
-                return RedirectToAction("MyTour");
+                var daysRemaining = (booking.Tour.ThoiGian.Value.Date - DateTime.Now.Date).TotalDays;
+
+                // Nếu còn 1 ngày hoặc ít hơn (VD: Nay 24, Đi 25 => 1 ngày) thì chặn
+                if (daysRemaining <= 1)
+                {
+                    TempData["ErrorMessage"] = "Đã quá hạn hủy tour (chỉ được hủy trước ngày khởi hành ít nhất 2 ngày).";
+                    return RedirectToAction("TourBooked", new { bookingId });
+                }
             }
-            if (booking.TrangThaiDat != "Đã hủy" && booking.TrangThaiDat != "Hoàn thành")
+
+            // 3. Thực hiện hủy (Cập nhật trạng thái)
+            try
             {
                 booking.TrangThaiDat = "Đã hủy";
                 _context.DatTours.Update(booking);
                 await _context.SaveChangesAsync();
                 TempData["SuccessMessage"] = "Tour đã được hủy thành công.";
             }
-            else
+            catch (Exception ex)
             {
-                TempData["ErrorMessage"] = "Không thể hủy tour này.";
+                TempData["ErrorMessage"] = "Lỗi hệ thống: " + ex.Message;
             }
-            return RedirectToAction("MyTour");
+
+            return RedirectToAction("TourBooked", new { bookingId });
         }
         [HttpGet]
         [Authorize(Roles = "ROLE_CUSTOMER,ROLE_ADMIN,ROLE_STAFF")]

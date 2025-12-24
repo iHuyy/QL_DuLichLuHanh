@@ -1,3 +1,4 @@
+import 'package:app_dllh/screens/payment_review_page.dart';
 import 'package:flutter/material.dart';
 import 'package:app_dllh/models/tour.dart';
 import 'package:app_dllh/models/booking_request.dart';
@@ -15,7 +16,8 @@ class BookingPage extends StatefulWidget {
   final Tour tour;
   final String userID;
 
-  const BookingPage({Key? key, required this.tour, required this.userID}) : super(key: key);
+  const BookingPage({Key? key, required this.tour, required this.userID})
+    : super(key: key);
 
   @override
   _BookingPageState createState() => _BookingPageState();
@@ -53,7 +55,7 @@ class _BookingPageState extends State<BookingPage> {
     try {
       // Gọi API lấy thông tin user (get_user.php)
       final result = await _authService.getUser(widget.userID);
-      
+
       if (result['success'] == true && result['data'] != null) {
         final data = result['data'];
         if (mounted) {
@@ -103,7 +105,9 @@ class _BookingPageState extends State<BookingPage> {
     try {
       String clean = price.toString().replaceAll(RegExp(r'[^0-9\.-]'), '');
       return double.parse(clean);
-    } catch (_) { return 0.0; }
+    } catch (_) {
+      return 0.0;
+    }
   }
 
   double _calculateTotal() {
@@ -114,51 +118,46 @@ class _BookingPageState extends State<BookingPage> {
 
   Future<void> _submitBooking() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Validate số chỗ
     int totalGuests = _soNguoiLon + _soTreEm;
     int available = _getAvailableSlots();
     if (totalGuests > available) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xin lỗi, chỉ còn $available chỗ trống!'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Xin lỗi, chỉ còn $available chỗ trống!'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
-    setState(() => _isLoading = true);
-    try {
-      final booking = BookingRequest(
-        maTour: widget.tour.maTour,
-        maKhachHang: widget.userID,
-        soNguoiLon: _soNguoiLon,
-        soTreEm: _soTreEm,
-        hoTen: _hoTenController.text.trim(),
-        soDienThoai: _soDienThoaiController.text.trim(),
-        email: _emailController.text.trim(),
-        ghiChu: _ghiChuController.text.trim(),
-      );
-      final result = await _bookingService.createBooking(booking);
-      setState(() => _isLoading = false);
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'] ?? 'Đặt tour thành công!'), backgroundColor: primaryGreen),
-        );
-        Navigator.of(context).pop({'success': true, 'bookingId': result['bookingId']});
-      } else {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text("Đặt tour thất bại", style: TextStyle(color: Colors.red)),
-            content: Text(result['message'] ?? 'Đã có lỗi xảy ra'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Đóng"))
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi kết nối: $e'), backgroundColor: Colors.red),
-      );
-    }
+
+    // Tạo object request
+    final bookingRequest = BookingRequest(
+      maTour: widget.tour.maTour,
+      maKhachHang: widget.userID,
+      soNguoiLon: _soNguoiLon,
+      soTreEm: _soTreEm,
+      hoTen: _hoTenController.text.trim(),
+      soDienThoai: _soDienThoaiController.text.trim(),
+      email: _emailController.text.trim(),
+      ghiChu: _ghiChuController.text.trim(),
+    );
+
+    // Tính tổng tiền để hiển thị bên trang thanh toán
+    double totalAmount = _calculateTotal();
+
+    // Chuyển sang trang Thanh toán
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PaymentReviewPage(
+          bookingRequest: bookingRequest,
+          tour: widget.tour,
+          totalAmount: totalAmount,
+        ),
+      ),
+    );
   }
 
   @override
@@ -170,7 +169,10 @@ class _BookingPageState extends State<BookingPage> {
     return Scaffold(
       backgroundColor: lightGreyBackground,
       appBar: AppBar(
-        title: const Text('ĐẶT CHỖ', style: TextStyle(color: primaryDark, fontWeight: FontWeight.w800)),
+        title: const Text(
+          'ĐẶT CHỖ',
+          style: TextStyle(color: primaryDark, fontWeight: FontWeight.w800),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
@@ -194,28 +196,55 @@ class _BookingPageState extends State<BookingPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.tour.tieuDe, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkTextColor)),
+                    Text(
+                      widget.tour.tieuDe,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: darkTextColor,
+                      ),
+                    ),
                     const Divider(height: 24),
-                    _buildInfoRow(Icons.calendar_today, 'Ngày khởi hành', widget.tour.thoiGian?.toString() ?? 'N/A'),
+                    _buildInfoRow(
+                      Icons.calendar_today,
+                      'Ngày khởi hành',
+                      widget.tour.thoiGian?.toString() ?? 'N/A',
+                    ),
                     const SizedBox(height: 8),
-                    _buildInfoRow(Icons.place_outlined, 'Điểm đến', widget.tour.noiDen ?? 'N/A'),
+                    _buildInfoRow(
+                      Icons.place_outlined,
+                      'Điểm đến',
+                      widget.tour.noiDen ?? 'N/A',
+                    ),
                     const SizedBox(height: 8),
                     // HIỂN THỊ SỐ CHỖ CÒN LẠI
                     Row(
                       children: [
-                        Icon(Icons.event_seat, size: 18, color: isSoldOut ? Colors.red : primaryGreen),
+                        Icon(
+                          Icons.event_seat,
+                          size: 18,
+                          color: isSoldOut ? Colors.red : primaryGreen,
+                        ),
                         const SizedBox(width: 12),
-                        Text('Tình trạng: ', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
                         Text(
-                          isSoldOut ? 'ĐÃ HẾT CHỖ' : 'Còn nhận $availableSlots khách',
+                          'Tình trạng: ',
                           style: TextStyle(
-                            fontWeight: FontWeight.bold, 
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          isSoldOut
+                              ? 'ĐÃ HẾT CHỖ'
+                              : 'Còn nhận $availableSlots khách',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
                             color: isSoldOut ? Colors.red : primaryGreen,
-                            fontSize: 14
+                            fontSize: 14,
                           ),
                         ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),
@@ -226,23 +255,26 @@ class _BookingPageState extends State<BookingPage> {
                 _buildSectionTitle('SỐ LƯỢNG KHÁCH'),
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Column(
                     children: [
                       _buildCounterRow(
-                        'Người lớn', 
-                        _soNguoiLon, 
-                        (val) => setState(() => _soNguoiLon = val), 
+                        'Người lớn',
+                        _soNguoiLon,
+                        (val) => setState(() => _soNguoiLon = val),
                         min: 1,
-                        max: availableSlots - _soTreEm // Giới hạn tổng
+                        max: availableSlots - _soTreEm, // Giới hạn tổng
                       ),
                       const Divider(height: 24),
                       _buildCounterRow(
-                        'Trẻ em', 
-                        _soTreEm, 
-                        (val) => setState(() => _soTreEm = val), 
+                        'Trẻ em',
+                        _soTreEm,
+                        (val) => setState(() => _soTreEm = val),
                         min: 0,
-                        max: availableSlots - _soNguoiLon // Giới hạn tổng
+                        max: availableSlots - _soNguoiLon, // Giới hạn tổng
                       ),
                     ],
                   ),
@@ -254,16 +286,41 @@ class _BookingPageState extends State<BookingPage> {
               _buildSectionTitle('THÔNG TIN LIÊN HỆ'),
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Column(
                   children: [
-                    _buildTextField('Họ và tên *', _hoTenController, Icons.person_outline, required: true),
+                    _buildTextField(
+                      'Họ và tên *',
+                      _hoTenController,
+                      Icons.person_outline,
+                      required: true,
+                    ),
                     const SizedBox(height: 16),
-                    _buildTextField('Số điện thoại *', _soDienThoaiController, Icons.phone_outlined, required: true, isPhone: true),
+                    _buildTextField(
+                      'Số điện thoại *',
+                      _soDienThoaiController,
+                      Icons.phone_outlined,
+                      required: true,
+                      isPhone: true,
+                    ),
                     const SizedBox(height: 16),
-                    _buildTextField('Email *', _emailController, Icons.email_outlined, required: true, isEmail: true),
+                    _buildTextField(
+                      'Email *',
+                      _emailController,
+                      Icons.email_outlined,
+                      required: true,
+                      isEmail: true,
+                    ),
                     const SizedBox(height: 16),
-                    _buildTextField('Ghi chú thêm', _ghiChuController, Icons.note_alt_outlined, maxLines: 3),
+                    _buildTextField(
+                      'Ghi chú thêm',
+                      _ghiChuController,
+                      Icons.note_alt_outlined,
+                      maxLines: 3,
+                    ),
                   ],
                 ),
               ),
@@ -280,10 +337,21 @@ class _BookingPageState extends State<BookingPage> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('TỔNG CỘNG', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: darkTextColor)),
+                    const Text(
+                      'TỔNG CỘNG',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: darkTextColor,
+                      ),
+                    ),
                     Text(
                       currencyFormat.format(total),
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: primaryGreen),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: primaryGreen,
+                      ),
                     ),
                   ],
                 ),
@@ -302,11 +370,27 @@ class _BookingPageState extends State<BookingPage> {
                     disabledBackgroundColor: Colors.grey,
                     foregroundColor: Colors.white,
                     elevation: 4,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   child: _isLoading
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Text(isSoldOut ? 'HẾT CHỖ' : 'XÁC NHẬN ĐẶT VÉ', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 1)),
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          isSoldOut ? 'HẾT CHỖ' : 'XÁC NHẬN ĐẶT VÉ',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(height: 40),
@@ -322,7 +406,14 @@ class _BookingPageState extends State<BookingPage> {
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey,
+        ),
+      ),
     );
   }
 
@@ -331,18 +422,39 @@ class _BookingPageState extends State<BookingPage> {
       children: [
         Icon(icon, size: 18, color: primaryGreen),
         const SizedBox(width: 12),
-        Text('$label: ', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-        Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14))),
+        Text(
+          '$label: ',
+          style: TextStyle(color: Colors.grey[600], fontSize: 14),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          ),
+        ),
       ],
     );
   }
 
   // Widget Counter có giới hạn Max
-  Widget _buildCounterRow(String label, int value, Function(int) onChanged, {int min = 0, required int max}) {
+  Widget _buildCounterRow(
+    String label,
+    int value,
+    Function(int) onChanged, {
+    int min = 0,
+    required int max,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: darkTextColor)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            color: darkTextColor,
+          ),
+        ),
         Container(
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade300),
@@ -358,11 +470,19 @@ class _BookingPageState extends State<BookingPage> {
               Container(
                 width: 40,
                 alignment: Alignment.center,
-                child: Text('$value', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: Text(
+                  '$value',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
               IconButton(
                 icon: const Icon(Icons.add, size: 18),
-                color: value < max ? primaryGreen : Colors.grey, // Disable nếu đạt max
+                color: value < max
+                    ? primaryGreen
+                    : Colors.grey, // Disable nếu đạt max
                 onPressed: value < max ? () => onChanged(value + 1) : null,
               ),
             ],
@@ -372,15 +492,26 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon, 
-      {bool required = false, bool isEmail = false, bool isPhone = false, int maxLines = 1}) {
+  Widget _buildTextField(
+    String label,
+    TextEditingController controller,
+    IconData icon, {
+    bool required = false,
+    bool isEmail = false,
+    bool isPhone = false,
+    int maxLines = 1,
+  }) {
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
-      keyboardType: isPhone ? TextInputType.phone : (isEmail ? TextInputType.emailAddress : TextInputType.text),
+      keyboardType: isPhone
+          ? TextInputType.phone
+          : (isEmail ? TextInputType.emailAddress : TextInputType.text),
       validator: (val) {
-        if (required && (val == null || val.isEmpty)) return 'Vui lòng nhập thông tin này';
-        if (isEmail && val != null && val.isNotEmpty && !val.contains('@')) return 'Email không hợp lệ';
+        if (required && (val == null || val.isEmpty))
+          return 'Vui lòng nhập thông tin này';
+        if (isEmail && val != null && val.isNotEmpty && !val.contains('@'))
+          return 'Email không hợp lệ';
         return null;
       },
       decoration: InputDecoration(
@@ -388,9 +519,18 @@ class _BookingPageState extends State<BookingPage> {
         prefixIcon: Icon(icon, color: Colors.grey),
         filled: true,
         fillColor: lightGreyBackground,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: primaryGreen)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: primaryGreen),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
     );
   }

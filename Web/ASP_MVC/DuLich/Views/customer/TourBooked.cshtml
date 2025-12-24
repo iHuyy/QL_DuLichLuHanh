@@ -94,7 +94,7 @@
                                 <div class="alert alert-success d-flex align-items-center mb-0 py-2">
                                     <i class="fa fa-check-circle me-2"></i>
                                     <div>
-                                        <strong>Đã ghi nhận thanh toán</strong><br/>
+                                        <strong>Đã ghi nhận thanh toán</strong><br />
                                         <small>(@ViewBag.PaymentStatusText)</small>
                                     </div>
                                 </div>
@@ -111,32 +111,51 @@
                         <div class="d-grid gap-2">
                             @if (item.BookingStatus != "c" && item.BookingStatus != "f")
                             {
+                                // Logic kiểm tra ngày: Ngày đi - Ngày hiện tại > 1 (tức là còn ít nhất 2 ngày)
+                                bool canCancel = item.StartDate.HasValue && (item.StartDate.Value.Date - DateTime.Now.Date).TotalDays > 1;
+
+                                // TRƯỜNG HỢP 1: CHƯA THANH TOÁN
                                 if (!item.IsPaid)
                                 {
                                     <a asp-controller="Customer" asp-action="Payment" asp-route-bookingId="@Model.BookingId"
-                                       class="btn btn-primary py-2 fw-bold"><i class="fa fa-credit-card me-2"></i>Thanh toán ngay</a>
-                                    
-                                    @if (!Model.HideCancelButton)
+                                    class="btn btn-primary py-2 fw-bold"><i class="fa fa-credit-card me-2"></i>Thanh toán ngay</a>
+
+                                    @if (canCancel && !Model.HideCancelButton)
                                     {
                                         <button type="submit" class="btn btn-outline-danger py-2">Hủy đặt tour</button>
                                     }
                                 }
+                                // TRƯỜNG HỢP 2: ĐÃ THANH TOÁN (Hiển thị nút Hủy cạnh nút Hóa đơn)
                                 else
                                 {
-                                    @if (item.IsIssued)
-                                    {
-                                        <a class="btn btn-success" target="_blank" asp-controller="Customer"
-                                           asp-action="DownloadInvoicePdf" asp-route-hoaDonId="@item.CheckoutId">
-                                            <i class="fa fa-download me-1"></i> Tải Hóa đơn PDF
-                                        </a>
-                                    }
-                                    else
-                                    {
-                                        <div class="alert alert-info text-center small mb-0">
-                                            <i class="fa fa-spinner fa-spin me-1"></i> Đang chờ nhân viên xuất hóa đơn.
-                                        </div>
-                                    }
+                                    <div class="d-flex gap-2">
+                                        @if (item.IsIssued)
+                                        {
+                                            <a class="btn btn-success flex-grow-1" target="_blank" asp-controller="Customer"
+                                            asp-action="DownloadInvoicePdf" asp-route-hoaDonId="@item.CheckoutId">
+                                                <i class="fa fa-download me-1"></i> Tải Hóa đơn PDF
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <div class="alert alert-info text-center small mb-0 flex-grow-1">
+                                                <i class="fa fa-spinner fa-spin me-1"></i> Chờ xuất hóa đơn
+                                            </div>
+                                        }
+
+                                        @if (canCancel)
+                                        {
+                                            <button type="submit" class="btn btn-outline-danger" title="Hủy tour này">
+                                                <i class="fa fa-times"></i> Hủy
+                                            </button>
+                                        }
+                                    </div>
                                 }
+                            }
+                            
+                            @if(item.BookingStatus == "c")
+                            {
+                                <div class="alert alert-danger text-center">Tour này đã bị hủy.</div>
                             }
                         </div>
                     </div>
