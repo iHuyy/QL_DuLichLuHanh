@@ -27,7 +27,11 @@ namespace DuLich.Controllers.Api
         [HttpGet("bookings")]
         public async Task<IActionResult> GetBookings()
         {
-            var query = _db.DatTours.AsQueryable();
+            var query = _db.DatTours
+                .Include(d => d.Tour)
+                .Include(d => d.HoaDon)
+                .Include(d => d.KhachHang)
+                .AsQueryable();
 
             // If user is staff, filter by their branch. Admin sees all.
             if (User.IsInRole("ROLE_STAFF"))
@@ -50,9 +54,6 @@ namespace DuLich.Controllers.Api
 
             var data = await query
                 .AsNoTracking()
-                .Include(d => d.HoaDon)
-                .Include(d => d.Tour)
-                .Include(d => d.KhachHang)
                 .Select(d => new
                 {
                     maDatTour = d.MaDatTour,
@@ -78,42 +79,82 @@ namespace DuLich.Controllers.Api
         public async Task<IActionResult> ConfirmBooking([FromForm] int bookingId)
         {
             var booking = await _db.DatTours
-                .Include(d => d.HoaDon)
                 .Include(d => d.Tour)
                 .Include(d => d.KhachHang)
+                .Include(d => d.HoaDon)
                 .FirstOrDefaultAsync(d => d.MaDatTour == bookingId);
 
             if (booking == null)
-                return NotFound(new { message = "Không tìm thấy đặt tour." });
+                return NotFound(new { message = "Không tìm thấy booking" });
 
-            booking.TrangThaiDat = "Đã xác nhận";
-
-            // Tạo hóa đơn nếu chưa có, đồng thời ký số
-            if (booking.HoaDon == null)
+            using (var transaction = _db.Database.BeginTransaction())
             {
-                booking.HoaDon = new HoaDon
+                try
                 {
-                    MaDatTour = booking.MaDatTour,
-                    SoTien = booking.TongTien ?? 0,
-                    NgayXuat = DateTime.Now,
-                    TrangThai = "Chưa thanh toán"
-                };
-                var payload = InvoiceSignatureHelper.CreatePayload(booking, booking.HoaDon);
-                booking.HoaDon.ChuKySo = _rsaService.Sign(payload);
-                _db.HoaDons.Add(booking.HoaDon);
-            }
-            else
-            {
-                booking.HoaDon.NgayXuat = booking.HoaDon.NgayXuat ?? DateTime.Now;
-                var payload = InvoiceSignatureHelper.CreatePayload(booking, booking.HoaDon);
-                booking.HoaDon.ChuKySo = _rsaService.Sign(payload);
-                _db.HoaDons.Update(booking.HoaDon);
-            }
+                    HoaDon hoaDon;
+                    string methodToInvoice = "Thanh toán tại văn phòng"; // FIX: Set payment method
 
-            _db.DatTours.Update(booking);
-            await _db.SaveChangesAsync();
+                    // If invoice exists, use it. Otherwise, create a new one.
+                    if (booking.HoaDon != null)
+                    {
+                        hoaDon = booking.HoaDon;
+                    }
+                    else
+                    {
+                        hoaDon = new HoaDon
+                        {
+                            MaDatTour = booking.MaDatTour
+                        };
+                        _db.HoaDons.Add(hoaDon);
+                    }
 
-            return Ok(new { message = "Đã xác nhận đặt tour và cập nhật hóa đơn." });
+                    // Update invoice details
+                    hoaDon.SoTien = booking.TongTien;
+                    hoaDon.NgayXuat = DateTime.Now;
+                    hoaDon.TrangThai = "Đã thanh toán";
+                    hoaDon.PhuongThucThanhToan = methodToInvoice;
+
+                    // First save: Ensures the invoice exists in the DB and has an ID.
+                    await _db.SaveChangesAsync();
+
+                    // Create payload and sign now that hoaDon has a valid ID
+                    string dataToSign = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
+                    if (string.IsNullOrEmpty(dataToSign))
+                    {
+                        throw new Exception("Không thể tạo nội dung ký số (Payload rỗng).");
+                    }
+
+                    string signature = _rsaService.Sign(dataToSign);
+
+                    // Update the invoice object with payload and signature
+                    hoaDon.Payload = dataToSign;
+                    hoaDon.ChuKySo = signature;
+
+                    // Update booking status
+                    booking.TrangThaiDat = "Đã xác nhận";
+                    if (booking.HoaDon == null)
+                    {
+                        booking.HoaDon = hoaDon;
+                    }
+
+                    // Second save: Updates the invoice with signature/payload and the booking status.
+                    await _db.SaveChangesAsync();
+                    transaction.Commit();
+
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Đã xác nhận và ký số thành công!",
+                        maHoaDon = hoaDon.MaHoaDon
+                    });
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine("Error ConfirmBooking: " + ex.ToString());
+                    return BadRequest(new { success = false, message = "Lỗi xử lý: " + ex.Message });
+                }
+            }
         }
 
         [HttpPost("bookings/cancel")]
@@ -143,7 +184,7 @@ namespace DuLich.Controllers.Api
             }
 
             booking.TrangThaiDat = "Đã hủy";
-            
+
             await _db.SaveChangesAsync();
 
             return Ok(new { message = "Đã hủy đặt tour." });
@@ -158,6 +199,19 @@ namespace DuLich.Controllers.Api
 
             return status.Equals("Đã thanh toán", StringComparison.OrdinalIgnoreCase)
                 || status.Equals("Hoàn tất", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string GetBadgeClassForInvoice(string? status)
+        {
+            var normalized = (status ?? string.Empty).Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                var s when s.Contains("đã thanh toán") || s.Contains("da thanh toan") => "success",
+                var s when s.Contains("chờ") || s.Contains("cho") || s.Contains("chưa thanh toán") => "warning",
+                var s when s.Contains("hủy") || s.Contains("huy") => "danger",
+                var s when s.Contains("hoàn tất") || s.Contains("hoan tat") => "info",
+                _ => "secondary"
+            };
         }
 
         [HttpGet("invoices")]
@@ -208,6 +262,7 @@ namespace DuLich.Controllers.Api
                 item.soTien,
                 item.ngayXuat,
                 item.trangThai,
+                statusClass = GetBadgeClassForInvoice(item.trangThai), // Add status class
                 item.chuKySo,
                 chuKySoHopLe = _rsaService.Verify(item.payload, item.chuKySo)
             });

@@ -170,11 +170,15 @@ namespace DuLich.Services
 
         public async Task<(bool success, string role, string errorMessage)> ValidateLoginAsync(string username, string password)
         {
+            var normalizedUsername = username.ToUpper();
+            var failedAttemptsCacheKey = $"FailedLoginAttempts_{normalizedUsername}";
+            var lockDuration = TimeSpan.FromMinutes(15); // Lock for 15 minutes
+
             try
             {
                 var builder = new OracleConnectionStringBuilder(_connectionString)
                 {
-                    UserID = username.ToUpper(),
+                    UserID = normalizedUsername,
                     Password = password,
                     ConnectionTimeout = 60
                 };
@@ -196,10 +200,13 @@ namespace DuLich.Services
                         await Task.Delay(2000);
                     }
                 }
-                Console.WriteLine($"Successfully connected as {username.ToUpper()}");
+                Console.WriteLine($"Successfully connected as {normalizedUsername}");
+
+                // On successful login, clear failed attempt count
+                _cache.Remove(failedAttemptsCacheKey);
 
                 var role = await GetUserRoleAsync(connection);
-                Console.WriteLine($"User {username.ToUpper()} has role: {role}");
+                Console.WriteLine($"User {normalizedUsername} has role: {role}");
 
                 if (!string.IsNullOrEmpty(role))
                 {
@@ -212,7 +219,7 @@ namespace DuLich.Services
 
                     using var checkCommand = sysConnection.CreateCommand();
                     checkCommand.CommandText = "SELECT COUNT(*) FROM all_users WHERE username = :username";
-                    checkCommand.Parameters.Add("username", OracleDbType.Varchar2).Value = username.ToUpper();
+                    checkCommand.Parameters.Add("username", OracleDbType.Varchar2).Value = normalizedUsername;
                     var count = Convert.ToInt32(await checkCommand.ExecuteScalarAsync());
                     if (count == 0)
                     {
@@ -224,25 +231,39 @@ namespace DuLich.Services
             }
             catch (OracleException ex)
             {
-                Console.WriteLine($"Oracle login error: {ex.Message}");
+                Console.WriteLine($"Oracle login error for {normalizedUsername}: {ex.Message}");
+                
+                // Handle ORA-01017: invalid username/password
+                if (ex.Number == 1017)
+                {
+                    var failedAttempts = _cache.Get<int>(failedAttemptsCacheKey);
+                    failedAttempts++;
+                    _cache.Set(failedAttemptsCacheKey, failedAttempts, lockDuration); // Store for 15 minutes
+
+                    if (failedAttempts >= 5)
+                    {
+                        // Lock account in Oracle
+                        await SetAccountLockAsync(normalizedUsername, true);
+                        return (false, string.Empty, $"Tài khoản của bạn đã bị khóa tạm thời do nhập sai mật khẩu 5 lần. Vui lòng thử lại sau {lockDuration.TotalMinutes} phút hoặc liên hệ quản trị viên.");
+                    }
+                    return (false, string.Empty, $"Tên đăng nhập hoặc mật khẩu không đúng. Bạn còn {5 - failedAttempts} lần thử.");
+                }
+                // Handle ORA-28000: account locked
                 if (ex.Number == 28000)
                 {
-                    return (false, string.Empty, "Tài khoản của bạn đã bị khóa do nhập sai mật khẩu nhiều lần. Vui lòng thử lại sau ít phút.");
+                    return (false, string.Empty, "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.");
                 }
-                // Bắt lỗi ORA-28001: Mật khẩu hết hạn
+                // Handle ORA-28001: password expired
                 if (ex.Number == 28001)
                 {
                     return (false, string.Empty, "PASSWORD_EXPIRED");
                 }
-                if (ex.Number == 1017)
-                {
-                    return (false, string.Empty, "Tên đăng nhập hoặc mật khẩu không đúng.");
-                }
+                
                 return (false, string.Empty, "Lỗi kết nối cơ sở dữ liệu.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Login error: {ex.Message}");
+                Console.WriteLine($"Login error for {normalizedUsername}: {ex.Message}");
                 return (false, string.Empty, "Đã có lỗi xảy ra. Vui lòng thử lại.");
             }
         }
@@ -682,27 +703,69 @@ namespace DuLich.Services
                 return (false, "Tên đăng nhập hoặc quyền không được để trống.");
             }
 
+            var normalizedUsername = username.ToUpperInvariant();
             var normalizedRole = role.ToUpperInvariant();
-            var allowedRoles = new HashSet<string> { "ROLE_CUSTOMER", "ROLE_ADMIN", "ROLE_STAFF", "ROLE_READ_ONLY" };
-            if (!allowedRoles.Contains(normalizedRole))
+            var managedRoles = new HashSet<string> { "ROLE_CUSTOMER", "ROLE_ADMIN", "ROLE_STAFF" };
+
+            if (!managedRoles.Contains(normalizedRole))
             {
                 return (false, "Quyền không hợp lệ.");
             }
 
             using var connection = new OracleConnection(_connectionString);
             await connection.OpenAsync();
+            using var transaction = connection.BeginTransaction();
 
             try
             {
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = $"GRANT {normalizedRole} TO \"{username.ToUpperInvariant()}\"";
-                await cmd.ExecuteNonQueryAsync();
-                return (true, $"Đã cấp quyền {normalizedRole} cho {username.ToUpperInvariant()}.");
+                // 1. Get current roles of the user
+                var currentRoles = new List<string>();
+                using (var cmd = connection.CreateCommand())
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = $"SELECT GRANTED_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE = :username AND GRANTED_ROLE IN ('ROLE_ADMIN', 'ROLE_CUSTOMER', 'ROLE_STAFF')";
+                    cmd.Parameters.Add("username", OracleDbType.Varchar2).Value = normalizedUsername;
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        currentRoles.Add(reader.GetString(0));
+                    }
+                }
+
+                // 2. Revoke old managed roles that are not the new role
+                foreach (var currentRole in currentRoles)
+                {
+                    if (currentRole != normalizedRole)
+                    {
+                        using var cmd = connection.CreateCommand();
+                        cmd.Transaction = transaction;
+                        cmd.CommandText = $"REVOKE {currentRole} FROM \"{normalizedUsername}\"";
+                        await cmd.ExecuteNonQueryAsync();
+                    }
+                }
+
+                // 3. Grant the new role
+                using (var cmd = connection.CreateCommand())
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = $"GRANT {normalizedRole} TO \"{normalizedUsername}\"";
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                transaction.Commit();
+                return (true, $"Đã cập nhật quyền {normalizedRole} cho {username.ToUpperInvariant()}.");
             }
             catch (OracleException ex)
             {
+                transaction.Rollback();
                 Console.WriteLine($"GrantRoleAsync error: {ex.Message}");
-                return (false, $"Lỗi khi cấp quyền: {ex.Message}");
+                return (false, $"Lỗi khi cập nhật quyền: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                transaction.Rollback();
+                Console.WriteLine($"GrantRoleAsync generic error: {ex.Message}");
+                return (false, "Lỗi không xác định khi cập nhật quyền.");
             }
         }
     }

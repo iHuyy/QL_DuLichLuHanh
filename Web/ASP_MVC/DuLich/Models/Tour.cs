@@ -55,7 +55,6 @@ namespace DuLich.Models
         [ForeignKey("MaChiNhanh")]
         public virtual ChiNhanh? ChiNhanh { get; set; }
 
-        // Thêm navigation collection để EF không tạo shadow FK "TourMaTour"
         public ICollection<AnhTour> AnhTours { get; set; } = new List<AnhTour>();
 
         [NotMapped]

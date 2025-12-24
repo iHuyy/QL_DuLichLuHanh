@@ -18,11 +18,13 @@ namespace DuLich.Controllers.Api
     {
         private readonly ApplicationDbContext _dbContext;
         private readonly RSAService _rsaService;
+        private readonly EmailService _emailService;
 
-        public HoaDonController(ApplicationDbContext dbContext, RSAService rsaService)
+        public HoaDonController(ApplicationDbContext dbContext, RSAService rsaService, EmailService emailService)
         {
             _dbContext = dbContext;
             _rsaService = rsaService;
+            _emailService = emailService;
         }
 
         [HttpPost("verify")]
@@ -200,6 +202,43 @@ namespace DuLich.Controllers.Api
             return Content(htmlContent, "text/html; charset=utf-8", System.Text.Encoding.UTF8);
         }
 
+        [HttpPost("send-invoice/{hoaDonId}")]
+        [Authorize(Roles = "ROLE_ADMIN,ROLE_STAFF")]
+        public async Task<IActionResult> SendInvoiceEmail(int hoaDonId)
+        {
+            var hoaDon = await _dbContext.HoaDons
+                .Include(h => h.DatTour.Tour)
+                .Include(h => h.DatTour.KhachHang)
+                .FirstOrDefaultAsync(h => h.MaHoaDon == hoaDonId);
+
+            if (hoaDon?.DatTour?.KhachHang == null || hoaDon.DatTour.Tour == null)
+            {
+                return NotFound(new { success = false, message = "Không tìm thấy dữ liệu đầy đủ cho hóa đơn." });
+            }
+
+            var customer = hoaDon.DatTour.KhachHang;
+            if (string.IsNullOrEmpty(customer.Email))
+            {
+                return BadRequest(new { success = false, message = "Khách hàng không có địa chỉ email." });
+            }
+
+            try
+            {
+                var htmlBody = GenerateInvoiceHtml(hoaDon, hoaDon.DatTour, hoaDon.DatTour.Tour, customer, "Hệ thống DuLich");
+                var subject = $"Hóa đơn điện tử cho tour: {hoaDon.DatTour.Tour.TieuDe}";
+
+                await _emailService.SendEmailAsync(customer.Email, subject, htmlBody);
+
+                return Ok(new { success = true, message = $"Đã gửi hóa đơn đến email: {customer.Email}" });
+            }
+            catch (Exception ex)
+            {
+                // Log the exception properly in a real application
+                Console.WriteLine("EMAIL SENDING FAILED: " + ex.ToString());
+                return StatusCode(500, new { success = false, message = "Lỗi máy chủ khi gửi email. Vui lòng kiểm tra lại cấu hình SMTP và thử lại." });
+            }
+        }
+
         private string GenerateInvoiceHtml(HoaDon hoaDon, DatTour booking, Tour tour, KhachHang customer, string signerName)
         {
             var signatureData = InvoiceSignatureHelper.CreatePayload(booking, hoaDon);
@@ -208,7 +247,6 @@ namespace DuLich.Controllers.Api
 
             try
             {
-                // Tạo Auth Code ngắn từ Hash của dữ liệu (để đối chiếu nhanh)
                 byte[] hashBytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(signatureData));
                 hashHex = BitConverter.ToString(hashBytes).Replace("-", "");
                 authCode = hashHex.Length >= 12 ? hashHex.Substring(0, 12) : hashHex;
@@ -219,63 +257,45 @@ namespace DuLich.Controllers.Api
             var ngayXuat = hoaDon.NgayXuat?.ToString("dd/MM/yyyy HH:mm:ss") ?? "N/A";
             var ngayDi = tour.ThoiGian?.ToString("dd/MM/yyyy") ?? "N/A";
 
-            // [ĐÃ SỬA] Ẩn chữ ký số dài dòng, chỉ hiện trạng thái xác thực
-            return $@"
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset='UTF-8'>
-        <style>
-            body {{ font-family: DejaVu Sans, Arial, sans-serif; margin: 20px; font-size: 14px; line-height: 1.5; }}
-            .header {{ text-align: center; margin-bottom: 30px; border-bottom: 2px solid #007AFF; padding-bottom: 10px; }}
-            .header h1 {{ color: #007AFF; margin: 0; }}
-            .section-title {{ color: #007AFF; font-weight: bold; margin-top: 20px; border-bottom: 1px solid #ddd; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-            td {{ padding: 8px; vertical-align: top; }}
-            .label {{ font-weight: bold; color: #555; width: 140px; }}
-            .total-box {{ text-align: right; margin-top: 20px; font-size: 18px; font-weight: bold; color: #d32f2f; }}
-            .signature-box {{ margin-top: 40px; background: #f9f9f9; padding: 15px; border-radius: 8px; font-size: 11px; word-break: break-all; }}
-            .footer {{ margin-top: 50px; text-align: center; font-size: 12px; color: #888; }}
-        </style>
-    </head>
-    <body>
-        <div class='header'>
-            <h1>HÓA ĐƠN ĐIỆN TỬ</h1>
-            <p>Mã hóa đơn: #{hoaDon.MaHoaDon} | Ngày xuất: {ngayXuat}</p>
+            return $@"<!DOCTYPE html>
+<html lang=""vi"">
+<head>
+    <meta charset=""utf-8"" />
+    <title>Hóa đơn điện tử</title>
+    <style>
+        body {{ font-family: Arial, Helvetica, sans-serif; color: #333; background: #f7f7f7; padding: 20px; }}
+        .invoice {{ max-width: 800px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
+        h2 {{ margin: 0 0 8px; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 12px; }}
+        th, td {{ padding: 8px; border: 1px solid #e6e6e6; text-align: left; }}
+    </style>
+</head>
+<body>
+    <div class=""invoice"">
+        <div style=""text-align:center"">
+            <h2>HÓA ĐƠN ĐIỆN TỬ</h2>
+            <div>Ngày xuất: {ngayXuat}</div>
         </div>
 
-        <div class='section-title'>THÔNG TIN KHÁCH HÀNG</div>
+        <section style=""margin-top:14px"">
+            <strong>Khách hàng:</strong> {customer.HoTen} {(!string.IsNullOrEmpty(customer.Email) ? $"- {customer.Email}" : string.Empty)}<br />
+            <strong>Tour:</strong> {tour.TieuDe} <span style=""margin-left:8px""><strong>Ngày đi:</strong> {ngayDi}</span>
+        </section>
+
         <table>
-            <tr><td class='label'>Họ tên:</td><td>{customer.HoTen}</td></tr>
-            <tr><td class='label'>Email:</td><td>{customer.Email}</td></tr>
-            <tr><td class='label'>Số điện thoại:</td><td>{customer.SoDienThoai}</td></tr>
-            <tr><td class='label'>Địa chỉ:</td><td>{customer.DiaChi}</td></tr>
+            <tr><th>Mã hóa đơn</th><td>{hoaDon.MaHoaDon}</td></tr>
+            <tr><th>Mã đặt tour</th><td>{booking.MaDatTour}</td></tr>
+            <tr><th>Tổng tiền</th><td>{total:C}</td></tr>
+            <tr><th>Trạng thái</th><td>{hoaDon.TrangThai}</td></tr>
+            <tr><th>Mã xác thực</th><td>{authCode}</td></tr>
         </table>
 
-        <div class='section-title'>CHI TIẾT DỊCH VỤ</div>
-        <table>
-            <tr><td class='label'>Tên Tour:</td><td><strong>{tour.TieuDe}</strong></td></tr>
-            <tr><td class='label'>Khởi hành:</td><td>{ngayDi} tại {tour.NoiKhoiHanh}</td></tr>
-            <tr><td class='label'>Số lượng:</td><td>{booking.SoNguoiLon} Người lớn, {booking.SoTreEm} Trẻ em</td></tr>
-            <tr><td class='label'>Trạng thái:</td><td>{hoaDon.TrangThai}</td></tr>
-        </table>
-
-        <div class='total-box'>
-            TỔNG THANH TOÁN: {total:N0} VNĐ
-        </div>
-
-        <div class='signature-box'>
-            <strong>THÔNG TIN XÁC THỰC (DIGITAL SIGNATURE)</strong><br/>
-            <p>Trạng thái: <b style='color:green'>Đã ký số bảo mật</b></p>
-            <p>Mã kiểm tra (Auth Code): <b>{authCode}</b></p>
-            <p><i>Hóa đơn này được bảo vệ bởi chữ ký số hệ thống DuLich. Bất kỳ thay đổi nào về nội dung sẽ khiến hóa đơn trở nên không hợp lệ khi tra cứu.</i></p>
-        </div>
-
-        <div class='footer'>
-            Cảm ơn quý khách đã sử dụng dịch vụ của chúng tôi!
-        </div>
-    </body>
-    </html>";
+        <div style=""margin-top:18px;"">Người ký: {signerName}</div>
+    </div>
+</body>
+</html>";
         }
+
     }
+
 }

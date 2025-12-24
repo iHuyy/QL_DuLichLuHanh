@@ -54,6 +54,11 @@ namespace DuLich.Controllers.admin
         [HttpPost]
         public async Task<IActionResult> Edit(Tour model, List<IFormFile>? images)
         {
+            if (!model.ThoiGian.HasValue)
+            {
+                ModelState.AddModelError("ThoiGian", "Ngày khởi hành không được để trống.");
+            }
+
             if (!ModelState.IsValid) return View(model);
 
             var t = await _db.Tours.FindAsync(model.MaTour);

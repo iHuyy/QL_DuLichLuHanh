@@ -511,7 +511,7 @@ namespace DuLich.Controllers
                 .Select(a => a.MaAnh)
                 .ToListAsync();
 
-            // Load tour liên quan (giữ nguyên logic cũ)
+            // Load tour liên quan
             ViewBag.RelatedTours = await _context.Tours
                 .Where(t => t.MaTour != id && (t.NoiDen == model.DiemDen || t.ThanhPho == model.DiemDen))
                 .OrderBy(t => t.MaTour)
@@ -606,6 +606,7 @@ namespace DuLich.Controllers
                         MaTour = model.TourId,
                         MaKhachHang = customer.MaKhachHang,
                         NgayDat = DateTime.Now,
+
                         SoNguoiLon = model.NumAdults,
                         SoTreEm = model.NumChildren,
                         TongTien = (model.NumAdults * (tour.GiaNguoiLon ?? 0)) + (model.NumChildren * (tour.GiaTreEm ?? 0)),
@@ -616,33 +617,20 @@ namespace DuLich.Controllers
 
                     _context.DatTours.Add(booking);
                     await _context.SaveChangesAsync(); // Lưu để lấy MaDatTour
-
-                    // 2. Tạo Hóa đơn (TRẠNG THÁI: CHƯA KÝ SỐ)
-                    // var hoaDon = new HoaDon
-                    // {
-                    //     MaDatTour = booking.MaDatTour,
-                    //     NgayXuat = DateTime.Now,
-                    //     SoTien = booking.TongTien,
-                    //     TrangThai = "Chưa thanh toán",
-
-                    //     // QUAN TRỌNG: Đặt null để đánh dấu là chưa được ký
-                    //     ChuKySo = null,
-                    //     Payload = null
-                    // };
-
-                    // _context.HoaDons.Add(hoaDon);
-                    // await _context.SaveChangesAsync();
-
-                    // --- ĐÃ XÓA BỎ BƯỚC 3: TỰ ĐỘNG KÝ SỐ ---
-                    // Việc ký số giờ đây sẽ được thực hiện bởi Nhân viên trong trang quản lý.
-
                     transaction.Commit();
                     return RedirectToAction("Payment", new { bookingId = booking.MaDatTour });
                 }
                 catch (Exception ex)
                 {
                     transaction.Rollback();
-                    ModelState.AddModelError("", "Lỗi khi đặt tour: " + ex.Message);
+                    string errorMessage = "Lỗi khi đặt tour: " + ex.Message;
+                    if (ex is Microsoft.EntityFrameworkCore.DbUpdateException dbUpdateEx)
+                    {
+                        errorMessage += " Inner Exception: " + dbUpdateEx.InnerException?.Message;
+                        Console.WriteLine("DbUpdateException Inner Exception: " + dbUpdateEx.InnerException?.ToString());
+                    }
+                    Console.WriteLine("Error during booking: " + ex.ToString());
+                    ModelState.AddModelError("", errorMessage);
                     return View(model);
                 }
             }

@@ -3,7 +3,11 @@
     ViewData["Title"] = "Sửa thông tin nhân viên";
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
 }
-
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+}
 <div class="row page-titles mx-0">
     <div class="col-sm-6 p-md-0">
         <div class="welcome-text">
@@ -47,7 +51,8 @@
 
                     <div class="form-group">
                         <label asp-for="MaChiNhanh">Chi nhánh</label>
-                        <select asp-for="MaChiNhanh" class="form-control" asp-items="@(new SelectList(ViewBag.ChiNhanhs, "MaChiNhanh", "TenChiNhanh"))">
+                        <select asp-for="MaChiNhanh" class="form-control"
+                            asp-items="@(new SelectList(ViewBag.ChiNhanhs, "MaChiNhanh", "TenChiNhanh"))">
                             <option value="">-- Chọn chi nhánh --</option>
                         </select>
                         <span asp-validation-for="MaChiNhanh" class="text-danger"></span>

@@ -30,7 +30,7 @@ namespace DuLich.Services
             using var client = new SmtpClient(host, port)
             {
                 // QUAN TRỌNG: Phải đặt UseDefaultCredentials = false TRƯỚC khi gán Credentials
-                UseDefaultCredentials = false, 
+                UseDefaultCredentials = false,
                 Credentials = new NetworkCredential(mail, password),
                 EnableSsl = true,
                 DeliveryMethod = SmtpDeliveryMethod.Network
@@ -38,12 +38,12 @@ namespace DuLich.Services
 
             var mailMessage = new MailMessage
             {
-                From = new MailAddress(mail, "DuLich App Support"),
+                From = new MailAddress(mail, "TravelHa"),
                 Subject = subject,
                 Body = body,
                 IsBodyHtml = true
             };
-            
+
             mailMessage.To.Add(toEmail);
 
             await client.SendMailAsync(mailMessage);

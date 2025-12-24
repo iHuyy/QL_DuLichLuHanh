@@ -3,7 +3,11 @@
     ViewData["Title"] = "Quản lý Khách hàng";
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
 }
-
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+}
 <div class="row page-titles mx-0">
     <div class="col-sm-6 p-md-0">
         <div class="welcome-text">
@@ -64,7 +68,7 @@
                                         <form asp-action="ChangeUserStatus" method="post">
                                             <input type="hidden" name="id" value="@user.MaKhachHang" />
                                             <select name="trangThai" class="form-control form-control-sm"
-                                                    onchange="this.form.submit()">
+                                                onchange="this.form.submit()">
                                                 @if (user.TrangThai == "HoatDong")
                                                 {
                                                     <option value="HoatDong" selected>Hoạt động</option>
@@ -81,27 +85,28 @@
                                     <td>
                                         <div class="d-flex">
                                             <a href="@Url.Action("EditUser", "Admin", new { id = user.MaKhachHang })"
-                                               class="btn btn-primary shadow btn-xs sharp mr-1" title="Sửa">
+                                                class="btn btn-primary shadow btn-xs sharp mr-1" title="Sửa">
                                                 <i class="fa fa-pencil"></i>
                                             </a>
 
                                             @if (user.TrangThai == "BiKhoa")
                                             {
-                                                <form asp-action="UnlockUser" asp-route-id="@user.MaKhachHang" method="post" class="mr-1">
+                                                <form asp-action="UnlockUser" asp-route-id="@user.MaKhachHang" method="post"
+                                                    class="mr-1">
                                                     @Html.AntiForgeryToken()
-                                                    <button type="submit" class="btn btn-warning shadow btn-xs sharp" 
-                                                            title="Mở khóa tài khoản Oracle"
-                                                            onclick="return confirm('Bạn có chắc chắn muốn mở khóa tài khoản database cho người dùng này?');">
+                                                    <button type="submit" class="btn btn-warning shadow btn-xs sharp"
+                                                        title="Mở khóa tài khoản Oracle"
+                                                        onclick="return confirm('Bạn có chắc chắn muốn mở khóa tài khoản database cho người dùng này?');">
                                                         <i class="fa fa-unlock"></i>
                                                     </button>
                                                 </form>
                                             }
 
                                             <form asp-action="DeleteUserById" asp-route-id="@user.MaKhachHang" method="post"
-                                                  onsubmit="return confirm('Bạn có chắc muốn xóa người dùng này?');">
+                                                onsubmit="return confirm('Bạn có chắc muốn xóa người dùng này?');">
                                                 @Html.AntiForgeryToken()
                                                 <button type="submit" class="btn btn-danger shadow btn-xs sharp"
-                                                        title="Xóa">
+                                                    title="Xóa">
                                                     <i class="fa fa-trash"></i>
                                                 </button>
                                             </form>

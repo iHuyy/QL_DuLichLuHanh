@@ -53,9 +53,9 @@
         <div class="alert alert-danger">@TempData["Error"]</div>
     }
 
-        <div class="card">
-            <div class="card-header">
-                <ul class="nav nav-tabs card-header-tabs" id="audit-tabs" role="tablist">
+    <div class="card">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" id="audit-tabs" role="tablist">
                 <li class="nav-item">
                     <a class="nav-link @(Model.ActiveTab == "TOUR" ? "active" : "")" id="tour-tab" data-toggle="tab"
                         href="#tour" role="tab" aria-controls="tour"
@@ -286,52 +286,53 @@
                         </nav>
                     }
                 </div>
-            <div class="card-body">
-                <h5 class="card-title mb-3">Lịch sử sao lưu</h5>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered">
-                        <thead class="thead-light">
-                            <tr>
-                                <th>Loại tác vụ</th>
-                                <th>Thời gian yêu cầu</th>
-                                <th>Thời gian hoàn thành</th>
-                                <th>Trạng thái</th>
-                                <th>Đích</th>
-                                <th>Người yêu cầu</th>
-                                <th>Ghi chú</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if (Model.BackupHistories == null || !Model.BackupHistories.Any())
-                            {
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Lịch sử sao lưu</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="thead-light">
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted">Không có lịch sử sao lưu</td>
+                                    <th>Loại tác vụ</th>
+                                    <th>Thời gian yêu cầu</th>
+                                    <th>Thời gian hoàn thành</th>
+                                    <th>Trạng thái</th>
+                                    <th>Đích</th>
+                                    <th>Người yêu cầu</th>
+                                    <th>Ghi chú</th>
                                 </tr>
-                            }
-                            else
-                            {
-                                @foreach (var backup in Model.BackupHistories)
+                            </thead>
+                            <tbody>
+                                @if (Model.BackupHistories == null || !Model.BackupHistories.Any())
                                 {
                                     <tr>
-                                        <td>@backup.ActionType</td>
-                                        <td>@backup.RequestedAt.ToString("dd/MM/yyyy HH:mm:ss")</td>
-                                        <td>@(backup.CompletedAt?.ToString("dd/MM/yyyy HH:mm:ss") ?? "-")</td>
-                                        <td>
-                                            <span class="badge @(backup.Status?.Contains("Hoàn") == true ? "badge-success" : backup.Status?.Contains("Thất bại") == true ? "badge-danger" : "badge-warning")">
-                                                @backup.Status
-                                            </span>
-                                        </td>
-                                        <td>@(string.IsNullOrWhiteSpace(backup.Target) ? "-" : backup.Target)</td>
-                                        <td>@(string.IsNullOrWhiteSpace(backup.RequestedBy) ? "-" : backup.RequestedBy)</td>
-                                        <td>@(string.IsNullOrWhiteSpace(backup.Notes) ? "-" : backup.Notes)</td>
+                                        <td colspan="7" class="text-center text-muted">Không có lịch sử sao lưu</td>
                                     </tr>
                                 }
-                            }
-                        </tbody>
-                    </table>
+                                else
+                                {
+                                    @foreach (var backup in Model.BackupHistories)
+                                    {
+                                        <tr>
+                                            <td>@backup.ActionType</td>
+                                            <td>@backup.RequestedAt.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                            <td>@(backup.CompletedAt?.ToString("dd/MM/yyyy HH:mm:ss") ?? "-")</td>
+                                            <td>
+                                                <span
+                                                    class="badge @(backup.Status?.Contains("Hoàn") == true ? "badge-success" : backup.Status?.Contains("Thất bại") == true ? "badge-danger" : "badge-warning")">
+                                                    @backup.Status
+                                                </span>
+                                            </td>
+                                            <td>@(string.IsNullOrWhiteSpace(backup.Target) ? "-" : backup.Target)</td>
+                                            <td>@(string.IsNullOrWhiteSpace(backup.RequestedBy) ? "-" : backup.RequestedBy)</td>
+                                            <td>@(string.IsNullOrWhiteSpace(backup.Notes) ? "-" : backup.Notes)</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
         </div>
     </div>
 </div>
@@ -349,4 +350,9 @@
             });
         });
     </script>
+}
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
 }

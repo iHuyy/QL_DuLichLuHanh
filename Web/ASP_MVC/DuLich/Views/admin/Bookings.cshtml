@@ -52,6 +52,10 @@
             <div class="modal-body" style="height: 80vh;">
                 <iframe id="invoiceFrame" src="" style="border: none; width: 100%; height: 100%;"></iframe>
             </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-warning" id="sendEmailButton"><i class="fa fa-envelope"></i> Gửi hóa đơn cho khách hàng</button>
+            </div>
         </div>
     </div>
 </div>
@@ -59,6 +63,7 @@
 @section Styles {
     <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
 }
 
 @section Scripts {
@@ -68,6 +73,19 @@
     <script>
         $(document).ready(function () {
             loadBookings();
+
+            // Click handler for the send email button inside the modal
+            $('#sendEmailButton').on('click', function() {
+                const modal = $('#invoiceModal');
+                const hoaDonId = modal.data('hoaDonId');
+                const customerName = modal.data('customerName');
+
+                if (hoaDonId) {
+                    sendInvoiceEmail(hoaDonId, customerName, this);
+                } else {
+                    toastr.error('Không tìm thấy mã hóa đơn để gửi.');
+                }
+            });
         });
 
         function badgeStatus(status) {
@@ -103,7 +121,8 @@
                             const actions = [];
                             const hasInvoice = !!data.maHoaDon;
                             if (hasInvoice) {
-                                actions.push(`<button class="btn btn-success btn-sm mr-1" onclick="showInvoice(${data.maHoaDon})">Xem hóa đơn</button>`);
+                                // Pass customer name to showInvoice
+                                actions.push(`<button class="btn btn-success btn-sm mr-1" onclick="showInvoice(${data.maHoaDon}, '${data.tenKhachHang}')">Xem hóa đơn</button>`);
                             }
                             const status = (data.trangThai || '').toLowerCase();
                             const isCancelled = status.includes('huy');
@@ -140,10 +159,35 @@
                 .fail(() => toastr.error('Không hủy được booking'));
         }
 
-        function showInvoice(hoaDonId) {
+        function showInvoice(hoaDonId, customerName) {
             if (!hoaDonId) return;
+            // Store data on the modal itself
+            $('#invoiceModal').data('hoaDonId', hoaDonId);
+            $('#invoiceModal').data('customerName', customerName);
+            // Set iframe src and show modal
             $('#invoiceFrame').attr('src', `/Customer/PrintInvoice?hoaDonId=${hoaDonId}`);
             $('#invoiceModal').modal('show');
+        }
+
+        function sendInvoiceEmail(hoaDonId, customerName, button) {
+            if (!confirm(`Bạn có chắc chắn muốn gửi hóa đơn cho khách hàng ${customerName}?`)) return;
+            
+            const $button = $(button);
+            const originalHtml = $button.html();
+            $button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Đang gửi...');
+
+            $.post(`/api/hoadon/send-invoice/${hoaDonId}`)
+                .done(function (response) {
+                    toastr.success(response.message || 'Đã gửi hóa đơn thành công!');
+                    $('#invoiceModal').modal('hide');
+                })
+                .fail(function (xhr) {
+                    const error = xhr.responseJSON?.message || 'Không thể gửi hóa đơn. Vui lòng thử lại.';
+                    toastr.error(error);
+                })
+                .always(function () {
+                    $button.prop('disabled', false).html(originalHtml);
+                });
         }
     </script>
 }

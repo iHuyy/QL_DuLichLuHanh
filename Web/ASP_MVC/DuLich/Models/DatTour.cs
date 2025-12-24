@@ -21,6 +21,7 @@ namespace DuLich.Models
         [Column("NGAYDAT")]
         public DateTime? NgayDat { get; set; }
 
+
         [Column("SONGUOILON")]
         public int? SoNguoiLon { get; set; }
 
@@ -43,7 +44,7 @@ namespace DuLich.Models
         public Tour? Tour { get; set; }
 
         public HoaDon? HoaDon { get; set; }
-        [Column("TRANGTHAITHANHTOAN")] 
+        [Column("TRANGTHAITHANHTOAN")]
         public string? TrangThaiThanhToan { get; set; }
     }
 }

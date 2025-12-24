@@ -347,8 +347,8 @@ RETURNING MAANH INTO :id";
                 status == "hoàn thành" || status == "hoan thanh")
                 return false;
 
-            return booking.Tour.ThoiGian != null &&
-                   booking.Tour.ThoiGian.Value.Date > DateTime.Now.AddDays(3).Date;
+            var start = booking.Tour?.ThoiGian;
+            return start != null && start.Value.Date > DateTime.Now.AddDays(3).Date;
         }
 
         [HttpGet]
@@ -381,6 +381,11 @@ RETURNING MAANH INTO :id";
             catch (Exception logEx)
             {
                 _logger.LogWarning(logEx, "Failed reading request form info");
+            }
+
+            if (!tour.ThoiGian.HasValue)
+            {
+                ModelState.AddModelError("ThoiGian", "Ngày khởi hành không được để trống.");
             }
 
             if (!ModelState.IsValid)
@@ -623,6 +628,11 @@ RETURNING MAANH INTO :id";
             {
                 TempData["Error"] = "Tour không tồn tại hoặc không thuộc chi nhánh của bạn.";
                 return RedirectToAction(nameof(Tours));
+            }
+
+            if (!tour.ThoiGian.HasValue)
+            {
+                ModelState.AddModelError("ThoiGian", "Ngày khởi hành không được để trống.");
             }
 
             if (ModelState.IsValid)
@@ -1080,7 +1090,7 @@ RETURNING MAANH INTO :id";
             hoaDon.SoTien = booking.TongTien;
             hoaDon.NgayXuat = DateTime.Now;
             hoaDon.TrangThai = "Đã thanh toán"; // Set trạng thái mong muốn
-            hoaDon.PhuongThucThanhToan = "Chuyển khoản"; // Hoặc lấy từ form
+            hoaDon.PhuongThucThanhToan = "Thanh toán tại văn phòng"; // Hoặc lấy từ form
 
             // 4. Tạo Payload và Ký số
             try

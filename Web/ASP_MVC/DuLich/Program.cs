@@ -24,6 +24,15 @@ OracleConfiguration.WalletLocation = OracleConfiguration.TnsAdmin;
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 
+// Register DbContext and Oracle session interceptor
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<DuLich.Models.Data.OracleSessionInterceptor>();
+builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
+{
+    var interceptor = sp.GetRequiredService<OracleSessionInterceptor>();
+    options.UseOracle(connectionString, o => o.CommandTimeout(5))
+           .AddInterceptors(interceptor);
+});
 // Đăng ký Authentication (GIỮ NGUYÊN .AddCookie(), THÊM .AddJwtBearer())
 
 // First, create the RSAService instance manually so it can be used during registration.
@@ -34,115 +43,53 @@ var rsaServiceInstance = new RSAService(rsaPrivateKeyPath, rsaPublicKeyPath);
 // Now, register the created instance as a singleton.
 builder.Services.AddSingleton(rsaServiceInstance);
 
+// Create and register DigitalSignatureService similarly.
+var digitalSignatureServiceInstance = new DigitalSignatureService(rsaPrivateKeyPath, rsaPublicKeyPath);
+builder.Services.AddSingleton(digitalSignatureServiceInstance);
 
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+// Configure authentication: Cookie as default, plus JWT for mobile clients
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+})
     .AddCookie(options =>
     {
-        options.LoginPath = "/Customer/Login";
-        options.AccessDeniedPath = "/Home/AccessDenied";
-        // Make cookie policy developer-friendly: when running on HTTP (local dev), avoid SameSite=None without Secure
-        options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
-        // For AJAX/API calls we should return 401/403 instead of redirecting to the login page
-        options.Events = new CookieAuthenticationEvents
-        {
-            OnRedirectToLogin = ctx =>
-            {
-                var path = ctx.Request.Path.Value ?? string.Empty;
-                if (path.StartsWith("/staff/api", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
-                {
-                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    return Task.CompletedTask;
-                }
-                ctx.Response.Redirect(ctx.RedirectUri);
-                return Task.CompletedTask;
-            },
-            OnRedirectToAccessDenied = ctx =>
-            {
-                var path = ctx.Request.Path.Value ?? string.Empty;
-                if (path.StartsWith("/staff/api", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
-                {
-                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    return Task.CompletedTask;
-                }
-                ctx.Response.Redirect(ctx.RedirectUri);
-                return Task.CompletedTask;
-            }
-        };
+        options.LoginPath = "/Admin/Account/Login";
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
     })
-    // *** BẮT ĐẦU THÊM MỚI (JWT) ***
-    .AddJwtBearer(options => // Thêm cấu hình JWT Bearer cho API (Mobile app)
+    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
     {
-        var jwtSettings = builder.Configuration.GetSection("Jwt");
-
+        options.RequireHttpsMetadata = false;
+        options.SaveToken = true;
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
+            ValidateIssuer = false,
+            ValidateAudience = false,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"],
-            ValidAudience = jwtSettings["Audience"],
-            IssuerSigningKey = new RsaSecurityKey(rsaServiceInstance.GetPublicKey()),
-            ClockSkew = TimeSpan.Zero
-        };
-        options.Events = new JwtBearerEvents
-        {
-            OnAuthenticationFailed = context =>
-            {
-                Console.WriteLine(">>> AUTH FAILED: " + context.Exception.Message);
-                return Task.CompletedTask;
-            },
-            OnTokenValidated = context =>
-            {
-                Console.WriteLine(">>> TOKEN VALIDATED: " + context.Principal?.Identity?.Name);
-                return Task.CompletedTask;
-            },
-            OnMessageReceived = context =>
-            {
-                Console.WriteLine(">>> TOKEN RECEIVED: " + context.Token);
-                return Task.CompletedTask;
-            },
-            OnChallenge = context =>
-            {
-                Console.WriteLine(">>> AUTH CHALLENGE (401): " + context.Error + " - " + context.ErrorDescription);
-                return Task.CompletedTask;
-            }
+            IssuerSigningKey = new RsaSecurityKey(rsaServiceInstance.GetPublicKey())
         };
     });
-// *** KẾT THÚC THÊM MỚI (JWT) ***
 
-// HttpContext accessor needed by DB connection interceptor
-builder.Services.AddHttpContextAccessor();
-
-// Register OracleSessionInterceptor (constructor will receive IHttpContextAccessor via DI)
-builder.Services.AddScoped<OracleSessionInterceptor>();
-
-builder.Services.AddSingleton<RestoreStateService>();
-
-builder.Services.AddTransient<DuLich.Services.EmailService>();
-// Đảm bảo MemoryCache đã được thêm (thường mặc định có trong MVC, nếu chưa thì thêm:)
-builder.Services.AddMemoryCache();
-
-// Đăng ký DbContext với interceptor
-builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
-{
-    var interceptor = sp.GetRequiredService<OracleSessionInterceptor>();
-    // Dùng connectionString đã khai báo ở trên
-    options.UseOracle(connectionString, o => o.CommandTimeout(5))
-           .AddInterceptors(interceptor);
-});
-
-// Đăng ký OracleAuthService
-builder.Services.AddScoped<OracleAuthService>();
 
 // The RSAService is already registered as a singleton instance above.
 // SSH service for backup/restore operations
 builder.Services.AddSingleton<BackupSshService>();
+// Service tracking restore state (used by middleware and controllers)
+builder.Services.AddSingleton<RestoreStateService>();
 
 // *** BẮT ĐẦU THÊM MỚI (SERVICES) ***
 // Thêm dịch vụ tạo JWT
 builder.Services.AddSingleton<JwtService>();
+
+// Cache in-memory và dịch vụ email được dùng bởi OracleAuthService
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<EmailService>();
+
+// Đăng ký OracleAuthService để các controller (Customer/Staff/API) có thể DI
+builder.Services.AddScoped<OracleAuthService>();
 
 // Thêm dịch vụ Session (cần cho SessionValidationMiddleware)
 builder.Services.AddSession(options =>

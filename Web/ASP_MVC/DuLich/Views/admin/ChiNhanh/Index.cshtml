@@ -1,10 +1,14 @@
 @model IEnumerable<DuLich.Models.ChiNhanhViewModel>
 
-@{ 
+@{
     ViewData["Title"] = "Quản lý Chi nhánh";
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
 }
-
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+}
 <div class="container-fluid">
     <div class="row page-titles">
         <ol class="breadcrumb">
@@ -47,8 +51,14 @@
                                         <td>@item.DoanhThu.ToString("N0") VNĐ</td>
                                         <td>
                                             <div class="d-flex">
-                                                <a asp-controller="ChiNhanh" asp-action="Edit" asp-route-id="@item.ChiNhanh.MaChiNhanh" class="btn btn-primary shadow btn-xs sharp me-1">Sửa<i class="fas fa-pencil-alt"></i></a>
-                                                <a asp-controller="ChiNhanh" asp-action="Delete" asp-route-id="@item.ChiNhanh.MaChiNhanh" class="btn btn-danger shadow btn-xs sharp">Xóa<i class="fa fa-trash"></i></a>
+                                                <a asp-controller="ChiNhanh" asp-action="Edit"
+                                                    asp-route-id="@item.ChiNhanh.MaChiNhanh"
+                                                    class="btn btn-primary shadow btn-xs sharp me-1">Sửa<i
+                                                        class="fas fa-pencil-alt"></i></a>
+                                                <a asp-controller="ChiNhanh" asp-action="Delete"
+                                                    asp-route-id="@item.ChiNhanh.MaChiNhanh"
+                                                    class="btn btn-danger shadow btn-xs sharp">Xóa<i
+                                                        class="fa fa-trash"></i></a>
                                             </div>
                                         </td>
                                     </tr>

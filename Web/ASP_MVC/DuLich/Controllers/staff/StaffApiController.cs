@@ -394,7 +394,7 @@ END;";
                 {
                     HoaDon hoaDon;
                     bool isNewInvoice = false;
-                    string methodToInvoice = "Chuyển khoản/Tiền mặt"; // Hoặc lấy từ tham số [FromForm]
+                    string methodToInvoice = "Thanh toán tại văn phòng"; // Hoặc lấy từ tham số [FromForm]
 
                     // [BƯỚC 4] Xử lý Hóa đơn: Nếu Trigger đã tạo thì lấy ra Sửa, chưa có thì Thêm mới
                     if (booking.HoaDon != null)

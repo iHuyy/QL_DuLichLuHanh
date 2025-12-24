@@ -61,7 +61,6 @@ namespace DuLich.Services
                 ? string.Empty
                 : DateTime.Parse(untilTime).ToString("yyyy-MM-dd HH:mm:ss");
 
-            // Escape double quotes and wrap args in double quotes for the shell command
             var escapedUntil = string.IsNullOrWhiteSpace(formattedUntil)
                 ? string.Empty
                 : formattedUntil.Replace("\"", "\\\"");
@@ -136,14 +135,25 @@ namespace DuLich.Services
                 var content = match.Groups["content"].Value.Trim();
                 // Corrected Regex
                 var pathMatch = Regex.Match(content, @"^Path:\s*(?<path>.*)$", RegexOptions.Multiline);
-                var timestampMatch = Regex.Match(content, @"^Timestamp:\s*(?<timestamp>.*)$", RegexOptions.Multiline);
+                var timestampStringMatch = Regex.Match(content, @"^Timestamp:\s*(?<timestamp>.*)$", RegexOptions.Multiline);
 
-                if (pathMatch.Success && timestampMatch.Success)
+                if (pathMatch.Success && timestampStringMatch.Success)
                 {
+                    var timestampStr = timestampStringMatch.Groups["timestamp"].Value.Trim();
+                    DateTime parsedTimestamp;
+                    // Attempt to parse the timestamp string. Use a common format or try multiple.
+                    if (!DateTime.TryParse(timestampStr, out parsedTimestamp))
+                    {
+                        // Fallback to a default or throw an error if parsing fails
+                        // For now, setting to a min value if parsing fails
+                        parsedTimestamp = DateTime.MinValue;
+                    }
+
                     backups.Add(new BackupInfo
                     {
                         Path = pathMatch.Groups["path"].Value.Trim(),
-                        Timestamp = timestampMatch.Groups["timestamp"].Value.Trim()
+                        TimestampString = timestampStr,
+                        Timestamp = parsedTimestamp
                     });
                 }
             }
@@ -177,7 +187,8 @@ namespace DuLich.Services
     public class BackupInfo
     {
         public string Path { get; set; } = string.Empty;
-        public string Timestamp { get; set; } = string.Empty;
+        public string TimestampString { get; set; } = string.Empty; // Keep original string for display
+        public DateTime Timestamp { get; set; } // Parsed DateTime for sorting and logic
     }
 
     public class BackupExecutionResult

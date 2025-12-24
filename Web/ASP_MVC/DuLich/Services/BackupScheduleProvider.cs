@@ -22,8 +22,8 @@ namespace DuLich.Services
     {
         private static readonly BackupScheduleDefinition[] Schedule =
         {
-            new BackupScheduleDefinition("Sao luu toan bo (Full)", "FULL", new TimeSpan(2, 0, 0)),
-            new BackupScheduleDefinition("Sao luu thay doi (Incremental)", "INCREMENTAL", new TimeSpan(17, 0, 0))
+            new BackupScheduleDefinition("Sao lưu toàn bộ (Full)", "FULL", new TimeSpan(2, 0, 0)),
+            new BackupScheduleDefinition("Sao lưu thay đổi (Incremental)", "INCREMENTAL", new TimeSpan(17, 0, 0))
         };
 
         public static IReadOnlyList<BackupScheduleDefinition> Definitions => Schedule;

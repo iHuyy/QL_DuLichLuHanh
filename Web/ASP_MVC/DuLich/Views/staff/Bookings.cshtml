@@ -1,9 +1,7 @@
-﻿@{
+@{
     ViewData["Title"] = "Quản lý booking";
     Layout = "~/Views/Shared/_StaffLayout.cshtml";
 }
-
-@Html.AntiForgeryToken()
 
 <div class="row page-titles mx-0">
     <div class="col-sm-6 p-md-0">
@@ -40,7 +38,9 @@
     </div>
 </div>
 
-<div class="modal fade" id="invoiceModal" tabindex="-1" role="dialog" aria-labelledby="invoiceModalLabel" aria-hidden="true">
+<!-- Modal hiển thị hóa đơn -->
+<div class="modal fade" id="invoiceModal" tabindex="-1" role="dialog" aria-labelledby="invoiceModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-xl" role="document" style="max-width: 90%;">
         <div class="modal-content">
             <div class="modal-header">
@@ -52,6 +52,10 @@
             <div class="modal-body" style="height: 80vh;">
                 <iframe id="invoiceFrame" src="" style="border: none; width: 100%; height: 100%;"></iframe>
             </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-warning" id="sendEmailButton"><i class="fa fa-envelope"></i> Gửi hóa đơn cho khách hàng</button>
+            </div>
         </div>
     </div>
 </div>
@@ -59,6 +63,7 @@
 @section Styles {
     <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
 }
 
 @section Scripts {
@@ -68,20 +73,46 @@
     <script>
         $(document).ready(function () {
             loadBookings();
+
+            // Click handler for the send email button inside the modal
+            $('#sendEmailButton').on('click', function() {
+                const modal = $('#invoiceModal');
+                const hoaDonId = modal.data('hoaDonId');
+                const customerName = modal.data('customerName');
+
+                if (hoaDonId) {
+                    sendInvoiceEmail(hoaDonId, customerName, this);
+                } else {
+                    toastr.error('Không tìm thấy mã hóa đơn để gửi.');
+                }
+            });
         });
 
         function badgeStatus(status) {
-            if (!status) return '<span class="badge badge-secondary">Chưa xác nhận</span>';
+            if (!status) return '<span class="badge badge-warning">Chờ xác nhận</span>'; // Default for empty status to yellow for pending
+
             const lower = status.toLowerCase();
-            if (lower.includes('huy')) return '<span class="badge badge-danger">Đã hủy</span>';
-            if (lower.includes('xac nhan')) return '<span class="badge badge-success">Đã xác nhận</span>';
-            return `<span class="badge badge-info">${status}</span>`;
+
+            if (lower.includes('hoan thanh')) {
+                return '<span class="badge badge-success">Hoàn thành</span>'; // Green for completed
+            } else if (lower.includes('xac nhan')) {
+                // Distinguish "Chờ xác nhận" from "Đã xác nhận"
+                if (lower.includes('cho')) {
+                    return '<span class="badge badge-warning">Chờ xác nhận</span>'; // Yellow for pending
+                } else { // Implies "Đã xác nhận"
+                    return '<span class="badge badge-success">Đã xác nhận</span>'; // Green for confirmed
+                }
+            } else if (lower.includes('huy')) {
+                return '<span class="badge badge-danger">Đã hủy</span>'; // Red for cancelled
+            }
+
+            return `<span class="badge badge-info">${status}</span>`; // Fallback for other statuses
         }
 
         function loadBookings() {
             $('#bookingsList').DataTable({
-                ajax: '/staff/api/bookings',
-                order: [[5, 'desc']], // Sắp xếp theo ngày bắt đầu mới nhất
+                ajax: '/api/admin/bookings',
+                order: [[5, 'desc']],
                 columns: [
                     { data: 'tenTour' },
                     { data: 'tenKhachHang' },
@@ -101,49 +132,20 @@
                         orderable: false,
                         render: function (data) {
                             const actions = [];
-                            
-                            // Nút Xem Tour
-                            actions.push(`<a href="/Staff/TourDetails/${data.maTour}" class="btn btn-primary btn-sm mr-1">Xem tour</a>`);
-                            
+                            const hasInvoice = !!data.maHoaDon;
+                            if (hasInvoice) {
+                                // Pass customer name to showInvoice
+                                actions.push(`<button class="btn btn-success btn-sm mr-1" onclick="showInvoice(${data.maHoaDon}, '${data.tenKhachHang}')">Xem hóa đơn</button>`);
+                            }
                             const status = (data.trangThai || '').toLowerCase();
-                            const isPaid = status.includes('thanh toán');
                             const isCancelled = status.includes('huy');
                             const isConfirmed = status.includes('xac nhan');
-
-                            // LOGIC MỚI: Kiểm tra ký số
-                            // data.daKySo phải được trả về từ API. Nếu chưa có, hãy đảm bảo thêm vào ViewModel trả về
-                            const isSigned = data.daKySo === true;
-                            const hasInvoiceId = !!data.maHoaDon;
-
-                            if (isPaid) {
-                                if (isSigned && hasInvoiceId) {
-                                    // Đã ký => Xem hóa đơn
-                                    actions.push(`<button class="btn btn-success btn-sm mr-1" onclick="showInvoice(${data.maHoaDon})"><i class="fa fa-file-invoice"></i> Xem HĐ</button>`);
-                                } else {
-                                    // Đã thanh toán nhưng chưa ký => Nút Ký & Xuất HĐ
-                                    // Dùng Form để POST an toàn kèm Token
-                                    const token = $('input[name="__RequestVerificationToken"]').val();
-                                    actions.push(`
-                                        <form action="/Staff/IssueInvoice/${data.maDatTour}" method="post" style="display:inline-block;" onsubmit="return confirm('Xác nhận tạo và ký số hóa đơn cho đơn này?');">
-                                            <input type="hidden" name="__RequestVerificationToken" value="${token}" />
-                                            <button type="submit" class="btn btn-warning btn-sm mr-1" title="Ký và Xuất hóa đơn">
-                                                <i class="fa fa-file-signature"></i> Ký HĐ
-                                            </button>
-                                        </form>
-                                    `);
-                                }
-                            }
-
-                            // Các nút hành động khác (Xác nhận / Hủy)
-                            if (!isConfirmed && !isCancelled && !isPaid) {
+                            if (!isConfirmed && !isCancelled) {
                                 actions.push(`<button class="btn btn-info btn-sm mr-1" onclick="confirmBooking(${data.maDatTour})">Xác nhận</button>`);
                             }
-                            
-                            // Chỉ cho phép hủy nếu chưa hủy và chưa thanh toán
-                            if (!isCancelled && !isPaid) {
+                            if (!isCancelled) {
                                 actions.push(`<button class="btn btn-danger btn-sm" onclick="cancelBooking(${data.maDatTour})">Hủy</button>`);
                             }
-
                             return actions.join('');
                         }
                     }
@@ -152,17 +154,17 @@
         }
 
         function confirmBooking(id) {
-            $.post('/staff/api/bookings/confirm', { bookingId: id })
+            $.post('/api/admin/bookings/confirm', { bookingId: id })
                 .done(() => {
                     $('#bookingsList').DataTable().ajax.reload(null, false);
-                    toastr.success('Đã xác nhận booking');
+                    toastr.success('Đã xác nhận booking và cập nhật hóa đơn');
                 })
                 .fail(() => toastr.error('Không xác nhận được booking'));
         }
 
         function cancelBooking(id) {
             if (!confirm('Bạn có chắc chắn muốn hủy booking này?')) return;
-            $.post('/staff/api/bookings/cancel', { bookingId: id, reason: 'Staff cancel' })
+            $.post('/api/admin/bookings/cancel', { bookingId: id, reason: 'Admin cancel' })
                 .done(() => {
                     $('#bookingsList').DataTable().ajax.reload(null, false);
                     toastr.success('Đã hủy booking');
@@ -170,10 +172,35 @@
                 .fail(() => toastr.error('Không hủy được booking'));
         }
 
-        function showInvoice(hoaDonId) {
+        function showInvoice(hoaDonId, customerName) {
             if (!hoaDonId) return;
+            // Store data on the modal itself
+            $('#invoiceModal').data('hoaDonId', hoaDonId);
+            $('#invoiceModal').data('customerName', customerName);
+            // Set iframe src and show modal
             $('#invoiceFrame').attr('src', `/Customer/PrintInvoice?hoaDonId=${hoaDonId}`);
             $('#invoiceModal').modal('show');
+        }
+
+        function sendInvoiceEmail(hoaDonId, customerName, button) {
+            if (!confirm(`Bạn có chắc chắn muốn gửi hóa đơn cho khách hàng ${customerName}?`)) return;
+            
+            const $button = $(button);
+            const originalHtml = $button.html();
+            $button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Đang gửi...');
+
+            $.post(`/api/hoadon/send-invoice/${hoaDonId}`)
+                .done(function (response) {
+                    toastr.success(response.message || 'Đã gửi hóa đơn thành công!');
+                    $('#invoiceModal').modal('hide');
+                })
+                .fail(function (xhr) {
+                    const error = xhr.responseJSON?.message || 'Không thể gửi hóa đơn. Vui lòng thử lại.';
+                    toastr.error(error);
+                })
+                .always(function () {
+                    $button.prop('disabled', false).html(originalHtml);
+                });
         }
     </script>
 }

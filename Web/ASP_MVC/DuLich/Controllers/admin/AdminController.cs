@@ -21,6 +21,7 @@ using System;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Threading;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace DuLich.Controllers
 {
@@ -152,11 +153,11 @@ namespace DuLich.Controllers
                 var backupSshService = HttpContext.RequestServices.GetRequiredService<BackupSshService>();
                 var availableBackups = backupSshService.ListBackups();
                 model.BackupFiles = availableBackups
-                    .OrderByDescending(b => b.Timestamp)
+                    .OrderByDescending(b => b.Timestamp) // Use the new DateTime Timestamp for sorting
                     .Select(b => new SelectListItem
                     {
-                        Text = $"Backup luc {b.Timestamp} (Duong dan: {b.Path})",
-                        Value = b.Path // The value is now the clean directory path
+                        Text = $"Backup luc {b.TimestampString} (Duong dan: {b.Path})", // Use TimestampString for display
+                        Value = b.Path
                     })
                     .ToList();
             }
@@ -367,7 +368,6 @@ namespace DuLich.Controllers
             return RedirectToAction("BackupRestore");
         }
 
-        // Helper to create history record within a specific DI scope
         private async Task<BackupHistory> CreateBackupHistoryInScope(ApplicationDbContext dbContext, string actionType, string status, string? target, string? notes)
         {
             var nextId = (await dbContext.BackupHistories.MaxAsync(b => (int?)b.Id) ?? 0) + 1;
@@ -1212,6 +1212,10 @@ WHERE rn BETWEEN :startRow AND :endRow";
 
             if (result.success)
             {
+                // Clear the failed login attempts cache for this user
+                var failedAttemptsCacheKey = $"FailedLoginAttempts_{kh.ORACLE_USERNAME!.ToUpper()}";
+                HttpContext.RequestServices.GetRequiredService<IMemoryCache>().Remove(failedAttemptsCacheKey);
+
                 // Cập nhật trạng thái trong bảng KhachHang nếu cần (về HoatDong)
                 kh.TrangThai = "HoatDong";
                 await _context.SaveChangesAsync();

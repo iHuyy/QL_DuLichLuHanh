@@ -1,6 +1,11 @@
 @{
     Layout = "~/Views/Shared/_StaffLayout.cshtml"; // reuse admin layout for staff area
 }
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+}
 
 <div class="row page-titles mx-0">
     <div class="col-sm-6 p-md-0">
@@ -181,10 +186,10 @@
                         data: 'maDatTour',
                         render: function (data) {
                             return `
-                                                    <div class="d-flex">
-                                                        <a href="/staff/bookings/details/${data}" class="btn btn-primary shadow btn-xs sharp mr-1"><i class="fa fa-eye"></i></a>
-                                                        <a href="/staff/bookings/edit/${data}" class="btn btn-info shadow btn-xs sharp"><i class="fa fa-pencil"></i></a>
-                                                    </div>`;
+                                                                <div class="d-flex">
+                                                                    <a href="/staff/bookings/details/${data}" class="btn btn-primary shadow btn-xs sharp mr-1"><i class="fa fa-eye"></i></a>
+                                                                    <a href="/staff/bookings/edit/${data}" class="btn btn-info shadow btn-xs sharp"><i class="fa fa-pencil"></i></a>
+                                                                </div>`;
                         }
                     }
                 ]
@@ -214,10 +219,10 @@
                         data: 'maTour',
                         render: function (data) {
                             return `
-                                                    <div class="d-flex">
-                                                        <a href="/staff/tours/details/${data}" class="btn btn-primary shadow btn-xs sharp mr-1"><i class="fa fa-eye"></i></a>
-                                                        <a href="/staff/tours/edit/${data}" class="btn btn-info shadow btn-xs sharp"><i class="fa fa-pencil"></i></a>
-                                                    </div>`;
+                                                                <div class="d-flex">
+                                                                    <a href="/staff/tours/details/${data}" class="btn btn-primary shadow btn-xs sharp mr-1"><i class="fa fa-eye"></i></a>
+                                                                    <a href="/staff/tours/edit/${data}" class="btn btn-info shadow btn-xs sharp"><i class="fa fa-pencil"></i></a>
+                                                                </div>`;
                         }
                     }
                 ]
@@ -226,11 +231,11 @@
             // Load notifications
             $.get('/staff/api/notifications', function (data) {
                 const notificationsHtml = data.map(notification => `
-                                        <div class="alert alert-${notification.type} mb-2">
-                                            <p class="mb-0">${notification.message}</p>
-                                            <small>${moment(notification.time).fromNow()}</small>
-                                        </div>
-                                    `).join('');
+                                                    <div class="alert alert-${notification.type} mb-2">
+                                                        <p class="mb-0">${notification.message}</p>
+                                                        <small>${moment(notification.time).fromNow()}</small>
+                                                    </div>
+                                                `).join('');
                 $('#notifications').html(notificationsHtml);
             });
         }

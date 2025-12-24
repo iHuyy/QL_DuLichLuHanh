@@ -12,14 +12,10 @@ namespace DuLich.Services
             {
                 return string.Empty;
             }
-
             // 1. Format Số tiền: Giống PHP (bỏ số 0 thừa, không dấu phẩy)
-            // VD: 1000000.00 -> 1000000
             var formattedAmount = hoaDon.SoTien.Value.ToString("0.##", CultureInfo.InvariantCulture);
-
             // 2. Format Ngày: Phải có cả giờ phút giây để khớp với PHP "Y-m-d H:i:s"
             var formattedDate = hoaDon.NgayXuat.Value.ToString("yyyy-MM-dd HH:mm:ss");
-
             // 3. Tạo Payload: Dùng MaHoaDon thay vì MaDatTour để khớp logic PHP
             return $"MaHoaDon={hoaDon.MaHoaDon}|SoTien={formattedAmount}|NgayXuat={formattedDate}";
         }
